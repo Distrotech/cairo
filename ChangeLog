@@ -1,3 +1,162 @@
+2004-05-11  Carl Worth  <cworth@isi.edu>	
+
+	* configure.in: Increment CAIRO_VERSION to 0.1.23.
+
+	* NEWS: Added notes for snapshot 0.1.23.
+
+	* RELEASING: Add reminder to mention incompatible API changes in
+	NEWS. Re-order steps to avoid clobbering pre-existing tar
+	files.
+
+2004-05-11  Carl Worth  <cworth@isi.edu>
+
+	* BUGS: Several people have reported that cairo_clip is not
+	working right now. And it's always been slow.
+
+2004-05-11  David Reveman  <c99drn@cs.umu.se>
+
+	* configure.in: Require glitz 0.1.2.
+
+	* src/cairo_gl_surface.c: Added opacity attribute. Fixed broken
+	CAIRO_GL_COMPOSITE_TRAPEZOIDS_SUPPORT macro.
+	(_cairo_gl_surface_composite_trapezoids): Use polygon opacity.
+	(_cairo_gl_surface_create_pattern): Added surface pattern support.
+	(_cairo_gl_surface_create): Initialize opacity to 0xffff.
+
+2004-05-07  Carl Worth  <cworth@isi.edu>
+
+	* src/cairo_ft_font.c (_utf8_to_ucs4): Bail on NULL utf8 string.
+
+	* src/cairo_spline.c (_cairo_spline_add_point): Don't add two
+	consecutive, identical points when decomposing the spline, (which
+	was leading to an infinte loop in the stroke algorithm when it
+	found a slope of (0,0)).
+
+2004-05-04  Carl Worth  <cworth@isi.edu>
+
+	* src/cairo_png_surface.c (cairo_png_surface_create): Move all
+	libpng-related code into copy_page.
+	(unpremultiply_data): Add missing unpremultiply step.
+	(_cairo_png_surface_copy_page): Move PNG output to copy_page. Add
+	support for A8 and A1 images. Remove time from header (we may want
+	to add it again later, but for now it messes up my test suite).
+	(_cairo_png_surface_destroy): Call copy_page if it hasn't been
+	called already.
+	(_cairo_png_surface_show_page): Add implementation.
+	(_cairo_png_surface_copy_page): Don't close a file we didn't open.
+
+2004-05-04  David Reveman  <c99drn@cs.umu.se>
+
+	* src/cairo_pattern.c (_cairo_image_data_set_radial): Corrected some
+	confusing comments about the math used for radial gradients.
+
+2004-05-01  David Reveman  <c99drn@cs.umu.se>
+
+	* src/cairo_gl_surface.c (_cairo_gl_surface_create_pattern): 
+	cairo_surface_t pointer to cairo_surface_set_matrix.
+
+2004-04-29  Carl Worth  <cworth@isi.edu>
+
+	* src/cairo_gstate.c (_cairo_gstate_set_pattern): Don't set
+	pattern_offset by the current point. Perhaps we can eliminate
+	pattern_offset altogether now?
+
+2004-04-30  David Reveman  <c99drn@cs.umu.se>
+
+	* src/cairoint.h: Radial patterns only store radius per circle. 
+	Only inverse CTM to _cairo_pattern_transform.
+
+	* src/cairo_pattern.c (cairo_pattern_create_radial): Only one radius
+	per circle now.
+	(_cairo_pattern_transform): A matrix multiplication with inverse CTM
+	is all that's needed here.
+	(_cairo_pattern_calc_color_at_pixel): Fixed extend type reflect.
+	(_cairo_image_data_set_linear): New linear gradient code. 
+	Transformation of linear gradient is now handled correctly.
+	(_cairo_image_data_set_radial): New radial gradient code. Inner circle
+	is now used for creating radial gradients. Transformation of radial
+	gradient is now handled correctly.
+	(_cairo_pattern_get_image): Fixed handling of pattern offset.
+
+	* src/cairo_gstate.c (_cairo_gstate_create_pattern): All pattern types
+	are transformed using inverse CTM.
+
+	* src/cairo_gl_surface.c (_cairo_gl_surface_create_pattern): Updated
+	to use glitz's new linear and radial gradients.
+
+	* configure.in: Require glitz 0.1.1.
+
+2004-04-28  David Reveman  <c99drn@cs.umu.se>
+
+	* src/cairo_gl_surface.c: Added CAIRO_GL_MULTITEXTURE_SUPPORT and
+	CAIRO_GL_SURFACE_IS_SOLID macros.
+	(_cairo_gl_surface_get_image): Simpler way for calculating rowstride.
+	(_cairo_gl_surface_composite): Support compositing with mask surface
+	when mask is solid or multi-texturing is available.
+
+2004-04-25  David Reveman  <c99drn@cs.umu.se>
+
+	* src/cairo_gl_surface.c (_cairo_gl_surface_set_clip_region): 
+	Fixed conversion of pixman_box16_t to glitz_rectangle_t.
+
+	* src/cairoint.h: Added scale factor value to cairo_color_stop_t.
+	Added cairo_shader_function_t and cairo_shader_op_t.
+
+	* src/cairo_surface.c (_cairo_surface_create_pattern): 
+	Fixed point updates.
+
+	* src/cairo_pattern.c (cairo_pattern_create_radial): Use absolute value
+	of radius parameters.
+	(cairo_pattern_add_color_stop): Precalculate scale factors and convert
+	offset to fixed point value.
+	(_cairo_image_data_set_radial): 
+	(_cairo_image_data_set_linear): Initialize and use shading operator.
+	(_cairo_pattern_get_image): Fixed point updates.
+	(_cairo_pattern_shader_nearest): 
+	(_cairo_pattern_shader_linear): 
+	(_cairo_pattern_shader_gaussian): 
+	(_cairo_pattern_calc_color_at_pixel): 
+	Converted shading routines to use fixed point values and introduced
+	a shading operator structure for more efficient shading calculations.
+	Added _cairo_pattern_shader_init function. 
+
+	* src/cairo_gl_surface.c (_cairo_gl_surface_composite): 
+	(_cairo_gl_surface_fill_rectangles): 
+	(_cairo_gl_surface_composite_trapezoids): 
+	Make sure that target surface is OK.
+	(_cairo_gl_create_color_range): Initialize and use shading operator.
+	(_cairo_gl_surface_create_pattern): 
+	(_cairo_gl_surface_set_clip_region): Fixed point updates.
+
+2004-04-23  Carl Worth  <cworth@isi.edu>
+
+	* src/cairoint.h: 
+	* src/cairo_surface.c (_cairo_surface_composite): 
+	* src/cairo_gstate.c (_cairo_gstate_current_fill_rule): Fixed
+	several function prototype mismatches between internal header file
+	and implementation (thanks to Carlos Romero and gcc-3.4).
+	
+2004-04-22  David Reveman  <c99drn@cs.umu.se>
+
+	* src/cairoint.h:
+	* src/cairo_surface.c (_cairo_surface_create_pattern):
+	* src/cairo_pattern.c (_cairo_pattern_set_source_offset)
+	(_cairo_pattern_get_image):
+	* src/cairo_gstate.c (_cairo_gstate_create_pattern):
+	* src/cairo_gl_surface.c (_cairo_gl_surface_create_pattern): Fixed
+	pattern source offset.
+
+2004-04-20  David Reveman  <c99drn@cs.umu.se>
+
+	* src/cairo_pattern.c (_cairo_image_data_set_linear): Use
+	CAIRO_MAXSHORT instead of INT_MAX.
+
+	* src/cairo_traps.c (_cairo_traps_extents): Use CAIRO_MAXSHORT and
+	CAIRO_MINSHORT instead of SHRT_MAX and SHRT_MIN.
+
+	* src/cairoint.h: including limits.h and defining CAIRO_MAXSHORT and
+	CAIRO_MINSHORT.
+
 2004-04-16  Carl Worth  <cworth@isi.edu>
 
 	* NEWS: Added notes for snapshot 0.1.22.

@@ -13,6 +13,9 @@ problems with stroking self-intersecting paths.
 * Implement cairo_stroke_path, (very easy to do after the above change
 is done).
 
+* Re-work the backend clipping interface to use geometry rather than
+images.
+
 * Fix the intersection problem, (see reference to Hobby's paper
 mentioned in cairo_traps.c).
 
@@ -57,8 +60,8 @@ functions:
 * Re-implement the trapezoid rasterization algorithm according to the
 new "specification".
 
-* Stroking degenerate paths should still draw caps.  Round caps are
-easy; square should probably draw an axis aligned square.
+* Stroking closed, degenerate paths should still draw caps.  Round
+caps are easy; square should probably draw an axis aligned square.
 
 * Verification, profiling, optimization.
 

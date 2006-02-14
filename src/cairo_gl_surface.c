@@ -64,12 +64,16 @@ struct cairo_gl_surface {
     long int features;
     long int hints;
     int owns_surface;
+    unsigned short opacity;
 
     cairo_pattern_t pattern;
     cairo_box_t pattern_box;
 
     glitz_surface_t *surface;
 };
+
+#define CAIRO_GL_MULTITEXTURE_SUPPORT(surface) \
+    (surface->features & GLITZ_FEATURE_ARB_MULTITEXTURE_MASK)
 
 #define CAIRO_GL_OFFSCREEN_SUPPORT(surface) \
     (surface->features & GLITZ_FEATURE_OFFSCREEN_DRAWING_MASK)
@@ -87,12 +91,16 @@ struct cairo_gl_surface {
     (surface->features & GLITZ_FEATURE_TEXTURE_MIRRORED_REPEAT_MASK)
 
 #define CAIRO_GL_COMPOSITE_TRAPEZOIDS_SUPPORT(surface) \
-    ((surface->format->stencil_size < \
-        ((surface->hints & GLITZ_HINT_CLIPPING_MASK)? 2: 1)) && \
-    (!CAIRO_GL_OFFSCREEN_SUPPORT (surface)))
+    ((surface->format->stencil_size >= \
+        ((surface->hints & GLITZ_HINT_CLIPPING_MASK)? 2: 1)) || \
+    CAIRO_GL_OFFSCREEN_SUPPORT (surface))
 
 #define CAIRO_GL_SURFACE_IS_OFFSCREEN(surface) \
     (surface->hints & GLITZ_HINT_OFFSCREEN_MASK)
+
+#define CAIRO_GL_SURFACE_IS_SOLID(surface) \
+    ((surface->hints & GLITZ_HINT_PROGRAMMATIC_MASK) && \
+     (surface->pattern.type == CAIRO_PATTERN_SOLID))
 
 static void
 _cairo_gl_surface_destroy (void *abstract_surface)
@@ -130,8 +138,7 @@ _cairo_gl_surface_get_image (void *abstract_surface)
     width = glitz_surface_get_width (surface->surface);
     height = glitz_surface_get_height (surface->surface);
 
-    rowstride = width * (surface->format->bpp / 8);
-    rowstride += (rowstride % 4) ? (4 - (rowstride % 4)) : 0;
+    rowstride = (width * (surface->format->bpp / 8) + 3) & -4;
 
     pixels = (char *) malloc (sizeof (char) * height * rowstride);
 
@@ -382,16 +389,21 @@ _cairo_gl_surface_composite (cairo_operator_t operator,
     cairo_gl_surface_t *src_clone = NULL;
     cairo_gl_surface_t *mask_clone = NULL;
 
+    /* Make sure that target surface is OK. */
+    if (glitz_surface_get_status (dst->surface))
+	return CAIRO_STATUS_NO_TARGET_SURFACE;
+
     /* If destination surface is offscreen, then offscreen drawing support is
        required. */
     if (CAIRO_GL_SURFACE_IS_OFFSCREEN (dst) &&
 	(!CAIRO_GL_OFFSCREEN_SUPPORT (dst)))
 	return CAIRO_INT_STATUS_UNSUPPORTED;
 
-    /* Fragment program or offscreen drawing required for composite with
-       mask. */
+    /* We need multi-texturing or offscreen drawing when compositing with
+       non-solid mask. */
     if (mask &&
-	(!CAIRO_GL_FRAGMENT_PROGRAM_SUPPORT (dst)) &&
+	(!CAIRO_GL_SURFACE_IS_SOLID (mask)) &&
+	(!CAIRO_GL_MULTITEXTURE_SUPPORT (dst)) &&
 	(!CAIRO_GL_OFFSCREEN_SUPPORT (dst)))
 	return CAIRO_INT_STATUS_UNSUPPORTED;
 
@@ -439,6 +451,10 @@ _cairo_gl_surface_fill_rectangles (void *abstract_surface,
 {
     cairo_gl_surface_t *surface = abstract_surface;
     glitz_color_t glitz_color;
+
+    /* Make sure that target surface is OK. */
+    if (glitz_surface_get_status (surface->surface))
+	return CAIRO_STATUS_NO_TARGET_SURFACE;
 
     /* If destination surface is offscreen, then offscreen drawing support is
        required. */
@@ -495,13 +511,17 @@ _cairo_gl_surface_composite_trapezoids (cairo_operator_t operator,
     cairo_gl_surface_t *src = (cairo_gl_surface_t *) generic_src;
     cairo_gl_surface_t *src_clone = NULL;
 
+    /* Make sure that target surface is OK. */
+    if (glitz_surface_get_status (dst->surface))
+	return CAIRO_STATUS_NO_TARGET_SURFACE;
+
     /* If destination surface is offscreen, then offscreen drawing support is
        required. */
     if (CAIRO_GL_SURFACE_IS_OFFSCREEN (dst) &&
 	(!CAIRO_GL_OFFSCREEN_SUPPORT (dst)))
 	return CAIRO_INT_STATUS_UNSUPPORTED;
 
-    /* Need to get current hints as clipping might have changed. */
+    /* Need to get current hints as clipping may have changed. */
     dst->hints = glitz_surface_get_hints (dst->surface);
 
     /* Solid source? */
@@ -527,10 +547,14 @@ _cairo_gl_surface_composite_trapezoids (cairo_operator_t operator,
 	src = src_clone;
     }
 
+    glitz_surface_set_polyopacity (dst->surface, src->opacity);
+    
     glitz_composite_trapezoids (_glitz_operator (operator),
 				src->surface, dst->surface,
 				x_src, y_src, (glitz_trapezoid_t *) traps,
 				num_traps);
+    
+    glitz_surface_set_polyopacity (dst->surface, 0xffff);
 
     if (src_clone)
 	cairo_surface_destroy (&src_clone->base);
@@ -570,9 +594,13 @@ _cairo_gl_create_color_range (cairo_pattern_t *pattern,
 			      unsigned int size)
 {
     unsigned int i, bytes = size * 4;
+    cairo_shader_op_t op;
+    
+    _cairo_pattern_shader_init (pattern, &op);
 
     for (i = 0; i < bytes; i += 4)
-	_cairo_pattern_calc_color_at_pixel (pattern, i / (double) bytes,
+	_cairo_pattern_calc_color_at_pixel (&op,
+					    ((double) i / bytes) * 65536,
 					    (int *) &data[i]);
 }
 
@@ -582,10 +610,8 @@ _cairo_gl_surface_create_pattern (void *abstract_surface,
 				  cairo_box_t *box)
 {
     cairo_gl_surface_t *surface = abstract_surface;
-    glitz_surface_t *programmatic = NULL;
-    cairo_gl_surface_t *gl_surface;
-    double x = floor (_cairo_fixed_to_double (box->p1.x));
-    double y = floor (_cairo_fixed_to_double (box->p1.y));
+    glitz_surface_t *source = NULL;
+    cairo_gl_surface_t *src;
 
     switch (pattern->type) {
     case CAIRO_PATTERN_SOLID: {
@@ -596,9 +622,8 @@ _cairo_gl_surface_create_pattern (void *abstract_surface,
 	color.blue = pattern->color.blue_short;
 	color.alpha = pattern->color.alpha_short;
 
-	programmatic = glitz_surface_create_solid (&color);
-    }
-	break;
+	source = glitz_surface_create_solid (&color);
+    } break;
     case CAIRO_PATTERN_LINEAR:
     case CAIRO_PATTERN_RADIAL: {
 	unsigned int color_range_size;
@@ -617,26 +642,17 @@ _cairo_gl_surface_create_pattern (void *abstract_surface,
 	if (pattern->type == CAIRO_PATTERN_LINEAR) {
 	    double dx, dy;
 
-	    dx = (pattern->u.linear.point1.x - x) -
-		(pattern->u.linear.point0.x - x);
-	    dy = (pattern->u.linear.point1.y - y) -
-		(pattern->u.linear.point0.y - y);
-	    
+	    dx = pattern->u.linear.point1.x - pattern->u.linear.point0.x;
+	    dy = pattern->u.linear.point1.y - pattern->u.linear.point0.y;
+
 	    color_range_size = sqrt (dx * dx + dy * dy);
 	} else {
-	    /* libglitz doesn't support inner circle. */
-	    if (pattern->u.radial.center0.x !=
-		pattern->u.radial.center1.x
-		|| pattern->u.radial.center0.y !=
-		pattern->u.radial.center1.y
-		|| pattern->u.radial.radius0.dx
-		|| pattern->u.radial.radius0.dy)
+	    /* glitz doesn't support inner circle yet. */
+	    if (pattern->u.radial.center0.x != pattern->u.radial.center1.x ||
+		pattern->u.radial.center0.y != pattern->u.radial.center1.y)
 		return CAIRO_INT_STATUS_UNSUPPORTED;
 
-	    color_range_size = sqrt (pattern->u.radial.radius1.dx *
-				     pattern->u.radial.radius1.dx +
-				     pattern->u.radial.radius1.dy *
-				     pattern->u.radial.radius1.dy);
+	    color_range_size = pattern->u.radial.radius1;
 	}
 
 	if ((!CAIRO_GL_TEXTURE_NPOT_SUPPORT (surface)))
@@ -647,8 +663,8 @@ _cairo_gl_surface_create_pattern (void *abstract_surface,
 	    return CAIRO_STATUS_NO_MEMORY;
 
 	_cairo_gl_create_color_range (pattern,
-				      glitz_color_range_get_data
-				      (color_range), color_range_size);
+				      glitz_color_range_get_data (color_range),
+				      color_range_size);
 
 	switch (pattern->extend) {
 	case CAIRO_EXTEND_REPEAT:
@@ -662,62 +678,89 @@ _cairo_gl_surface_create_pattern (void *abstract_surface,
 	    break;
 	}
 
+	glitz_color_range_set_filter (color_range, GLITZ_FILTER_BILINEAR);
+
 	if (pattern->type == CAIRO_PATTERN_LINEAR) {
 	    glitz_point_fixed_t start;
 	    glitz_point_fixed_t stop;
 
-	    start.x =
-		_cairo_fixed_from_double (pattern->u.linear.point0.x - x);
-	    start.y =
-		_cairo_fixed_from_double (pattern->u.linear.point0.y - y);
-	    stop.x = _cairo_fixed_from_double (pattern->u.linear.point1.x - x);
-	    stop.y = _cairo_fixed_from_double (pattern->u.linear.point1.y - y);
+	    start.x = _cairo_fixed_from_double (pattern->u.linear.point0.x);
+	    start.y = _cairo_fixed_from_double (pattern->u.linear.point0.y);
+	    stop.x = _cairo_fixed_from_double (pattern->u.linear.point1.x);
+	    stop.y = _cairo_fixed_from_double (pattern->u.linear.point1.y);
 
-	    programmatic =
-		glitz_surface_create_linear (&start, &stop, color_range);
+	    source = glitz_surface_create_linear (&start, &stop, color_range);
 	} else {
 	    glitz_point_fixed_t center;
-	    glitz_distance_fixed_t radius;
-
-	    center.x =
-		_cairo_fixed_from_double (pattern->u.radial.center1.x - x);
-	    center.y =
-		_cairo_fixed_from_double (pattern->u.radial.center1.y - y);
-	    radius.dx =
-		_cairo_fixed_from_double (pattern->u.radial.radius1.dx);
-	    radius.dy =
-		_cairo_fixed_from_double (pattern->u.radial.radius1.dy);
-
-	    programmatic =
-		glitz_surface_create_radial (&center, &radius, color_range);
+	    
+	    center.x = _cairo_fixed_from_double (pattern->u.radial.center1.x);
+	    center.y = _cairo_fixed_from_double (pattern->u.radial.center1.y);
+	    
+	    source = glitz_surface_create_radial
+		(&center,
+		 _cairo_fixed_from_double (pattern->u.radial.radius0),
+		 _cairo_fixed_from_double (pattern->u.radial.radius1),
+		 color_range);
 	}
 
 	glitz_color_range_destroy (color_range);
-    }
-	break;
-    default:
+    } break;
+    case CAIRO_PATTERN_SURFACE:
+	if (CAIRO_GL_COMPOSITE_TRAPEZOIDS_SUPPORT (surface)) {
+	    cairo_gl_surface_t *src_clone = NULL;
+	    cairo_surface_t *generic_src = pattern->u.surface.surface;
+
+	    src = (cairo_gl_surface_t *) generic_src;
+	    if (generic_src->backend != surface->base.backend) {
+		src_clone =
+		    _cairo_gl_surface_clone_similar (generic_src, surface,
+						     CAIRO_FORMAT_ARGB32);
+		if (!src_clone)
+		    return CAIRO_INT_STATUS_UNSUPPORTED;
+	    } else {
+		src_clone = (cairo_gl_surface_t *)
+		    _cairo_gl_surface_create (src->surface, 0);
+		if (!src_clone)
+		    return CAIRO_STATUS_NO_MEMORY;
+		
+		cairo_surface_set_filter
+		    (&src_clone->base, cairo_surface_get_filter (generic_src));
+
+		cairo_surface_set_matrix (&src_clone->base,
+					  &generic_src->matrix);
+	    }
+	    
+	    cairo_surface_set_repeat (&src_clone->base, generic_src->repeat);
+	    
+	    src_clone->opacity = (unsigned short)
+		(pattern->color.alpha * 0xffff);
+
+	    pattern->source = &src_clone->base;
+	    
+	    return CAIRO_STATUS_SUCCESS;
+	}
 	return CAIRO_INT_STATUS_UNSUPPORTED;
 	break;
     }
-
-    if (!programmatic)
+    
+    if (!source)
 	return CAIRO_STATUS_NO_MEMORY;
 
-    gl_surface = (cairo_gl_surface_t *)
-        _cairo_gl_surface_create (programmatic, 1);
-    if (!gl_surface) {
-	glitz_surface_destroy (programmatic);
-
+    src = (cairo_gl_surface_t *) _cairo_gl_surface_create (source, 1);
+    if (!src) {
+	glitz_surface_destroy (source);
+	
 	return CAIRO_STATUS_NO_MEMORY;
     }
+    
+    if (pattern->type == CAIRO_PATTERN_LINEAR ||
+	pattern->type == CAIRO_PATTERN_RADIAL)
+	cairo_surface_set_matrix (&src->base, &pattern->matrix);
 
-    _cairo_pattern_init_copy (&gl_surface->pattern, pattern);
-    gl_surface->pattern_box = *box;
-
-    pattern->source = &gl_surface->base;
-    _cairo_pattern_add_source_offset (pattern,
-				      floor (_cairo_fixed_to_double (box->p1.x)),
-				      floor (_cairo_fixed_to_double (box->p1.y)));
+    _cairo_pattern_init_copy (&src->pattern, pattern);
+    src->pattern_box = *box;
+    
+    pattern->source = &src->base;
 
     return CAIRO_STATUS_SUCCESS;
 }
@@ -757,8 +800,8 @@ _cairo_gl_surface_set_clip_region (void *abstract_surface,
 	return CAIRO_STATUS_NO_MEMORY;
 
     for (i = 0; i < n; n++, box++) {
-	clip_rects[i].x = (short) box->x1;
-	clip_rects[i].y = (short) box->y1;
+	clip_rects[i].x = box->x1;
+	clip_rects[i].y = box->y1;
 	clip_rects[i].width = (unsigned short) (box->x2 - box->x1);
 	clip_rects[i].height = (unsigned short) (box->y2 - box->y1);
     }
@@ -810,6 +853,7 @@ _cairo_gl_surface_create (glitz_surface_t *surface, int owns_surface)
     crsurface->features = glitz_surface_get_features (surface);
     crsurface->hints = glitz_surface_get_hints (surface);
     crsurface->owns_surface = owns_surface;
+    crsurface->opacity = 0xffff;
 
     return (cairo_surface_t *) crsurface;
 }

@@ -203,7 +203,7 @@ cairo_surface_set_repeat (cairo_surface_t *surface, int repeat)
 }
 slim_hidden_def(cairo_surface_set_repeat);
 
-cairo_int_status_t
+cairo_status_t
 _cairo_surface_composite (cairo_operator_t	operator,
 			  cairo_surface_t	*src,
 			  cairo_surface_t	*mask,
@@ -424,10 +424,10 @@ _cairo_surface_create_pattern (cairo_surface_t *surface,
 
 	    /* handle pattern opacity */
 	    if (pattern->color.alpha != 1.0) {
-		int width = ceil (_cairo_fixed_to_double (box->p2.x)) -
-		    floor (_cairo_fixed_to_double (box->p1.x));
-		int height = ceil (_cairo_fixed_to_double (box->p2.y)) -
-		    floor (_cairo_fixed_to_double (box->p1.y));
+		double x = box->p1.x >> 16;
+		double y = box->p1.y >> 16;
+		int width = ((box->p2.x + 65535) >> 16) - (box->p1.x >> 16);
+		int height = ((box->p2.y + 65535) >> 16) - (box->p1.y >> 16);
 		cairo_pattern_t alpha;
         
 		pattern->source =
@@ -462,9 +462,9 @@ _cairo_surface_create_pattern (cairo_surface_t *surface,
 						  save_repeat);
             
 			if (status == CAIRO_STATUS_SUCCESS) {
-			    _cairo_pattern_add_source_offset (pattern,
-							      floor (_cairo_fixed_to_double (box->p1.x)),
-							      floor (_cairo_fixed_to_double (box->p1.y)));
+			    _cairo_pattern_set_source_offset (pattern,
+							      pattern->source_offset.x + x,
+							      pattern->source_offset.y + y);
 			} else
 			    cairo_surface_destroy (pattern->source);
 		    }

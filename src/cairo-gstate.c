@@ -363,10 +363,6 @@ _cairo_gstate_set_pattern (cairo_gstate_t *gstate, cairo_pattern_t *pattern)
     
     gstate->pattern = pattern;
     cairo_pattern_reference (pattern);
-
-    _cairo_gstate_current_point (gstate,
-                                 &gstate->pattern_offset.x,
-                                 &gstate->pattern_offset.y);
     
     return CAIRO_STATUS_SUCCESS;
 }
@@ -452,7 +448,7 @@ _cairo_gstate_set_fill_rule (cairo_gstate_t *gstate, cairo_fill_rule_t fill_rule
     return CAIRO_STATUS_SUCCESS;
 }
 
-cairo_status_t
+cairo_fill_rule_t
 _cairo_gstate_current_fill_rule (cairo_gstate_t *gstate)
 {
     return gstate->fill_rule;
@@ -1278,7 +1274,11 @@ _cairo_gstate_create_pattern (cairo_gstate_t *gstate,
     }
   
     _cairo_pattern_set_alpha (pattern, gstate->alpha);
-    _cairo_pattern_transform (pattern, &gstate->ctm, &gstate->ctm_inverse);
+    _cairo_pattern_transform (pattern, &gstate->ctm_inverse);
+
+    _cairo_pattern_set_source_offset (pattern,
+				      gstate->pattern_offset.x,
+				      gstate->pattern_offset.y);
 
     status = _cairo_surface_create_pattern (gstate->surface, pattern, extents);
     if (status) {
@@ -1288,10 +1288,6 @@ _cairo_gstate_create_pattern (cairo_gstate_t *gstate,
 
     if (pattern->type == CAIRO_PATTERN_SURFACE)
 	_cairo_pattern_prepare_surface (pattern);
-
-    _cairo_pattern_add_source_offset (pattern,
-				      gstate->pattern_offset.x,
-				      gstate->pattern_offset.y);
     
     return CAIRO_STATUS_SUCCESS;
 }

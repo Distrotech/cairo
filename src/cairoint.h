@@ -40,6 +40,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <limits.h>
 
 #include "cairo.h"
 
@@ -118,6 +119,9 @@ typedef int32_t cairo_fixed_16_16_t;
 
 /* The common 16.16 format gets a shorter name */
 typedef cairo_fixed_16_16_t cairo_fixed_t;
+
+#define CAIRO_MAXSHORT SHRT_MAX
+#define CAIRO_MINSHORT SHRT_MIN
 
 typedef struct cairo_point {
     cairo_fixed_t x;
@@ -453,11 +457,26 @@ typedef enum {
 } cairo_pattern_type_t;
 
 typedef struct cairo_color_stop {
-    double offset;
+    cairo_fixed_t offset;
+    cairo_fixed_48_16_t scale;
     int id;
     cairo_color_t color;
     unsigned char color_char[4];
 } cairo_color_stop_t;
+
+typedef void (*cairo_shader_function_t) (unsigned char *color0,
+					 unsigned char *color1,
+					 cairo_fixed_t factor,
+					 int *pixel);
+
+typedef struct cairo_shader_op {
+    cairo_color_stop_t *stops;
+    int n_stops;
+    cairo_fixed_t min_offset;
+    cairo_fixed_t max_offset;
+    cairo_extend_t extend;
+    cairo_shader_function_t shader_function;
+} cairo_shader_op_t;
 
 struct cairo_pattern {
     unsigned int ref_count;
@@ -489,8 +508,8 @@ struct cairo_pattern {
         struct {
             cairo_point_double_t center0;
             cairo_point_double_t center1;
-            cairo_distance_double_t radius0;
-            cairo_distance_double_t radius1;
+            double radius0;
+            double radius1;
         } radial;
     } u;
 };
@@ -924,7 +943,7 @@ _cairo_font_create (const char           *family,
 		    cairo_font_slant_t   slant, 
 		    cairo_font_weight_t  weight);
 
-extern cairo_int_status_t __internal_linkage
+extern cairo_status_t __internal_linkage
 _cairo_font_init (cairo_font_t *font, 
 		  const struct cairo_font_backend *backend);
 
@@ -937,22 +956,22 @@ _cairo_font_scale (cairo_font_t *font, double scale);
 extern cairo_status_t __internal_linkage
 _cairo_font_transform (cairo_font_t *font, cairo_matrix_t *matrix);
 
-extern cairo_int_status_t __internal_linkage
+extern cairo_status_t __internal_linkage
 _cairo_font_font_extents (cairo_font_t *font, 
 			  cairo_font_extents_t *extents);
 
-extern cairo_int_status_t __internal_linkage
+extern cairo_status_t __internal_linkage
 _cairo_font_text_extents (cairo_font_t *font,
                           const unsigned char *utf8,
 			  cairo_text_extents_t *extents);
 
-extern cairo_int_status_t __internal_linkage
+extern cairo_status_t __internal_linkage
 _cairo_font_glyph_extents (cairo_font_t *font,
                            cairo_glyph_t *glyphs,
                            int num_glyphs,
 			   cairo_text_extents_t *extents);
 
-extern cairo_int_status_t __internal_linkage
+extern cairo_status_t __internal_linkage
 _cairo_font_show_text (cairo_font_t             *font,
                        cairo_operator_t         operator,
                        cairo_surface_t          *source,
@@ -962,7 +981,7 @@ _cairo_font_show_text (cairo_font_t             *font,
                        const unsigned char      *utf8);
 
 
-extern cairo_int_status_t __internal_linkage
+extern cairo_status_t __internal_linkage
 _cairo_font_show_glyphs (cairo_font_t           *font,
                          cairo_operator_t       operator,
                          cairo_surface_t        *source,
@@ -971,14 +990,14 @@ _cairo_font_show_glyphs (cairo_font_t           *font,
                          int                    num_glyphs);
 
 
-extern cairo_int_status_t __internal_linkage
+extern cairo_status_t __internal_linkage
 _cairo_font_text_path (cairo_font_t             *font,
 		       double			x,
 		       double			y,
                        const unsigned char      *utf8,
                        cairo_path_t             *path);
 
-extern cairo_int_status_t __internal_linkage
+extern cairo_status_t __internal_linkage
 _cairo_font_glyph_path (cairo_font_t            *font,
                         cairo_glyph_t           *glyphs, 
                         int                     num_glyphs,
@@ -1331,20 +1350,23 @@ extern void __internal_linkage
 _cairo_pattern_set_alpha (cairo_pattern_t *pattern, double alpha);
 
 extern void __internal_linkage
-_cairo_pattern_add_source_offset (cairo_pattern_t *pattern,
+_cairo_pattern_set_source_offset (cairo_pattern_t *pattern,
 				  double x, double y);
 
 extern void __internal_linkage
 _cairo_pattern_transform (cairo_pattern_t *pattern,
-			  cairo_matrix_t *matrix,
-			  cairo_matrix_t *matrix_inverse);
+			  cairo_matrix_t *ctm_inverse);
 
 extern void __internal_linkage
 _cairo_pattern_prepare_surface (cairo_pattern_t *pattern);
 
 extern void __internal_linkage
-_cairo_pattern_calc_color_at_pixel (cairo_pattern_t *pattern,
-				    double factor,
+_cairo_pattern_shader_init (cairo_pattern_t *pattern,
+			    cairo_shader_op_t *op);
+
+extern void __internal_linkage
+_cairo_pattern_calc_color_at_pixel (cairo_shader_op_t *op,
+				    cairo_fixed_t factor,
 				    int *pixel);
 
 extern cairo_image_surface_t *__internal_linkage
