@@ -1,3 +1,719 @@
+2005-08-08  Carl Worth  <cworth@cworth.org>
+
+	* NEWS: Added notes for release 0.9.0.
+
+	* configure.in: Increment CAIRO_VERSION to 0.9.0. Increment
+	LT_CURRENT to 2 to mark the beginning of proper soname management.
+
+2005-08-08  Carl Worth  <cworth@cworth.org>
+
+	* src/Makefile.am (libcairo_la_SOURCES): Add missing cairo-debug.h
+	which was hold up make distcheck.
+
+2005-08-08  Carl Worth  <cworth@cworth.org>
+
+	* test/Makefile.am (EXTRA_DIST): Fix typo that was holding up make
+	distcheck from working.
+
+2005-08-08  Billy Biggs  <vektor@dumbterm.net>
+
+	* src/cairo-path-data-private.h: Declare _cairo_path_nil as extern.
+
+2005-08-08  Billy Biggs  <vektor@dumbterm.net>
+
+	reviewed by: cworth, otaylor
+
+	* src/cairo.c: (cairo_set_antialias), (cairo_get_antialias):
+	* src/cairo.h: Add a new API for disabling antialiasing of shapes
+	drawn by cairo.  This is a hint and is not supported by all backends.
+
+	* src/cairoint.h:
+	* src/cairo-gstate-private.h:
+	* src/cairo-gstate.c: (_cairo_gstate_init),
+	(_composite_traps_draw_func),
+	(_cairo_surface_clip_and_composite_trapezoids),
+	(_cairo_gstate_clip_and_composite_trapezoids),
+	(_cairo_gstate_clip), (_cairo_gstate_set_antialias),
+	(_cairo_gstate_get_antialias): Store the antialiasing mode in the
+	gstate and pass it to the backend for trapezoid rendering and for
+	clipping.
+
+	* src/cairo-clip-private.h:
+	* src/cairo-clip.c: (_cairo_clip_intersect_path),
+	(_cairo_clip_intersect_mask), (_cairo_clip_clip): Pass the
+	antialiasing parameter down to the backend where appropriate.
+
+	* src/cairo-surface.c: (_fallback_composite_trapezoids),
+	(_cairo_surface_composite_trapezoids), (_cairo_surface_reset_clip),
+	(_cairo_surface_intersect_clip_path),
+	(_cairo_surface_set_clip_path_recursive),
+	(_cairo_surface_set_clip_path): Pass the antialiasing parameter down
+	to the backend where appropriate.
+
+	* src/cairo-image-surface.c:
+	(_cairo_image_surface_composite_trapezoids): Add support for A1 format
+	trapezoid rendering, and remove the _create_mask_image function,
+	creating a temporary image from memory we allocate and clear.
+
+	* src/cairo-xcb-surface.c:
+	(_cairo_xcb_surface_composite_trapezoids): Support A1 masks to disable
+	antialiasing using the RENDER extension when requested.
+
+	* src/cairo-xlib-surface.c: (_create_trapezoid_mask),
+	(_cairo_xlib_surface_composite_trapezoids): Support A1 masks to disable
+	antialiasing using the RENDER extension when requested.
+
+	* src/cairo-meta-surface-private.h:
+	* src/cairo-meta-surface.c:
+	(_cairo_meta_surface_composite_trapezoids),
+	(_cairo_meta_surface_intersect_clip_path),
+	(_cairo_meta_surface_replay): Blindly pass through the antialising
+	parameter.
+
+	* src/cairo-glitz-surface.c:
+	(_cairo_glitz_surface_composite_trapezoids):
+	* src/cairo-pdf-surface.c:
+	(_cairo_pdf_surface_composite_trapezoids),
+	(_cairo_pdf_surface_intersect_clip_path): 
+	* src/cairo-ps-surface.c: (_cairo_ps_surface_composite_trapezoids),
+	(_cairo_ps_surface_intersect_clip_path),
+	(_ps_output_composite_trapezoids),
+	(_ps_output_intersect_clip_path): Add the antialiasing parameter but
+	don't support it.
+
+	* test/Makefile.am:
+	* test/unantialiased-shapes-ref.png:
+	* test/unantialiased-shapes.c: (big_star_path), (draw), (main):
+	Add a test case and a reference image from the latest libpixman.
+
+	* doc/public/tmpl/cairo-font.sgml:
+	* doc/public/tmpl/cairo.sgml:
+	* doc/public/cairo-sections.txt: Add the new antialiasing disabling API to
+	the docs.
+
+	* TODO: Update progress on a parameter to disable antialiasing.
+
+2005-08-08  Carl Worth  <cworth@cworth.org>
+
+	* test/.cvsignore: Ignore clip-operator and unbounded-operator.
+
+2005-08-08  Carl Worth  <cworth@cworth.org>
+
+	* RELEASING: Fix gnome-announce-list address.
+
+2005-08-08  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-xlib-surface.c (_xlib_glyphset_cache_destroy_entry): 
+	Don't free the glyph if the entry doesn't have a glyph.
+	(Maybe #3909, Carlos Garnacho Parro)
+
+2005-08-08  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-gstate.c: (_cairo_operator_bounded): Add a return
+	value after ASSERT_NOT_REACHED to quiet an anxious compiler.
+
+2005-08-08  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-gstate.c: (_cairo_surface_clip_and_composite_trapezoids): 
+	Fix accidentally committed line.
+
+2005-08-08  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo-surface.c (_cairo_surface_set_clip_path): Update doc
+	comment.
+
+2005-08-08  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-gstate.c (_cairo_operator_bounded): Add a function to test
+	whether a cairo_operator_t is bounded (does nothing for 0 src/mask)
+
+	* src/cairo-surface.c (_cairo_surface_composite_fixup_unbounded) cairoint.h:
+	Add a helper function to take clearing areas that are outside the source/mask
+	but are cleared by unbounded operations.
+
+	* src/cairo-image-surface.c (_cairo_image_surface_composite)
+	src/cairo-xlib-surface.c (_cairo_xlib_surface_composite): Use 
+	_cairo_surface_composite_fixup_unbounded() as needed.
+
+	* src/cairo-image-surface.c src/cairint.h: Keep track of whether the surface 
+	has a clip or not ... we need this for determining when we can bypass
+	an intermediate mask for composite_trapezoids().
+
+	* src/cairo-image-surface.c (_cairo_image_surface_composite_trapezoids):
+	Create an intermediate mask of the right size with pixman_add_trapezoids()
+	and composite that.
+
+	* src/cairo-xlib-surface.c (_cairo_xlib_surface_composite_trapezoids):
+	When rendering with an unbounded operator, create the intermediate mask
+	ourselves and render with ADD to that, then composite the result.
+
+	* src/cairo-ft-font.c (_cairo_ft_scaled_font_show_glyphs): Create an 
+	intermediate surface the size of the extents, render the glyphs to that
+	then composite the results.
+
+	* src/cairo-xlib-surface.c (glyphset_cache_entry_t): Add the size of the glyph
+
+	* src/cairo-xlib-surface.c (_show_glyphs_fixup_unbounded): Compute the size
+	of the glyph mask, then use _cairo_surface_composite_fixup_unbounded().
+
+	* src/cairo-xlib-surface.c (_cairo_xlib_surface_show_glyphs32): Use the right
+	mask format. (Unrelated bugfix)
+
+	* src/cairo-gstate.c (_cairo_gstate_clip_and_composite): New function taking
+	a drawing function as a parameter to encapsulate shared logic between
+	compositing trapezoid, glyphs, and masks.
+
+	* src/cairo-gstate.c (_cairo_gstate_mask, 
+	_cairo_surface_clip_and_composite_trapezoids, _cairo_gstate_show_glyphs):
+	Use _cairo_gstate_clip_and_composite(). Also fix extents computations for 
+	unbounded operators.
+	
+	* src/cairo-clip.c src/cairo-clip-private.h (_cairo_clip_combine_to_surface): 
+	Add the destination as an extra parameter to allow combining to an intermediate
+	surface.
+
+	* tests/unbounded-operator.c tests/Makefile.am: Add a test for the
+	operation of the 6 unbounded operators against different shapes.
+
+	* tests/clip-operator.c tests/Makefile.am: Add a test that tests
+	surface clipping with different shapes against all the operators.
+
+	* test/composite-integer-translate-over-repeat.c (draw): Make use OVER
+	like the name and description. With fixed semantics, SOURCE does something
+	different.
+
+2005-08-06  Carl Worth  <cworth@cworth.org>
+
+	* BUGS: Remove several bugs that have been fixed.
+	
+	* ROADMAP: Slip group support off of the 1.0 roadmap. Update
+	status of clipping work which otaylor is working on.
+	
+	* TODO: Update for progress on cairo_surface_mark_dirty
+	(committed), non-antialiased rendering (patch), cairo_arc_to
+	(patch), consistent error handling (committed), cairo_content_t
+	(committed). Remove details for some completed items.
+
+	* src/cairo-gstate.c (_cairo_gstate_set_font_face): Don't crash if
+	font_face is NULL, (this is a documented mechanism for returning
+	to the default font_face).
+
+2005-08-06  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.c (cairo_get_font_face): Fix to return
+	&_cairo_font_face_nil instead of NULL on error.
+
+2005-08-06  Jeff Muizelaar  <jeff@infidigm.net>
+
+	* test/a8-mask.c: (main): Give reason for failure.
+
+2005-08-06  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-win32-font.c (_cairo_win32_scaled_font_show_glyphs): 
+	Remove a non-sensical XXX that crept in at some point; for
+	a solid color, there is no difference between premultiplied
+	and non-premultiplied colors.
+
+2005-08-06  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-ft-font.c: (_cairo_ft_scaled_font_create),
+	(_cairo_ft_scaled_font_create_toy),
+	(_cairo_ft_scaled_font_glyph_extents),
+	(_cairo_ft_font_face_scaled_font_create): Fix up some stale
+	comments. Rename _cairo_ft_scaled_font_create_for_unscaled to its
+	proper name of _cairo_ft_scaled_font_create (which is available
+	now that _cairo_ft_scaled_font_create_toy has its correct
+	name). Also prefer 'scaled_font' over 'f' as an identifier.
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-ft-font.c: (_cairo_ft_unscaled_font_init),
+	(_cairo_ft_unscaled_font_create_from_face),
+	(_cairo_ft_unscaled_font_create_from_filename): Unify
+	initialization for _cairo_ft_unscaled_font_create_from_face and
+	_cairo_ft_unscaled_font_create_from_filename through new
+	_cairo_ft_unscaled_font_init.
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-ft-font.c: (_cairo_ft_font_face_create): Rename
+	_ft_font_face_backend to be preoperly namespaced as
+	_cairo_ft_font_face_backend.
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-ft-font.c: (_cairo_ft_font_face_destroy),
+	(_cairo_ft_font_face_create): Rename cairo_ft_font_face->next_face
+	to next.
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h: Include cairo-hash-private.h.
+
+	* src/Makefile.am (libcairo_la_SOURCES): Add cairo-hash.c and
+	cairo-hash-private.h since we're actually going to start using
+	them now.
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-gstate.c: (_cairo_gstate_set_font_face): Simplify the
+	implementation by taking advantage of the fact that destroy and
+	reference are safe for NULL, and that reference returns its
+	argument.
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-gstate.c: (_cairo_gstate_translate),
+	(_cairo_gstate_scale), (_cairo_gstate_rotate),
+	(_cairo_gstate_transform), (_cairo_gstate_set_matrix),
+	(_cairo_gstate_identity_matrix), (_cairo_gstate_unset_scaled_font),
+	(_cairo_gstate_set_font_size), (_cairo_gstate_set_font_matrix),
+	(_cairo_gstate_set_font_options),
+	(_cairo_gstate_ensure_scaled_font),
+	(_cairo_gstate_get_font_extents), (_cairo_gstate_text_to_glyphs),
+	(_cairo_gstate_set_font_face), (_cairo_gstate_glyph_extents),
+	(_cairo_gstate_show_glyphs), (_cairo_gstate_glyph_path):
+	Rename two functions:
+
+	_cairo_gstate_unset_font  -> _cairo_gstate_unset_scaled_font
+	_cairo_gstate_ensure_font -> _cairo_gstate_ensure_scaled_font
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h: Entagle the cairo_unscaled_font_t typedef.
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h: Rename font_face_backend->create_font to
+	scaled_font_create. Group the scaled_font prototypes together. A
+	little more simple -> toy renaming.
+
+	* src/cairo-font.c: (_cairo_toy_font_face_create_from_cache_key),
+	(_cairo_toy_font_face_destroy),
+	(_cairo_toy_font_face_create):
+	* src/cairo-gstate.c: (_cairo_gstate_select_font_face),
+	(_cairo_gstate_ensure_font_face):
+	A little more simple -> toy renaming.
+
+	* src/cairo-font.c: (_cairo_toy_font_face_scaled_font_create),
+	(_cairo_inner_font_cache_create_entry):
+	* src/cairo-ft-font.c: (_cairo_ft_font_face_scaled_font_create):
+	* src/cairo-win32-font.c: (_cairo_win32_font_face_scaled_font_create):
+	Track rename of font_face_backend->scaled_font_create.
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h: Rather gratuitous (though mostly harmless)
+	whitespace changes for font backend tables.
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.c: Document the implicit closing of sub-paths for
+	cairo_fill and cairo_fill_preserve.
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h: Rename parameters to scalend_font_backend from
+	font to scaled_font.
+	
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h: Rename scaled_font_backend->destroy to the more
+	accurate fini, (since it frees only the dependent data within the
+	scaled_font and not the scaled_font itself).
+
+	* src/cairo-atsui-font.c: (_cairo_atsui_font_fini):
+	* src/cairo-font.c: (cairo_scaled_font_destroy):
+	* src/cairo-ft-font.c: (_cairo_ft_scaled_font_fini):
+	* src/cairo-win32-font.c: (_cairo_win32_scaled_font_fini):
+	Track rename of scaled_font_backend->fini.
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h: Rename scaled_font_backend->create to
+	create_toy. Move declaration of cairo_simple_font_face_t from
+	cairo_font.c to cairoint.h and rename it
+	cairo_toy_font_face_t. Rework create_toy to accept a
+	cairo_toy_font_face_t rather than separate family, slant, and
+	weight.
+	
+	* src/cairo-atsui-font.c: (_cairo_atsui_font_create_toy):
+	* src/cairo-ft-font.c: (_cairo_ft_scaled_font_create_toy):
+	* src/cairo-win32-font.c: (_cairo_win32_scaled_font_create_toy):
+	Track change in create_toy interface.
+
+	* src/cairo-font.c: (_cairo_toy_font_face_create_from_cache_key),
+	(_cairo_simple_font_cache_create_entry),
+	(_cairo_simple_font_face_destroy),
+	(_cairo_simple_font_face_create_font):
+	Partial rename of simple->toy. It's not complete as this is a step
+	in the process of merging in a large patch of mine which actually
+	removes most of the affected code.
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* test/.cvsignore: ignore a8-mask
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* test/a8-mask.c (draw): Patch memory leaks.
+
+2005-08-05  Jeff Muizelaar  <jeff@infidigm.net>
+
+	* test/Makefile.am:
+	* test/a8-mask-ref.png:
+	* test/a8-mask.c: (draw), (main):
+	Add a test case for CAIRO_FORMAT_A8 masks that fails with
+	libpixman.
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* autogen.sh (automake_min_vers): Bump automake_min_vers up to 1.7
+	since we clearly don't work with 1.4 anymore.
+
+2005-08-05  Jeff Muizelaar  <jeff@infidigm.net>
+
+	* test/xlib-surface.c: (do_test): use the newly added
+	buffer_diff_noalpha for comparing buffers of
+	CAIRO_FORMAT_RGB24.
+
+2005-08-05  Jeff Muizelaar  <jeff@infidigm.net>
+
+	* test/buffer-diff.c: (buffer_diff_core), (buffer_diff),
+	(buffer_diff_noalpha):
+	* test/buffer-diff.h: rewrite buffer_diff to be endian safe
+	and add a new fuction buffer_diff_noalpha
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* doc/public/cairo-sections.txt: Remove CAIRO_BEGIN_DECLS and
+	CAIRO_END_DECLS which don't belong here.
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* test/surface-finish-twice.c (draw): Remove unused variable.
+	
+2005-08-05  Carl Worth  <cworth@cworth.org>
+	
+	* doc/public/Makefile.am: Ignore cairo-clip-private.h.
+	
+	* doc/public/cairo-docs.xml: Drop non-existent cairo-atsui.xml.
+	
+	* src/cairo-font.c: Fix misnamed parameters in comment blocks.
+	
+	* test/cairo-test.c: Include config.h so HAVE_UNISTD_H gets
+	picked up as necessary.
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* doc/public/Makefile.am (IGNORE_HFILES): Ignore
+	cairo-clip-private.h.
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* doc/public/cairo-sections.txt: Add some missing declarations to
+	the appropriate sections.
+	
+	* doc/public/tmpl/cairo-font.sgml:
+	* doc/public/tmpl/cairo-surface.sgml:
+	* doc/public/tmpl/cairo-xlib.sgml:
+	* doc/public/tmpl/cairo.sgml: churn
+	
+	* src/cairo-path-data-private.h: Rename cairo_path_nil to
+	_cairo_path_nil since it may be exported, and tag it cairo_private
+	to try to avoid exporting it. Qualify it as const well.
+	
+	* src/cairo-path-data.c: (_cairo_path_data_create_real):
+	* src/cairo.c: (cairo_copy_path), (cairo_copy_path_flat):
+	Track new name of _cairo_path_nil and cast away the const as
+	required.
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-arc.c:
+	* src/cairo-matrix.c: Remove include of math.h since cairoint.h
+	does it more carefully, (for annoying platforms for which just
+	including math.h without extra defines is not enough).
+
+	* src/cairo.c: Replace Cairo with cairo.
+	
+	* test/buffer-diff.c: Include config.h so HAVE_UNISTD_H gets
+	picked up as necessary.
+	
+	* test/cairo-test.c: Fix non-UTF-8 copyright symbol.
+
+2005-08-05  Carl Worth  <cworth@cworth.org>
+
+	Patch from John Ehresman <jpe@wingide.com> to aid win32
+	compilation:
+
+	* src/cairo-output-stream.c: Define snprintf as _snprintf when
+	under the influence of _MSC_VER.
+	
+	* test/read-png.c: (read_png_argb32):
+	* src/cairo-wideint.h: Define int32_t and friends as __int32 and
+	friends when under the influence of _MSC_VER.
+
+	* test/buffer-diff.c:
+	* test/cairo-test.c: Make include of unistd.h conditional on
+	HAVE_UNISTD_H.
+
+2005-08-05  Kristian Høgsberg  <krh@redhat.com>
+
+	Patch from Adrian Johnson <ajohnson@redneon.com>
+	
+	* src/cairo-font-subset.c (cairo_pdf_ft_font_write_glyf_table)
+	(cairo_pdf_ft_font_remap_composite_glyph): Remap composite glyps
+	to use subset font glyph indices.
+	
+2005-08-05  Kristian Høgsberg  <krh@redhat.com>
+
+	Reviewed by: otaylor
+
+	* src/Makefile.am:
+	* src/cairo-clip-private.h:
+	* src/cairo-clip.c: New files.  Move code for manipulating
+	cairo_clip_t out into cairo_clip_* functions and put them in
+	cairo-clip.c.
+	
+	* src/cairo-gstate-private.h:
+	* src/cairo-gstate.c: Rewrite to use new cairo_clip_t functions
+	for manipulating the clip state, change the
+	clip_and_composite_trapezoids call tree to use cairo_clip_t
+	instead of cairo_gstate_t.
+	
+	* src/cairo-meta-surface.c: Use new cairo_clip_t function to
+	maintain clip state while replaying.
+	
+	* src/cairo-path-fill.c: (_cairo_filler_init),
+	(_cairo_filler_curve_to), (_cairo_path_fixed_fill_to_traps): Pass
+	fill rule and tolerance directly, to break gstate dependency.
+	
+	* src/cairo-surface.c: (_cairo_surface_set_clip): New function.
+	Set the clip for a surface as specified by the cairo_clip_t.
+	
+	* src/cairo-traps.c: (_cairo_traps_translate): Move
+	translate_traps() from cairo-gstate.c to here and rename it.
+
+2005-08-04  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo-font.c: (cairo_font_face_reference),
+	(_cairo_unscaled_font_reference), (cairo_scaled_font_reference):
+	* src/cairo-gstate.c: (_cairo_clip_path_reference):
+	* src/cairo-pattern.c: (cairo_pattern_reference):
+	* src/cairo-pdf-surface.c: (_cairo_pdf_document_reference):
+	* src/cairo-surface.c: (cairo_surface_reference):
+	* src/cairo.c: (cairo_reference):
+	* src/cairo.h:
+	* src/cairoint.h:
+	Change *_reference() functions to return the object being
+	referenced.
+
+2005-07-29  T Rowley  <tim.rowley@gmail.com>
+
+	Reviewed by: otaylor
+
+	* src/cairo-xlib-surface.c ( _categorize_composite_operation):
+	Check for render bug involving repeated patterns with a general
+	transform matrix.
+
+2005-08-04  Carl Worth  <cworth@cworth.org>
+
+	Originally 2005-07-13  Carl Worth  <cworth@cworth.org>
+
+	Reviewed by: otaylor
+
+	* src/cairo-ft-private.h: Export opaque cairo_ft_unscaled_font_t
+	and change _cairo_ft_unscaled_font_[un]lock_face to accept
+	cairo_ft_unscaled_font_t rather than cairo_unscaled_font_t.
+	
+	* src/cairo-font-subset.c: (_cairo_font_subset_create),
+	(cairo_pdf_ft_font_generate): Cast explicitly to
+	cairo_ft_unscaled_font_t to track change in prototype of
+	_cairo_ft_unscaled_font_[un]lock_face.
+
+	* src/cairo-ft-font.c: Lots of renaming to use consistent
+	namespacing:
+
+		ft_font_transform_t -> cairo_ft_font_transform_t
+		ft_font_face_t	    -> cairo_ft_font_face_t
+		ft_unscaled_font_t  -> cairo_ft_unscaled_font_t
+
+	Add missing _cairo prefix to many functions.
+	
+	Disambiguate _ft_scaled_font_create and
+	_cairo_ft_scaled_font_create by renaming the former to
+	_cairo_ft_scaled_font_create_for_unscaled.
+
+2005-08-03  Carl Worth  <cworth@cworth.org>
+
+	Fix for bug #3951:
+
+	* configure.in: Add new _CHECK_FUNCS_WITH_FLAGS to abstract out
+	the pain of temporarily setting flags for AC_CHECK_FUNCS. Use this
+	to check for the existence of FcFini.
+	
+	* test/cairo-test.c: (cairo_test_expecting): Make call to FcFini
+	conditional on HAVE_FCFINI.
+	
+	* test/text-cache-crash.c: (main): Remove stale comment about
+	cleaning up memory which is now handled by cairo-test.c.
+
+2005-08-01  Owen Taylor  <otaylor@redhat.com>
+
+	reviewed by: cworth
+
+	* src/cairo-gstate.c src/cairo-gstate-private.h: Store the
+	inverse CTM at the time of cairo_gstate_set_source() to 
+	"lock" the user space matrix.
+
+	* src/cairo-gstate.c: Move the source pattern transformation
+	to the outside of _cairo_gstate_clip_and_composite_trapezoids()
+	instead of doing it at the leaves.
+
+	* test/source-surface-scale-paint.c: Change size of output
+	surface for aesthetics.
+
+	* test/source-surface-scale-paint-ref.png: Updated to correspond
+	to the current definition.
+	
+	* test/Makefile.am (XFAIL_TESTS):
+	Remove source-surface-scale-paint.
+
+2005-08-01  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-debug.h: New public header file.
+
+	* src/cairo-debug.c: (cairo_debug_reset_static_data): New function
+	to reset all static data (eg. caches) to their initial state.
+	
+	* Makefile.am: Fix check-valgrind target to depend on the 'all'
+	target.
+	
+	* configure.in: Add check for a new, proposed, XrmFinalize
+	function.
+	
+	* src/Makefile.am: Add cairo-debug.c.
+	
+	* src/cairo.h:
+	* src/cairo-features.h.in: Move the definition of
+	CAIRO_BEGIN_DECLS to cairo-features.h so that it can be shared
+	between public header files, and so that it doesn't clutter
+	cairo.h
+
+	* src/cairoint.h:
+	* src/cairo-font.c: (_get_global_simple_cache),
+	(_get_outer_font_cache), (_get_inner_font_cache),
+	(_cairo_unlock_global_image_glyph_cache),
+	(_cairo_font_reset_static_data):
+	* src/cairo-ft-font.c: (_cairo_ft_font_reset_static_data):
+	* src/cairo-xlib-screen.c: (_cairo_xlib_close_display),
+	(_cairo_xlib_screen_info_reset),
+	(_cairo_xlib_screen_reset_static_data):
+	* src/cairo-xlib-surface.c: (_unlock_xlib_glyphset_caches),
+	(_destroy_glyphset_cache_recurse),
+	(_cairo_xlib_surface_reset_static_data): Implement
+	reset_static_data in all modules as required.
+
+	* test/xlib-surface.c: (main):
+	* test/cairo-test.h:
+	* test/cairo-test.c: (cairo_test_for_target),
+	(cairo_test_expecting): Call cairo_debug_reset_static_data and
+	FcFini so that we can have all tests be valgrind-clean with
+	respect to memory leaks and still-reachable data.
+
+2005-08-01  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo.h src/cairoint.h src/cairo-surface.c:
+	Add cairo_mark_dirty[_rectangle]() and cairo_flush() for
+
+	* src/cairo-win32-surface.c: Implement a cairo_flush()
+	that restores the original clip. Also restore the original
+	flush when a surface is finished.
+
+	* ROADMAP: Check off the item.
+
+2005-07-31  Billy Biggs  <vektor@dumbterm.net>
+
+	reviewed by: keithp
+
+	* src/cairo-ft-font.c: (_ft_unscaled_font_set_scale): Support
+	versions of freetype without exact FT_Bitmap_Size.x/y_ppem
+	values by using the pixel width and height values instead.
+
+	* configure.in: Add a check for FT_Bitmap_Size.y_ppem.
+
+2005-07-31  Billy Biggs  <vektor@dumbterm.net>
+
+	* src/cairo-quartz-surface.c: (cairo_quartz_surface_create):
+	Cast away the const on the nil surface to avoid a compiler warning.
+
+2005-07-31  Billy Biggs  <vektor@dumbterm.net>
+
+	* src/cairo-atsui-font.c: (_cairo_atsui_font_create): Pass the
+	options down to the scaled font object to keep things compiling.
+
+2005-07-30  Keith Packard  <keithp@keithp.com>
+
+	* src/cairo-wideint.c: (_cairo_int32x32_64_mul),
+	(_cairo_uint64_divrem), (_cairo_uint128_divrem):
+	* src/cairo-wideint.h:
+	
+	Replace wide integer divide algorithms with
+	trivial bit-at-a-time code. Original code was
+	of unclear provenance, this new code is
+	completely different.
+
+2005-07-29  Carl Worth  <cworth@cworth.org>
+
+	* ROADMAP: Remove completed 0.6 tasks. Add cairo_surface_flush to
+	the cairo_surface_mark_dirty task.
+
+2005-07-29  T Rowley  <tim.rowley@gmail.com>
+
+	* src/cairo-atsui-font.c ( _cairo_atsui_font_create):
+        src/cairo-quartz-surface.c (_cairo_quartz_surface_acquire_dest_image):
+	Minor updates to keep quartz backend limping along.
+
+2005-07-29  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-font.c src/cairo-ft-font.c src/cairo-win32-font.c
+	src/cairoint.h: Move the font options into the base 
+	cairo_scaled_font_t object so that we have them available
+	to use when we are removing a scaled font from the cache.
+	(http://bugzilla.gnome.org/show_bug.cgi?id=311299, 
+	Ali Akcaagac, Behdad Esfahbod)
+
+2005-07-28  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-gstate.c: (_cairo_gstate_mask): Run the mask pattern
+	through the CTM in the same way as the source pattern. This fixes
+	the bug demonstrated by the mask-ctm and mask-surface-ctm tests so
+	they should no longer fail.
+
+2005-07-28  Carl Worth  <cworth@cworth.org>
+
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/mask-ctm-ref.png:
+	* test/mask-ctm.c: (draw), (main):
+	* test/mask-surface-ctm-ref.png:
+	* test/mask-surface-ctm.c: (draw), (main): Add two new tests:
+		mask-ctm
+		mask-surface-ctm
+	  demonstrating that masks are not currently being modified by the
+	  CTM.
+
+2005-07-28  Carl Worth  <cworth@cworth.org>
+
+	* RELEASING: CC gnome-announce-list@gnome.org on cairo release
+	announcements.
+
+2005-07-28  Carl Worth  <cworth@cworth.org>
+
+	* configure.in: Add -head to CAIRO_VERSION after tagging with
+	SNAPSHOT_0_6_0.
+
 2005-07-28  Carl Worth  <cworth@cworth.org>
 
 	* NEWS: Added notes for snapshot 0.6.0
@@ -534,6 +1250,19 @@
 
 	* ROADMAP: Move all API changes from 1.0 to 0.6. Other 1.0 API
 	issues are strictly additions.
+
+2005-07-18  Carl Worth  <cworth@cworth.org>
+
+	* test/.valgrind-suppressions: Add valgrind suppressions for
+	libpng/libz use of uninitialized data. There are clearly bugs here
+	that are not cairo's fault as zeroing the buffer before writing
+	the png image actually causes more errors(!). And, notably,
+	setting all the data to random bytes usually makes the errors go
+	away.
+	
+	* test/Makefile.am: Change the check-valgrind target to include
+	the .valgrind-suppresions file and to tee output into
+	valgrind.log.
 
 2005-07-18  Carl Worth  <cworth@cworth.org>
 

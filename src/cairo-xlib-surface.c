@@ -91,6 +91,14 @@ struct _cairo_xlib_surface {
      *
      * We can't test for this because it depends on whether the
      * picture is in video memory or not.
+     *
+     * We also use this variable as a guard against a second
+     * independent bug with transformed repeating pictures:
+     *
+     * http://lists.freedesktop.org/archives/cairo/2004-September/001839.html
+     *
+     * Both are fixed in xorg >= 6.9 and hopefully in > 6.8.2, so
+     * we can reuse the test for now.
      */ 
     cairo_bool_t buggy_repeat;
 
@@ -662,8 +670,7 @@ _cairo_xlib_surface_clone_similar (void			*abstract_surface,
 	cairo_xlib_surface_t *xlib_src = (cairo_xlib_surface_t *)src;
 
 	if (_cairo_xlib_surface_same_screen (surface, xlib_src)) {
-	    *clone_out = src;
-	    cairo_surface_reference (src);
+	    *clone_out = cairo_surface_reference (src);
 	    
 	    return CAIRO_STATUS_SUCCESS;
 	}
@@ -878,11 +885,13 @@ _operator_needs_alpha_composite (cairo_operator_t operator,
     return TRUE;
 }
 
-/* There is a bug in most older X servers with compositing using a repeating
- * source pattern when the source is in off-screen video memory. When that
- * bug could be triggered, we need a fallback: in the common case where we have no
- * transformation and the source and destination have the same format/visual,
- * we can do the operation using the core protocol, otherwise, we need
+/* There is a bug in most older X servers with compositing using a
+ * untransformed repeating source pattern when the source is in off-screen
+ * video memory, and another with repeated transformed images using a
+ * general tranform matrix. When these bugs could be triggered, we need a
+ * fallback: in the common case where we have no transformation and the
+ * source and destination have the same format/visual, we can do the
+ * operation using the core protocol for the first bug, otherwise, we need
  * a software fallback.
  *
  * We can also often optimize a compositing operation by calling XCopyArea
@@ -896,9 +905,11 @@ typedef enum {
     DO_UNSUPPORTED	/* software fallback */
 } composite_operation_t;
 
-/* Initial check for the bug; we need to recheck after we turn
- * patterns into surfaces, since that may introduce a repeating
- * pattern for gradient patterns.
+/* Initial check for the render bugs; we need to recheck for the
+ * offscreen-memory bug after we turn patterns into surfaces, since that
+ * may introduce a repeating pattern for gradient patterns.  We don't need
+ * to check for the repeat+transform bug because gradient surfaces aren't
+ * transformed.
  *
  * All we do here is reject cases where we *know* are going to
  * hit the bug and won't be able to use a core protocol fallback.
@@ -920,8 +931,10 @@ _categorize_composite_operation (cairo_xlib_surface_t *dst,
 	if (_cairo_matrix_is_integer_translation (&src_pattern->matrix, NULL, NULL) &&
 	    src_pattern->extend == CAIRO_EXTEND_REPEAT)
 	{
-	    /* This is the case where we have a bug; reject some cases where a
-	     * core protocol fallback is impossible.
+	    /* This is the case where we have the bug involving
+	     * untransformed repeating source patterns with off-screen
+	     * video memory; reject some cases where a core protocol
+	     * fallback is impossible.
 	     */
 	    if (have_mask ||
 		!(operator == CAIRO_OPERATOR_SOURCE || operator == CAIRO_OPERATOR_OVER))
@@ -942,6 +955,12 @@ _categorize_composite_operation (cairo_xlib_surface_t *dst,
 		    return DO_UNSUPPORTED;
 	    }
 	}
+
+	/* Check for the other bug involving repeat patterns with general
+	 * transforms. */
+	if (!_cairo_matrix_is_integer_translation (&src_pattern->matrix, NULL, NULL) &&
+	    src_pattern->extend == CAIRO_EXTEND_REPEAT)
+	    return DO_UNSUPPORTED;
     }
 
     return DO_RENDER;
@@ -1118,6 +1137,16 @@ _cairo_xlib_surface_composite (cairo_operator_t		operator,
 			      dst_x, dst_y,
 			      width, height);
 	}
+
+	if (!_cairo_operator_bounded (operator))
+	    _cairo_surface_composite_fixup_unbounded (&dst->base,
+						      &src_attr, src->width, src->height,
+						      mask ? &mask_attr : NULL,
+						      mask ? mask->width : 0,
+						      mask ? mask->height : 0,
+						      src_x, src_y,
+						      mask_x, mask_y,
+						      dst_x, dst_y, width, height);
 	break;
 
     case DO_XCOPYAREA:
@@ -1195,10 +1224,101 @@ _cairo_xlib_surface_fill_rectangles (void			*abstract_surface,
     return CAIRO_STATUS_SUCCESS;
 }
 
+/* Creates an A8 picture of size @width x @height, initialized with @color
+ */
+static Picture
+_create_a8_picture (cairo_xlib_surface_t *surface,
+		    XRenderColor         *color,
+		    int                   width,
+		    int                   height,
+		    cairo_bool_t          repeat)
+{
+    XRenderPictureAttributes pa;
+    unsigned long mask = 0;
+
+    Pixmap pixmap = XCreatePixmap (surface->dpy, surface->drawable,
+				   width, height,
+				   8);
+    Picture picture;
+
+    if (repeat) {
+	pa.repeat = TRUE;
+	mask = CPRepeat;
+    }
+    
+    picture = XRenderCreatePicture (surface->dpy, pixmap,
+				    XRenderFindStandardFormat (surface->dpy, PictStandardA8),
+				    mask, &pa);
+    XRenderFillRectangle (surface->dpy, PictOpSrc, picture, color,
+			  0, 0, width, height);
+    XFreePixmap (surface->dpy, pixmap);
+    
+    return picture;
+}
+
+/* Creates a temporary mask for the trapezoids covering the area
+ * [@dst_x, @dst_y, @width, @height] of the destination surface.
+ */
+static Picture
+_create_trapezoid_mask (cairo_xlib_surface_t *dst,
+			cairo_trapezoid_t    *traps,
+			int                   num_traps,
+			int                   dst_x,
+			int                   dst_y,
+			int                   width,
+			int                   height,
+			XRenderPictFormat     *pict_format)
+{
+    XRenderColor transparent = { 0, 0, 0, 0 };
+    XRenderColor solid = { 0xffff, 0xffff, 0xffff, 0xffff };
+    Picture mask_picture, solid_picture;
+    XTrapezoid *offset_traps;
+    int i;
+
+    /* This would be considerably simpler using XRenderAddTraps(), but since
+     * we are only using this in the unbounded-operator case, we stick with
+     * XRenderCompositeTrapezoids, which is available on older versions
+     * of RENDER rather than conditionalizing. We should still hit an
+     * optimization that avoids creating another intermediate surface on
+     * the servers that have XRenderAddTraps().
+     */
+    mask_picture = _create_a8_picture (dst, &transparent, width, height, FALSE);
+    solid_picture = _create_a8_picture (dst, &solid, width, height, TRUE);
+
+    offset_traps = malloc (sizeof (XTrapezoid) * num_traps);
+    if (!offset_traps)
+	return None;
+
+    for (i = 0; i < num_traps; i++) {
+	offset_traps[i].top = traps[i].top - 0x10000 * dst_y;
+	offset_traps[i].bottom = traps[i].bottom - 0x10000 * dst_y;
+	offset_traps[i].left.p1.x = traps[i].left.p1.x - 0x10000 * dst_x;
+	offset_traps[i].left.p1.y = traps[i].left.p1.y - 0x10000 * dst_y;
+	offset_traps[i].left.p2.x = traps[i].left.p2.x - 0x10000 * dst_x;
+	offset_traps[i].left.p2.y = traps[i].left.p2.y - 0x10000 * dst_y;
+	offset_traps[i].right.p1.x = traps[i].right.p1.x - 0x10000 * dst_x;
+	offset_traps[i].right.p1.y = traps[i].right.p1.y - 0x10000 * dst_y;
+	offset_traps[i].right.p2.x = traps[i].right.p2.x - 0x10000 * dst_x;
+	offset_traps[i].right.p2.y = traps[i].right.p2.y - 0x10000 * dst_y;
+    }
+
+    XRenderCompositeTrapezoids (dst->dpy, PictOpAdd,
+				solid_picture, mask_picture,
+				pict_format,
+				0, 0,
+				offset_traps, num_traps);
+    
+    XRenderFreePicture (dst->dpy, solid_picture);
+    free (offset_traps);
+
+    return mask_picture;
+}
+
 static cairo_int_status_t
 _cairo_xlib_surface_composite_trapezoids (cairo_operator_t	operator,
 					  cairo_pattern_t	*pattern,
 					  void			*abstract_dst,
+					  cairo_antialias_t	antialias,
 					  int			src_x,
 					  int			src_y,
 					  int			dst_x,
@@ -1215,6 +1335,7 @@ _cairo_xlib_surface_composite_trapezoids (cairo_operator_t	operator,
     composite_operation_t       operation;
     int				render_reference_x, render_reference_y;
     int				render_src_x, render_src_y;
+    XRenderPictFormat		*pict_format;
 
     if (!CAIRO_SURFACE_RENDER_HAS_TRAPEZOIDS (dst))
 	return CAIRO_INT_STATUS_UNSUPPORTED;
@@ -1235,6 +1356,15 @@ _cairo_xlib_surface_composite_trapezoids (cairo_operator_t	operator,
 	status = CAIRO_INT_STATUS_UNSUPPORTED;
 	goto FAIL;
     }
+
+    switch (antialias) {
+    case CAIRO_ANTIALIAS_NONE:
+	pict_format = XRenderFindStandardFormat (dst->dpy, PictStandardA1);
+	break;
+    default:
+	pict_format = XRenderFindStandardFormat (dst->dpy, PictStandardA8);
+	break;
+    }
 	
     if (traps[0].left.p1.y < traps[0].left.p2.y) {
 	render_reference_x = _cairo_fixed_integer_floor (traps[0].left.p1.x);
@@ -1247,17 +1377,52 @@ _cairo_xlib_surface_composite_trapezoids (cairo_operator_t	operator,
     render_src_x = src_x + render_reference_x - dst_x;
     render_src_y = src_y + render_reference_y - dst_y;
 
-    /* XXX: The XTrapezoid cast is evil and needs to go away somehow. */
     _cairo_xlib_surface_ensure_dst_picture (dst);
     status = _cairo_xlib_surface_set_attributes (src, &attributes);
-    if (status == CAIRO_STATUS_SUCCESS)
+    if (status)
+	goto FAIL;
+
+    if (!_cairo_operator_bounded (operator)) {
+	/* XRenderCompositeTrapezoids() creates a mask only large enough for the
+	 * trapezoids themselves, but if the operator is unbounded, then we need
+	 * to actually composite all the way out to the bounds, so we create
+	 * the mask and composite ourselves. There actually would
+	 * be benefit to doing this in all cases, since RENDER implementations
+	 * will frequently create a too temporary big mask, ignoring destination
+	 * bounds and clip. (XRenderAddTraps() could be used to make creating
+	 * the mask somewhat cheaper.)
+	 */
+	Picture mask_picture = _create_trapezoid_mask (dst, traps, num_traps,
+						       dst_x, dst_y, width, height,
+						       pict_format);
+	if (!mask_picture) {
+	    status = CAIRO_STATUS_NO_MEMORY;
+	    goto FAIL;
+	}
+
+	XRenderComposite (dst->dpy,
+			  _render_operator (operator),
+			  src->src_picture,
+			  mask_picture,
+			  dst->dst_picture,
+			  src_x + attributes.x_offset,
+			  src_y + attributes.y_offset,
+			  0, 0,
+			  dst_x, dst_y,
+			  width, height);
+	
+	XRenderFreePicture (dst->dpy, mask_picture);
+	
+    } else {
+	/* XXX: The XTrapezoid cast is evil and needs to go away somehow. */
 	XRenderCompositeTrapezoids (dst->dpy,
 				    _render_operator (operator),
 				    src->src_picture, dst->dst_picture,
-				    XRenderFindStandardFormat (dst->dpy, PictStandardA8),
+				    pict_format,
 				    render_src_x + attributes.x_offset, 
 				    render_src_y + attributes.y_offset,
 				    (XTrapezoid *) traps, num_traps);
+    }
 
  FAIL:
     _cairo_pattern_release_surface (pattern, &src->base, &attributes);
@@ -1716,6 +1881,7 @@ typedef struct {
     cairo_glyph_cache_key_t key;
     GlyphSet glyphset;
     Glyph glyph;
+    cairo_glyph_size_t size;
 } glyphset_cache_entry_t;
 
 static Glyph
@@ -1770,6 +1936,7 @@ _xlib_glyphset_cache_create_entry (void *abstract_cache,
 	entry->glyph = None;
 	entry->glyphset = None;
 	entry->key.base.memory = 0;
+	entry->size.x = entry->size.y = entry->size.width = entry->size.height = 0;
 	
 	goto out;
     }
@@ -1777,6 +1944,8 @@ _xlib_glyphset_cache_create_entry (void *abstract_cache,
     entry->glyph = _next_xlib_glyph (cache);
 
     data = im->image->data;
+
+    entry->size = im->size;
 
     glyph_info.width = im->size.width;
     glyph_info.height = im->size.height;
@@ -1916,8 +2085,9 @@ _xlib_glyphset_cache_destroy_entry (void *abstract_cache,
     glyphset_cache_entry_t *entry = abstract_entry;
 
     _cairo_unscaled_font_destroy (entry->key.unscaled);
-    XRenderFreeGlyphs (cache->display, entry->glyphset,
-		       &(entry->glyph), 1);
+    if (entry->glyph)
+	XRenderFreeGlyphs (cache->display, entry->glyphset,
+			   &(entry->glyph), 1);
     free (entry);	
 }
 
@@ -1943,8 +2113,10 @@ _lock_xlib_glyphset_caches (void)
 static void
 _unlock_xlib_glyphset_caches (glyphset_cache_t *cache)
 {
-    _cairo_cache_shrink_to (&cache->base,
-			    CAIRO_XLIB_GLYPH_CACHE_MEMORY_DEFAULT);
+    if (cache) {
+	_cairo_cache_shrink_to (&cache->base,
+				CAIRO_XLIB_GLYPH_CACHE_MEMORY_DEFAULT);
+    }
     CAIRO_MUTEX_UNLOCK(_xlib_glyphset_caches_mutex);
 }
 
@@ -2102,7 +2274,7 @@ _cairo_xlib_surface_show_glyphs32 (cairo_scaled_font_t    *scaled_font,
 			    _render_operator (operator),
 			    src->src_picture,
 			    self->dst_picture,
-			    cache->a8_pict_format,
+			    mask_format,
 			    source_x, source_y,
 			    0, 0,
 			    elts, count);
@@ -2330,7 +2502,70 @@ _cairo_xlib_surface_show_glyphs8 (cairo_scaled_font_t    *scaled_font,
     return CAIRO_STATUS_NO_MEMORY;
 }
 
+/* Handles clearing the regions that are outside of the temporary
+ * mask created by XRenderCompositeText[N] but should be affected
+ * by an unbounded operator like CAIRO_OPERATOR_SOURCE.
+ */
+static void
+_show_glyphs_fixup_unbounded (cairo_xlib_surface_t       *self,
+			      cairo_surface_attributes_t *src_attr,
+			      cairo_xlib_surface_t       *src,
+			      const cairo_glyph_t        *glyphs,
+			      glyphset_cache_entry_t    **entries,
+			      int                         num_glyphs,
+			      int                         src_x,
+			      int                         src_y,
+			      int                         dst_x,
+			      int                         dst_y,
+			      int                         width,
+			      int                         height)
+{
+    cairo_surface_attributes_t mask_attr;
+    int x1 = INT_MAX;
+    int x2 = INT_MIN;
+    int y1 = INT_MAX;
+    int y2 = INT_MIN;
+    int i;
 
+    /* Compute the size of the glyph mask as the bounding box
+     * of all the glyphs.
+     */
+    for (i = 0; i < num_glyphs; ++i) {
+	int thisX, thisY;
+	
+	if (entries[i] == NULL || !entries[i]->glyph) 
+	    continue;
+	
+	thisX = (int) floor (glyphs[i].x + 0.5);
+	thisY = (int) floor (glyphs[i].y + 0.5);
+	
+	if (thisX + entries[i]->size.x < x1)
+	    x1 = thisX + entries[i]->size.x;
+	if (thisX + entries[i]->size.x + entries[i]->size.width > x2)
+	    x2 = thisX + entries[i]->size.x + entries[i]->size.width;
+	if (thisY + entries[i]->size.y < y1)
+	    y1 = thisY + entries[i]->size.y;
+	if (thisY + entries[i]->size.y + entries[i]->size.height > y2)
+	    y2 = thisY + entries[i]->size.y + entries[i]->size.height;
+    }
+
+    if (x1 >= x2 || y1 >= y2)
+	x1 = x2 = y1 = y2 = 0;
+
+    cairo_matrix_init_identity (&mask_attr.matrix);
+    mask_attr.extend = CAIRO_EXTEND_NONE;
+    mask_attr.filter = CAIRO_FILTER_NEAREST;
+    mask_attr.x_offset = 0;
+    mask_attr.y_offset = 0;
+
+    _cairo_surface_composite_fixup_unbounded (&self->base,
+					      src_attr, src->width, src->height,
+					      &mask_attr, x2 - x1, y2 - y1,
+					      src_x, src_y,
+					      dst_x - x1, dst_y - y1,
+					      dst_x, dst_y, width, height);
+}
+    
 static cairo_int_status_t
 _cairo_xlib_surface_show_glyphs (cairo_scaled_font_t    *scaled_font,
 				 cairo_operator_t       operator,
@@ -2441,6 +2676,13 @@ _cairo_xlib_surface_show_glyphs (cairo_scaled_font_t    *scaled_font,
 						    glyphs, entries, num_glyphs);
     }
 
+    if (!_cairo_operator_bounded (operator))
+	_show_glyphs_fixup_unbounded (self,
+				      &attributes, src,
+				      glyphs, entries, num_glyphs,
+				      source_x, source_y,
+				      dest_x, dest_y, width, height);
+
  UNLOCK:
     _unlock_xlib_glyphset_caches (cache);
 
@@ -2451,4 +2693,24 @@ _cairo_xlib_surface_show_glyphs (cairo_scaled_font_t    *scaled_font,
     _cairo_pattern_release_surface (pattern, &src->base, &attributes);
     
     return status;
+}
+
+static void
+_destroy_glyphset_cache_recurse (glyphset_cache_t *cache)
+{
+    if (cache == NULL)
+	return;
+
+    _destroy_glyphset_cache_recurse (cache->next);
+    _cairo_cache_destroy (&cache->base);
+    free (cache);
+}
+
+void
+_cairo_xlib_surface_reset_static_data (void)
+{
+    _lock_xlib_glyphset_caches ();
+    _destroy_glyphset_cache_recurse (_xlib_glyphset_caches);
+    _xlib_glyphset_caches = NULL;
+    _unlock_xlib_glyphset_caches (NULL);
 }

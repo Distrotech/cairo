@@ -1,6 +1,8 @@
 # All test cases go here
 TESTS = 			\
+a8-mask				\
 clip-nesting			\
+clip-operator			\
 clip-twice			\
 composite-integer-translate-source \
 composite-integer-translate-over \
@@ -16,6 +18,8 @@ leaky-polygon			\
 line-width			\
 linear-gradient			\
 mask				\
+mask-ctm			\
+mask-surface-ctm		\
 move-to-show-surface		\
 paint				\
 paint-with-alpha		\
@@ -38,6 +42,8 @@ text-rotate			\
 transforms			\
 translate-show-surface		\
 trap-clip			\
+unantialiased-shapes		\
+unbounded-operator		\
 user-data			\
 rel-path
 
@@ -57,7 +63,9 @@ endif
 # I really don't like having to repeat this list. Anyone know a good
 # way to avoid it? Can I use a wildcard here?
 EXTRA_DIST =				\
+a8-mask-ref.png				\
 clip-nesting-ref.png			\
+clip-operator-ref.png			\
 clip-twice-ref.png			\
 composite-integer-translate-source-ref.png		\
 composite-integer-translate-over-ref.png		\
@@ -72,6 +80,8 @@ leaky-polygon-ref.png			\
 line-width-ref.png			\
 linear-gradient-ref.png			\
 mask-ref.png				\
+mask-ctm-ref.png			\
+mask-surface-ctm-ref.png		\
 move-to-show-surface-ref.png		\
 paint-ref.png				\
 paint-with-alpha-ref.png		\
@@ -90,6 +100,8 @@ text-antialias-none-ref.png		\
 transforms-ref.png			\
 translate-show-surface-ref.png		\
 trap-clip-ref.png			\
+unantialiased-shapes-ref.png		\
+unbounded-operator-ref.png		\
 rel-path-ref.png
 
 # Any test for which the code committed to CVS is expected to fail
@@ -106,10 +118,10 @@ rel-path-ref.png
 # Also, any test listed here should call cairo_test_expect_failure and
 # provide an explanation for the expected failure.
 XFAIL_TESTS =			\
+a8-mask				\
 filter-nearest-offset		\
 pixman-rotate			\
 self-intersecting		\
-source-surface-scale-paint	\
 text-antialias-subpixel		\
 text-rotate
 
@@ -145,7 +157,9 @@ LDADDS = libcairotest.la $(top_builddir)/src/libcairo.la
 # ARGH! I have to repeat the list of tests a third time. Maybe it's
 # time to break down and auto-generate the Makefile.am or something
 # from autogen.sh. My, but this is painful...
+a8_mask_LDADD = $(LDADDS)
 clip_nesting_LDADD = $(LDADDS)
+clip_operator_LDADD = $(LDADDS)
 clip_twice_LDADD = $(LDADDS)
 composite_integer_translate_source_LDADD = $(LDADDS)
 composite_integer_translate_over_LDADD = $(LDADDS)
@@ -161,6 +175,8 @@ leaky_polygon_LDADD = $(LDADDS)
 line_width_LDADD = $(LDADDS)
 linear_gradient_LDADD = $(LDADDS)
 mask_LDADD = $(LDADDS)
+mask_ctm_LDADD = $(LDADDS)
+mask_surface_ctm_LDADD = $(LDADDS)
 move_to_show_surface_LDADD = $(LDADDS)
 paint_LDADD = $(LDADDS)
 paint_with_alpha_LDADD = $(LDADDS)
@@ -186,6 +202,8 @@ text_rotate_LDADD = $(LDADDS)
 transforms_LDADD = $(LDADDS)
 translate_show_surface_LDADD = $(LDADDS)
 trap_clip_LDADD = $(LDADDS)
+unantialiased_shapes_LDADD = $(LDADDS)
+unbounded_operator_LDADD = $(LDADDS)
 user_data_LDADD = $(LDADDS)
 rel_path_LDADD = $(LDADDS)
 xlib_surface_LDADD = $(LDADDS)

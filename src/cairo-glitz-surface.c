@@ -349,8 +349,7 @@ _cairo_glitz_surface_clone_similar (void	    *abstract_surface,
 
     if (src->backend == surface->base.backend)
     {
-	*clone_out = src;
-	cairo_surface_reference (src);
+	*clone_out = cairo_surface_reference (src);	
 	
 	return CAIRO_STATUS_SUCCESS;
     }
@@ -937,6 +936,7 @@ static cairo_int_status_t
 _cairo_glitz_surface_composite_trapezoids (cairo_operator_t  op,
 					   cairo_pattern_t   *pattern,
 					   void		     *abstract_dst,
+					   cairo_antialias_t antialias,
 					   int		     src_x,
 					   int		     src_y,
 					   int		     dst_x,

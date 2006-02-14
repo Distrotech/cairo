@@ -2,7 +2,9 @@
 .libs
 Makefile
 Makefile.in
+a8-mask
 clip-nesting
+clip-operator
 clip-twice
 composite-integer-translate-source
 composite-integer-translate-over
@@ -20,6 +22,8 @@ leaky-polygon
 line-width
 linear-gradient
 mask
+mask-ctm
+mask-surface-ctm
 move-to-show-surface
 paint
 paint-with-alpha
@@ -49,6 +53,7 @@ text-rotate
 transforms
 translate-show-surface
 trap-clip
+unbounded-operator
 user-data
 xlib-surface
 *-image-out.png

@@ -1,5 +1,5 @@
 /*
- * Copyright � 2004 Red Hat, Inc.
+ * Copyright © 2004 Red Hat, Inc.
  *
  * Permission to use, copy, modify, distribute, and sell this software
  * and its documentation for any purpose is hereby granted without
@@ -23,12 +23,19 @@
  * Author: Carl D. Worth <cworth@cworth.org>
  */
 
+#if HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#ifdef HAVE_UNISTD_H
 #include <unistd.h>
+#endif
 #include <errno.h>
 #include <string.h>
+#include <fontconfig/fontconfig.h>
 
 #include "cairo-test.h"
 
@@ -36,6 +43,10 @@
 #include "read-png.h"
 #include "write-png.h"
 #include "xmalloc.h"
+
+#ifdef _MSC_VER
+#define vsnprintf _vsnprintf
+#endif
 
 #define CAIRO_TEST_LOG_SUFFIX ".log"
 #define CAIRO_TEST_PNG_SUFFIX "-out.png"
@@ -469,6 +480,9 @@ cairo_test_for_target (cairo_test_t *test,
 UNWIND_CAIRO:
     cairo_destroy (cr);
     cairo_surface_destroy (surface);
+
+    cairo_debug_reset_static_data ();
+
     target->cleanup_target (target->closure);
 
 UNWIND_STRINGS:
@@ -556,6 +570,10 @@ cairo_test_expecting (cairo_test_t *test, cairo_test_draw_function_t draw,
 	ret = CAIRO_TEST_FAILURE;
 
     fclose (cairo_test_log_file);
+
+#if HAVE_FCFINI
+    FcFini ();
+#endif
 
     return ret;
 }

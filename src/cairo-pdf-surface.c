@@ -159,7 +159,7 @@ _cairo_pdf_document_destroy (cairo_pdf_document_t *document);
 static cairo_status_t
 _cairo_pdf_document_finish (cairo_pdf_document_t *document);
 
-static void
+static cairo_pdf_document_t *
 _cairo_pdf_document_reference (cairo_pdf_document_t *document);
 
 static unsigned int
@@ -365,8 +365,7 @@ _cairo_pdf_surface_create_for_document (cairo_pdf_document_t	*document,
     surface->width = width;
     surface->height = height;
 
-    _cairo_pdf_document_reference (document);
-    surface->document = document;
+    surface->document = _cairo_pdf_document_reference (document);
     _cairo_array_init (&surface->streams, sizeof (cairo_pdf_stream_t *));
     _cairo_array_init (&surface->patterns, sizeof (cairo_pdf_resource_t));
     _cairo_array_init (&surface->xobjects, sizeof (cairo_pdf_resource_t));
@@ -1152,6 +1151,7 @@ static cairo_int_status_t
 _cairo_pdf_surface_composite_trapezoids (cairo_operator_t	operator,
 					 cairo_pattern_t	*pattern,
 					 void			*abstract_dst,
+					 cairo_antialias_t	antialias,
 					 int			x_src,
 					 int			y_src,
 					 int			x_dst,
@@ -1335,7 +1335,8 @@ static cairo_int_status_t
 _cairo_pdf_surface_intersect_clip_path (void			*dst,
 					cairo_path_fixed_t	*path,
 					cairo_fill_rule_t	fill_rule,
-					double			tolerance)
+					double			tolerance,
+					cairo_antialias_t	antialias)
 {
     cairo_pdf_surface_t *surface = dst;
     cairo_pdf_document_t *document = surface->document;
@@ -1658,10 +1659,12 @@ _cairo_pdf_document_write_xref (cairo_pdf_document_t *document)
     return offset;
 }
 
-static void
+static cairo_pdf_document_t *
 _cairo_pdf_document_reference (cairo_pdf_document_t *document)
 {
     document->ref_count++;
+
+    return document;
 }
 
 static void

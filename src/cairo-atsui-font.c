@@ -105,12 +105,11 @@ CreateSizedCopyOfStyle(ATSUStyle inStyle, cairo_matrix_t *scale)
 
 
 static cairo_status_t
-_cairo_atsui_font_create(const char *family,
-			 cairo_font_slant_t slant,
-			 cairo_font_weight_t weight,
-			 const cairo_matrix_t *font_matrix,
-			 const cairo_matrix_t *ctm,
-			 cairo_scaled_font_t **font_out)
+_cairo_atsui_font_create_toy(const cairo_toy_font_face *toy_face,
+			     const cairo_matrix_t *font_matrix,
+			     const cairo_matrix_t *ctm,
+			     const cairo_font_options_t *options,
+			     cairo_scaled_font_t **font_out)
 {
     cairo_atsui_font_t *font = NULL;
     ATSUStyle style;
@@ -118,11 +117,11 @@ _cairo_atsui_font_create(const char *family,
     OSStatus err;
     Boolean isItalic, isBold;
     cairo_matrix_t scale;
+    const char *family = toy_face->family;
 
     err = ATSUCreateStyle(&style);
 
-
-    switch (weight) {
+    switch (toy_face->weight) {
     case CAIRO_FONT_WEIGHT_BOLD:
         isBold = true;
         break;
@@ -132,7 +131,7 @@ _cairo_atsui_font_create(const char *family,
         break;
     }
 
-    switch (slant) {
+    switch (toy_face->slant) {
     case CAIRO_FONT_SLANT_ITALIC:
         isItalic = true;
         break;
@@ -188,7 +187,7 @@ _cairo_atsui_font_create(const char *family,
 
     font = malloc(sizeof(cairo_atsui_font_t));
 
-    _cairo_scaled_font_init(&font->base, font_matrix, ctm,
+    _cairo_scaled_font_init(&font->base, font_matrix, ctm, options,
 			    &cairo_atsui_scaled_font_backend);
 
     cairo_matrix_multiply(&scale, font_matrix, ctm);
@@ -213,9 +212,8 @@ _cairo_atsui_font_create(const char *family,
     return CAIRO_STATUS_SUCCESS;
 }
 
-
 static void
-_cairo_atsui_font_destroy_font(void *abstract_font)
+_cairo_atsui_font_fini(void *abstract_font)
 {
     cairo_atsui_font_t *font = abstract_font;
 
@@ -690,8 +688,8 @@ _cairo_atsui_font_glyph_path(void *abstract_font,
 }
 
 const cairo_scaled_font_backend_t cairo_atsui_scaled_font_backend = {
-    _cairo_atsui_font_create,
-    _cairo_atsui_font_destroy_font,
+    _cairo_atsui_font_create_toy,
+    _cairo_atsui_font_fini,
     _cairo_atsui_font_font_extents,
     _cairo_atsui_font_text_to_glyphs,
     _cairo_atsui_font_glyph_extents,

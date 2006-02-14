@@ -42,7 +42,7 @@
 /* Forward declare so we can use it as an arbitrary backend for
  * _cairo_font_face_nil.
  */
-static const cairo_font_face_backend_t _cairo_simple_font_face_backend;
+static const cairo_font_face_backend_t _cairo_toy_font_face_backend;
 
 /* cairo_font_face_t */
 
@@ -50,7 +50,7 @@ const cairo_font_face_t _cairo_font_face_nil = {
     CAIRO_STATUS_NO_MEMORY,	/* status */
     -1,		                /* ref_count */
     { 0, 0, 0, NULL },		/* user_data */
-    &_cairo_simple_font_face_backend
+    &_cairo_toy_font_face_backend
 };
 
 void
@@ -72,17 +72,21 @@ _cairo_font_face_init (cairo_font_face_t               *font_face,
  * Increases the reference count on @font_face by one. This prevents
  * @font_face from being destroyed until a matching call to
  * cairo_font_face_destroy() is made.
+ *
+ * Return value: the referenced #cairo_font_face_t.
  **/
-void
+cairo_font_face_t *
 cairo_font_face_reference (cairo_font_face_t *font_face)
 {
     if (font_face == NULL)
-	return;
+	return NULL;
 
     if (font_face->ref_count == (unsigned int)-1)
-	return;
+	return font_face;
 
     font_face->ref_count++;
+
+    return font_face;
 }
 
 /**
@@ -121,7 +125,7 @@ cairo_font_face_destroy (cairo_font_face_t *font_face)
 
 /**
  * cairo_font_face_status:
- * @surface: a #cairo_font_face_t
+ * @font_face: a #cairo_font_face_t
  * 
  * Checks whether an error has previously occurred for this
  * font face
@@ -184,19 +188,6 @@ cairo_font_face_set_user_data (cairo_font_face_t	   *font_face,
 					    key, user_data, destroy);
 }
 
-/* cairo_simple_font_face_t - simple family/slant/weight font faces used for
- * the built-in font API
- */
-
-typedef struct _cairo_simple_font_face cairo_simple_font_face_t;
-
-struct _cairo_simple_font_face {
-    cairo_font_face_t base;
-    char *family;
-    cairo_font_slant_t slant;
-    cairo_font_weight_t weight;
-};
-
 /* We maintain a global cache from family/weight/slant => cairo_font_face_t
  * for cairo_simple_font_t. The primary purpose of this cache is to provide
  * unique cairo_font_face_t values so that our cache from
@@ -214,7 +205,7 @@ typedef struct {
 
 typedef struct {
     cairo_simple_cache_key_t key;
-    cairo_simple_font_face_t *font_face;
+    cairo_toy_font_face_t *font_face;
 } cairo_simple_cache_entry_t;
 
 static const cairo_cache_backend_t _cairo_simple_font_cache_backend;
@@ -233,11 +224,11 @@ _unlock_global_simple_cache (void)
     CAIRO_MUTEX_UNLOCK (_global_simple_cache_mutex);
 }
 
+static cairo_cache_t *global_simple_cache = NULL;
+
 static cairo_cache_t *
 _get_global_simple_cache (void)
 {
-    static cairo_cache_t *global_simple_cache = NULL;
-
     if (global_simple_cache == NULL)
     {
 	global_simple_cache = malloc (sizeof (cairo_cache_t));	
@@ -287,12 +278,12 @@ _cairo_simple_font_cache_keys_equal (void *cache,
 	a->weight == b->weight;
 }
 
-static cairo_simple_font_face_t *
-_cairo_simple_font_face_create_from_cache_key (cairo_simple_cache_key_t *key)
+static cairo_toy_font_face_t *
+_cairo_toy_font_face_create_from_cache_key (cairo_simple_cache_key_t *key)
 {
-    cairo_simple_font_face_t *simple_face;
+    cairo_toy_font_face_t *simple_face;
 
-    simple_face = malloc (sizeof (cairo_simple_font_face_t));
+    simple_face = malloc (sizeof (cairo_toy_font_face_t));
     if (!simple_face)
 	return NULL;
     
@@ -305,7 +296,7 @@ _cairo_simple_font_face_create_from_cache_key (cairo_simple_cache_key_t *key)
     simple_face->slant = key->slant;
     simple_face->weight = key->weight;
 
-    _cairo_font_face_init (&simple_face->base, &_cairo_simple_font_face_backend);
+    _cairo_font_face_init (&simple_face->base, &_cairo_toy_font_face_backend);
 
     return simple_face;
 }
@@ -322,7 +313,7 @@ _cairo_simple_font_cache_create_entry (void  *cache,
     if (entry == NULL)
 	return CAIRO_STATUS_NO_MEMORY;
 
-    entry->font_face = _cairo_simple_font_face_create_from_cache_key (k);
+    entry->font_face = _cairo_toy_font_face_create_from_cache_key (k);
     if (!entry->font_face) {
 	free (entry);
 	return CAIRO_STATUS_NO_MEMORY;
@@ -366,9 +357,9 @@ static const cairo_cache_backend_t _cairo_simple_font_cache_backend = {
 };
 
 static void
-_cairo_simple_font_face_destroy (void *abstract_face)
+_cairo_toy_font_face_destroy (void *abstract_face)
 {
-    cairo_simple_font_face_t *simple_face = abstract_face;
+    cairo_toy_font_face_t *simple_face = abstract_face;
     cairo_cache_t *cache;
     cairo_simple_cache_key_t key;
 
@@ -391,27 +382,27 @@ _cairo_simple_font_face_destroy (void *abstract_face)
 }
 
 static cairo_status_t
-_cairo_simple_font_face_create_font (void                        *abstract_face,
-				     const cairo_matrix_t        *font_matrix,
-				     const cairo_matrix_t        *ctm,
-				     const cairo_font_options_t  *options,
-				     cairo_scaled_font_t        **scaled_font)
+_cairo_toy_font_face_scaled_font_create (void			  *abstract_face,
+					 const cairo_matrix_t       *font_matrix,
+					 const cairo_matrix_t       *ctm,
+					 const cairo_font_options_t *options,
+					 cairo_scaled_font_t    **scaled_font)
 {
     const cairo_scaled_font_backend_t * backend = CAIRO_SCALED_FONT_BACKEND_DEFAULT;
 
-    cairo_simple_font_face_t *simple_face = abstract_face;
+    cairo_toy_font_face_t *simple_face = abstract_face;
 
-    return backend->create (simple_face->family, simple_face->slant, simple_face->weight,
-			    font_matrix, ctm, options, scaled_font);
+    return backend->create_toy (simple_face,
+				font_matrix, ctm, options, scaled_font);
 }
 
-static const cairo_font_face_backend_t _cairo_simple_font_face_backend = {
-    _cairo_simple_font_face_destroy,
-    _cairo_simple_font_face_create_font,
+static const cairo_font_face_backend_t _cairo_toy_font_face_backend = {
+    _cairo_toy_font_face_destroy,
+    _cairo_toy_font_face_scaled_font_create
 };
 
 /**
- * _cairo_simple_font_face_create:
+ * _cairo_toy_font_face_create:
  * @family: a font family name, encoded in UTF-8
  * @slant: the slant for the font
  * @weight: the weight for the font
@@ -424,9 +415,9 @@ static const cairo_font_face_backend_t _cairo_simple_font_face_backend = {
  *  cairo_font_face_destroy()
  **/
 cairo_font_face_t *
-_cairo_simple_font_face_create (const char          *family, 
-				cairo_font_slant_t   slant, 
-				cairo_font_weight_t  weight)
+_cairo_toy_font_face_create (const char          *family, 
+			     cairo_font_slant_t   slant, 
+			     cairo_font_weight_t  weight)
 {
     cairo_simple_cache_entry_t *entry;
     cairo_simple_cache_key_t key;
@@ -466,6 +457,10 @@ static const cairo_scaled_font_t _cairo_scaled_font_nil = {
     { 1., 0., 0., 1., 0, 0},	/* font_matrix */
     { 1., 0., 0., 1., 0, 0},	/* ctm */
     { 1., 0., 0., 1., 0, 0},	/* scale */
+    { CAIRO_ANTIALIAS_DEFAULT,	/* options */
+      CAIRO_SUBPIXEL_ORDER_DEFAULT,
+      CAIRO_HINT_STYLE_DEFAULT,
+      CAIRO_HINT_METRICS_DEFAULT} ,
     NULL,			/* font_face */
     CAIRO_SCALED_FONT_BACKEND_DEFAULT,
 };
@@ -497,7 +492,7 @@ _cairo_scaled_font_set_error (cairo_scaled_font_t *scaled_font,
 
 /**
  * cairo_scaled_font_status:
- * @surface: a #cairo_scaled_font_t
+ * @scaled_font: a #cairo_scaled_font_t
  * 
  * Checks whether an error has previously occurred for this
  * scaled_font.
@@ -560,11 +555,11 @@ _unlock_global_font_cache (void)
     CAIRO_MUTEX_UNLOCK (_global_font_cache_mutex);
 }
 
+static cairo_cache_t *outer_font_cache = NULL;
+
 static cairo_cache_t *
 _get_outer_font_cache (void)
 {
-    static cairo_cache_t *outer_font_cache = NULL;
-
     if (outer_font_cache == NULL)
     {
 	outer_font_cache = malloc (sizeof (cairo_cache_t));	
@@ -585,11 +580,11 @@ _get_outer_font_cache (void)
     return NULL;
 }
 
+static cairo_cache_t *inner_font_cache = NULL;
+
 static cairo_cache_t *
 _get_inner_font_cache (void)
 {
-    static cairo_cache_t *inner_font_cache = NULL;
-
     if (inner_font_cache == NULL)
     {
 	inner_font_cache = malloc (sizeof (cairo_cache_t));	
@@ -743,11 +738,11 @@ _cairo_inner_font_cache_create_entry (void  *cache,
     if (entry == NULL)
 	return CAIRO_STATUS_NO_MEMORY;
 
-    status = k->font_face->backend->create_font (k->font_face,
-						 k->font_matrix,
-						 k->ctm,
-						 &k->options,
-						 &entry->scaled_font);
+    status = k->font_face->backend->scaled_font_create (k->font_face,
+							k->font_matrix,
+							k->ctm,
+							&k->options,
+							&entry->scaled_font);
     if (status) {
 	free (entry);
 	return status;
@@ -864,6 +859,7 @@ void
 _cairo_scaled_font_init (cairo_scaled_font_t               *scaled_font, 
 			 const cairo_matrix_t              *font_matrix,
 			 const cairo_matrix_t              *ctm,
+			 const cairo_font_options_t        *options,
 			 const cairo_scaled_font_backend_t *backend)
 {
     scaled_font->status = CAIRO_STATUS_SUCCESS;
@@ -871,6 +867,8 @@ _cairo_scaled_font_init (cairo_scaled_font_t               *scaled_font,
     scaled_font->font_matrix = *font_matrix;
     scaled_font->ctm = *ctm;
     cairo_matrix_multiply (&scaled_font->scale, &scaled_font->font_matrix, &scaled_font->ctm);
+
+    scaled_font->options = *options;
     
     scaled_font->ref_count = 1;
     scaled_font->backend = backend;
@@ -992,13 +990,15 @@ _cairo_unscaled_font_init (cairo_unscaled_font_t               *unscaled_font,
     unscaled_font->backend = backend;
 }
 
-void
+cairo_unscaled_font_t *
 _cairo_unscaled_font_reference (cairo_unscaled_font_t *unscaled_font)
 {
     if (unscaled_font == NULL)
-	return;
+	return NULL;
 
     unscaled_font->ref_count++;
+
+    return unscaled_font;
 }
 
 void
@@ -1027,17 +1027,21 @@ _cairo_unscaled_font_destroy (cairo_unscaled_font_t *unscaled_font)
  * Increases the reference count on @scaled_font by one. This prevents
  * @scaled_font from being destroyed until a matching call to
  * cairo_scaled_font_destroy() is made.
+ *
+ * Return value: the referenced #cairo_scaled_font_t.
  **/
-void
+cairo_scaled_font_t *
 cairo_scaled_font_reference (cairo_scaled_font_t *scaled_font)
 {
     if (scaled_font == NULL)
-	return;
+	return NULL;
 
     if (scaled_font->ref_count == (unsigned int)-1)
-	return;
+	return scaled_font;
 
     scaled_font->ref_count++;
+
+    return scaled_font;
 }
 
 /**
@@ -1071,6 +1075,7 @@ cairo_scaled_font_destroy (cairo_scaled_font_t *scaled_font)
 	key.font_face = scaled_font->font_face;
 	key.font_matrix = &scaled_font->font_matrix;
 	key.ctm = &scaled_font->ctm;
+	key.options = scaled_font->options;
 	
 	_cairo_cache_remove (cache, &key);
 	_unlock_global_font_cache ();
@@ -1078,7 +1083,7 @@ cairo_scaled_font_destroy (cairo_scaled_font_t *scaled_font)
 	cairo_font_face_destroy (scaled_font->font_face);
     }
 
-    scaled_font->backend->destroy (scaled_font);
+    scaled_font->backend->fini (scaled_font);
 
     free (scaled_font);
 }
@@ -1089,9 +1094,6 @@ cairo_scaled_font_destroy (cairo_scaled_font_t *scaled_font)
  * @extents: a #cairo_font_extents_t which to store the retrieved extents.
  * 
  * Gets the metrics for a #cairo_scaled_font_t. 
- * 
- * Return value: %CAIRO_STATUS_SUCCESS on success. Otherwise, an
- *  error such as %CAIRO_STATUS_NO_MEMORY.
  **/
 void
 cairo_scaled_font_extents (cairo_scaled_font_t  *scaled_font,
@@ -1344,8 +1346,10 @@ _cairo_lock_global_image_glyph_cache()
 void
 _cairo_unlock_global_image_glyph_cache()
 {
-    _cairo_cache_shrink_to (_global_image_glyph_cache, 
-			    CAIRO_IMAGE_GLYPH_CACHE_MEMORY_DEFAULT);
+    if (_global_image_glyph_cache) {
+	_cairo_cache_shrink_to (_global_image_glyph_cache, 
+				CAIRO_IMAGE_GLYPH_CACHE_MEMORY_DEFAULT);
+    }
     CAIRO_MUTEX_UNLOCK (_global_image_glyph_cache_mutex);
 }
 
@@ -1371,4 +1375,25 @@ _cairo_get_global_image_glyph_cache ()
 	free (_global_image_glyph_cache);
     _global_image_glyph_cache = NULL;
     return NULL;
+}
+
+void
+_cairo_font_reset_static_data (void)
+{
+    _lock_global_font_cache ();
+    _cairo_cache_destroy (outer_font_cache);
+    outer_font_cache = NULL;
+    _cairo_cache_destroy (inner_font_cache);
+    inner_font_cache = NULL;
+    _unlock_global_font_cache ();
+
+    _cairo_lock_global_image_glyph_cache();
+    _cairo_cache_destroy (_global_image_glyph_cache);
+    _global_image_glyph_cache = NULL;
+    _cairo_unlock_global_image_glyph_cache();
+
+    _lock_global_simple_cache ();
+    _cairo_cache_destroy (global_simple_cache);
+    global_simple_cache = NULL;
+    _unlock_global_simple_cache ();
 }

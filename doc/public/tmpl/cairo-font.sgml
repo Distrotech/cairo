@@ -35,6 +35,7 @@ Font Handling
 </para>
 
 @font_face: 
+@Returns: 
 
 
 <!-- ##### FUNCTION cairo_font_face_destroy ##### -->
@@ -43,6 +44,15 @@ Font Handling
 </para>
 
 @font_face: 
+
+
+<!-- ##### FUNCTION cairo_font_face_status ##### -->
+<para>
+
+</para>
+
+@font_face: 
+@Returns: 
 
 
 <!-- ##### FUNCTION cairo_font_face_get_user_data ##### -->
@@ -85,6 +95,7 @@ Font Handling
 </para>
 
 @scaled_font: 
+@Returns: 
 
 
 <!-- ##### FUNCTION cairo_scaled_font_destroy ##### -->
@@ -93,6 +104,15 @@ Font Handling
 </para>
 
 @scaled_font: 
+
+
+<!-- ##### FUNCTION cairo_scaled_font_status ##### -->
+<para>
+
+</para>
+
+@scaled_font: 
+@Returns: 
 
 
 <!-- ##### STRUCT cairo_font_extents_t ##### -->
@@ -207,16 +227,6 @@ Font Handling
 @other: 
 @Returns: 
 
-
-<!-- ##### ENUM cairo_antialias_t ##### -->
-<para>
-
-</para>
-
-@CAIRO_ANTIALIAS_DEFAULT: 
-@CAIRO_ANTIALIAS_NONE: 
-@CAIRO_ANTIALIAS_GRAY: 
-@CAIRO_ANTIALIAS_SUBPIXEL: 
 
 <!-- ##### FUNCTION cairo_font_options_set_antialias ##### -->
 <para>

@@ -38,14 +38,6 @@
 #ifndef CAIRO_H
 #define CAIRO_H
 
-#ifdef  __cplusplus
-# define CAIRO_BEGIN_DECLS  extern "C" {
-# define CAIRO_END_DECLS    }
-#else
-# define CAIRO_BEGIN_DECLS
-# define CAIRO_END_DECLS
-#endif
-
 #include <cairo-features.h>
 
 CAIRO_BEGIN_DECLS
@@ -230,7 +222,7 @@ typedef cairo_status_t (*cairo_read_func_t) (void		*closure,
 cairo_t *
 cairo_create (cairo_surface_t *target);
 
-void
+cairo_t *
 cairo_reference (cairo_t *cr);
 
 void
@@ -294,6 +286,29 @@ cairo_set_source_surface (cairo_t	  *cr,
 
 void
 cairo_set_tolerance (cairo_t *cr, double tolerance);
+
+/**
+ * cairo_antialias_t:
+ * @CAIRO_ANTIALIAS_DEFAULT: Use the default antialiasing for
+ *   the subsystem and target device
+ * @CAIRO_ANTIALIAS_NONE: Use a bilevel alpha mask
+ * @CAIRO_ANTIALIAS_GRAY: Perform single-color antialiasing (using
+ *  shades of gray for black text on a white background, for example).
+ * @CAIRO_ANTIALIAS_SUBPIXEL: Perform antialiasing by taking
+ *  advantage of the order of subpixel elements on devices
+ *  such as LCD panels
+ * 
+ * Specifies the type of antialiasing to do when rendering text or shapes.
+ **/
+typedef enum _cairo_antialias {
+    CAIRO_ANTIALIAS_DEFAULT,
+    CAIRO_ANTIALIAS_NONE,
+    CAIRO_ANTIALIAS_GRAY,
+    CAIRO_ANTIALIAS_SUBPIXEL
+} cairo_antialias_t;
+
+void
+cairo_set_antialias (cairo_t *cr, cairo_antialias_t antialias);
 
 /**
  * cairo_fill_rule_t
@@ -668,26 +683,6 @@ typedef enum _cairo_font_weight {
 } cairo_font_weight_t;
 
 /**
- * cairo_antialias_t:
- * @CAIRO_ANTIALIAS_DEFAULT: Use the default antialiasing for
- *   the font subsystem and target device
- * @CAIRO_ANTIALIAS_NONE: Do no antialiasing of fonts; use bilevel text
- * @CAIRO_ANTIALIAS_GRAY: Perform single-color antialiasing (using
- *  shades of gray for black text on a white background, for example).
- * @CAIRO_ANTIALIAS_SUBPIXEL: Perform antialiasing by taking
- *  advantage of the order of subpixel elements on devices
- *  such as LCD panels
- * 
- * Specifies the type of antialiasing to do when rendering text.
- **/
-typedef enum _cairo_antialias {
-    CAIRO_ANTIALIAS_DEFAULT,
-    CAIRO_ANTIALIAS_NONE,
-    CAIRO_ANTIALIAS_GRAY,
-    CAIRO_ANTIALIAS_SUBPIXEL
-} cairo_antialias_t;
-
-/**
  * cairo_subpixel_order_t:
  * @CAIRO_SUBPIXEL_ORDER_DEFAULT: Use the default subpixel order for
  *   for the target device
@@ -871,7 +866,7 @@ cairo_glyph_path (cairo_t *cr, cairo_glyph_t *glyphs, int num_glyphs);
 
 /* Generic identifier for a font style */
 
-void
+cairo_font_face_t *
 cairo_font_face_reference (cairo_font_face_t *font_face);
 
 void
@@ -898,7 +893,7 @@ cairo_scaled_font_create (cairo_font_face_t          *font_face,
 			  const cairo_matrix_t       *ctm,
 			  const cairo_font_options_t *options);
 
-void
+cairo_scaled_font_t *
 cairo_scaled_font_reference (cairo_scaled_font_t *scaled_font);
 
 void
@@ -927,6 +922,9 @@ cairo_get_source (cairo_t *cr);
 
 double
 cairo_get_tolerance (cairo_t *cr);
+
+cairo_antialias_t
+cairo_get_antialias (cairo_t *cr);
 
 void
 cairo_get_current_point (cairo_t *cr, double *x, double *y);
@@ -1109,7 +1107,7 @@ cairo_surface_create_similar (cairo_surface_t  *other,
 			      int		width,
 			      int		height);
 
-void
+cairo_surface_t *
 cairo_surface_reference (cairo_surface_t *surface);
 
 void
@@ -1147,6 +1145,19 @@ cairo_surface_set_user_data (cairo_surface_t		 *surface,
 void
 cairo_surface_get_font_options (cairo_surface_t      *surface,
 				cairo_font_options_t *options);
+
+void
+cairo_surface_flush (cairo_surface_t *surface);
+
+void
+cairo_surface_mark_dirty (cairo_surface_t *surface);
+
+void
+cairo_surface_mark_dirty_rectangle (cairo_surface_t *surface,
+				    int              x,
+				    int              y,
+				    int              width,
+				    int              height);
 
 void
 cairo_surface_set_device_offset (cairo_surface_t *surface,
@@ -1236,7 +1247,7 @@ cairo_pattern_t *
 cairo_pattern_create_radial (double cx0, double cy0, double radius0,
 			     double cx1, double cy1, double radius1);
 
-void
+cairo_pattern_t *
 cairo_pattern_reference (cairo_pattern_t *pattern);
 
 void

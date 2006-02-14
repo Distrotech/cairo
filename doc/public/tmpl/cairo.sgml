@@ -48,6 +48,7 @@ Drawing contexts.
 </para>
 
 @cr: 
+@Returns: 
 
 
 <!-- ##### FUNCTION cairo_destroy ##### -->
@@ -188,6 +189,25 @@ Drawing contexts.
 
 @cr: 
 @tolerance: 
+
+
+<!-- ##### ENUM cairo_antialias_t ##### -->
+<para>
+
+</para>
+
+@CAIRO_ANTIALIAS_DEFAULT: 
+@CAIRO_ANTIALIAS_NONE: 
+@CAIRO_ANTIALIAS_GRAY: 
+@CAIRO_ANTIALIAS_SUBPIXEL: 
+
+<!-- ##### FUNCTION cairo_set_antialias ##### -->
+<para>
+
+</para>
+
+@cr: 
+@antialias: 
 
 
 <!-- ##### ENUM cairo_fill_rule_t ##### -->
@@ -845,6 +865,15 @@ Drawing contexts.
 @Returns: 
 
 
+<!-- ##### FUNCTION cairo_get_antialias ##### -->
+<para>
+
+</para>
+
+@cr: 
+@Returns: 
+
+
 <!-- ##### FUNCTION cairo_get_current_point ##### -->
 <para>
 
@@ -1113,5 +1142,12 @@ Drawing contexts.
 @data: 
 @length: 
 @Returns: 
+
+
+<!-- ##### FUNCTION cairo_debug_reset_static_data ##### -->
+<para>
+
+</para>
+
 
 

@@ -75,6 +75,7 @@ cairo_xcb_surface_create_with_xrender_format
 cairo_xlib_surface_create
 cairo_xlib_surface_create_for_bitmap
 cairo_xlib_surface_set_size
+cairo_xlib_surface_set_drawable
 </SECTION>
 
 <SECTION>
@@ -90,10 +91,14 @@ cairo_surface_t
 cairo_surface_create_similar
 cairo_surface_reference
 cairo_surface_destroy
+cairo_surface_status
 cairo_surface_finish
 cairo_surface_get_font_options
 cairo_surface_set_user_data
 cairo_surface_get_user_data
+cairo_surface_flush
+cairo_surface_mark_dirty
+cairo_surface_mark_dirty_rectangle
 cairo_surface_set_device_offset
 </SECTION>
 
@@ -145,11 +150,13 @@ cairo_font_face_t
 cairo_scaled_font_t
 cairo_font_face_reference
 cairo_font_face_destroy
+cairo_font_face_status
 cairo_font_face_get_user_data
 cairo_font_face_set_user_data
 cairo_scaled_font_create
 cairo_scaled_font_reference
 cairo_scaled_font_destroy
+cairo_scaled_font_status
 cairo_font_extents_t
 cairo_scaled_font_extents
 cairo_text_extents_t
@@ -162,7 +169,6 @@ cairo_font_options_status
 cairo_font_options_merge
 cairo_font_options_hash
 cairo_font_options_equal
-cairo_antialias_t
 cairo_font_options_set_antialias
 cairo_font_options_get_antialias
 cairo_subpixel_order_t
@@ -196,6 +202,8 @@ cairo_set_source_rgba
 cairo_set_source
 cairo_set_source_surface
 cairo_set_tolerance
+cairo_antialias_t
+cairo_set_antialias
 cairo_fill_rule_t
 cairo_set_fill_rule
 cairo_set_line_width
@@ -265,6 +273,7 @@ cairo_glyph_path
 cairo_get_operator
 cairo_get_source
 cairo_get_tolerance
+cairo_get_antialias
 cairo_get_current_point
 cairo_get_fill_rule
 cairo_get_line_width
@@ -293,9 +302,8 @@ cairo_destroy_func_t
 cairo_user_data_key_t
 cairo_read_func_t
 cairo_write_func_t
+cairo_debug_reset_static_data
 <SUBSECTION Private>
-CAIRO_BEGIN_DECLS
-CAIRO_END_DECLS
 cairo_current_font_extents
 cairo_get_font_extents
 cairo_current_operator

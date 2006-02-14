@@ -245,18 +245,38 @@ _cairo_surface_get_clip_mode (cairo_surface_t *surface)
 	return CAIRO_CLIP_MODE_MASK;
 }
 
-void
+/**
+ * cairo_surface_reference:
+ * @surface: a #cairo_surface_t
+ * 
+ * Increases the reference count on @surface by one. This prevents
+ * @surface from being destroyed until a matching call to
+ * cairo_surface_destroy() is made.
+ *
+ * Return value: the referenced #cairo_surface_t.
+ **/
+cairo_surface_t *
 cairo_surface_reference (cairo_surface_t *surface)
 {
     if (surface == NULL)
-	return;
+	return NULL;
 
     if (surface->ref_count == (unsigned int)-1)
-	return;
+	return surface;
 
     surface->ref_count++;
+
+    return surface;
 }
 
+/**
+ * cairo_surface_destroy:
+ * @surface: a #cairo_t
+ * 
+ * Decreases the reference count on @surface by one. If the result is
+ * zero, then @surface and all associated resources are freed.  See
+ * cairo_surface_reference().
+ **/
 void
 cairo_surface_destroy (cairo_surface_t *surface)
 {
@@ -310,7 +330,15 @@ cairo_surface_finish (cairo_surface_t *surface)
 	surface->finished = TRUE;
 	return;
     }
-	
+
+    if (!surface->status && surface->backend->flush) {
+	status = surface->backend->flush (surface);
+	if (status) {
+	    _cairo_surface_set_error (surface, status);
+	    return;
+	}
+    }
+
     status = surface->backend->finish (surface);
     if (status) {
 	_cairo_surface_set_error (surface, status);
@@ -389,6 +417,93 @@ cairo_surface_get_font_options (cairo_surface_t       *surface,
 	surface->backend->get_font_options (surface, options);
     } else {
 	_cairo_font_options_init_default (options);
+    }
+}
+
+/**
+ * cairo_surface_flush:
+ * @surface: a #cairo_surface_t
+ * 
+ * Do any pending drawing for the surface and also restore any
+ * temporary modification's cairo has made to the surface's
+ * state. This function must be called before switching from
+ * drawing on the surface with cairo to drawing on it directly
+ * with native APIs. If the surface doesn't support direct access,
+ * then this function does nothing.
+ **/
+void
+cairo_surface_flush (cairo_surface_t *surface)
+{
+    if (surface->status) {
+	_cairo_surface_set_error (surface, surface->status);
+	return;
+    }
+
+    if (surface->finished) {
+	_cairo_surface_set_error (surface, CAIRO_STATUS_SURFACE_FINISHED);
+	return;
+    }
+
+    if (surface->backend->flush) {
+	cairo_status_t status;
+
+	status = surface->backend->flush (surface);
+	
+	if (status)
+	    _cairo_surface_set_error (surface, status);
+    }
+}
+
+/**
+ * cairo_surface_mark_dirty:
+ * @surface: a #cairo_surface_t
+ *
+ * Tells cairo that drawing has been done to surface using means other
+ * than cairo, and that cairo should reread any cached areas. Note
+ * that you must call cairo_surface_flush() before doing such drawing.
+ */
+void
+cairo_surface_mark_dirty (cairo_surface_t *surface)
+{
+    cairo_surface_mark_dirty_rectangle (surface, 0, 0, -1, -1);
+}
+
+/**
+ * cairo_surface_mark_dirty_rectangle:
+ * @surface: a #cairo_surface_t
+ * @x: X coordinate of dirty rectangle
+ * @y: Y coordinate of dirty rectangle
+ * @width: width of dirty rectangle
+ * @height: height of dirty rectangle
+ *
+ * Like cairo_surface_mark_dirty(), but drawing has been done only to
+ * the specified rectangle, so that cairo can retain cached contents
+ * for other parts of the surface.
+ */
+void
+cairo_surface_mark_dirty_rectangle (cairo_surface_t *surface,
+				    int              x,
+				    int              y,
+				    int              width,
+				    int              height)
+{
+    if (surface->status) {
+	_cairo_surface_set_error (surface, surface->status);
+	return;
+    }
+
+    if (surface->finished) {
+	_cairo_surface_set_error (surface, CAIRO_STATUS_SURFACE_FINISHED);
+	return;
+    }
+
+    if (surface->backend->mark_dirty_rectangle) {
+	cairo_status_t status;
+	
+	status = surface->backend->mark_dirty_rectangle (surface, x, y, width, height);
+	
+	if (status)
+	    _cairo_surface_set_error (surface, status);
     }
 }
 
@@ -876,6 +991,7 @@ static cairo_status_t
 _fallback_composite_trapezoids (cairo_operator_t	operator,
 				cairo_pattern_t		*pattern,
 				cairo_surface_t		*dst,
+				cairo_antialias_t	antialias,
 				int			src_x,
 				int			src_y,
 				int			dst_x,
@@ -928,6 +1044,7 @@ _fallback_composite_trapezoids (cairo_operator_t	operator,
 
     state.image->base.backend->composite_trapezoids (operator, pattern,
 						     &state.image->base,
+						     antialias,
 						     src_x, src_y,
 						     dst_x - state.image_rect.x,
 						     dst_y - state.image_rect.y,
@@ -945,6 +1062,7 @@ cairo_status_t
 _cairo_surface_composite_trapezoids (cairo_operator_t		operator,
 				     cairo_pattern_t		*pattern,
 				     cairo_surface_t		*dst,
+				     cairo_antialias_t		antialias,
 				     int			src_x,
 				     int			src_y,
 				     int			dst_x,
@@ -965,6 +1083,7 @@ _cairo_surface_composite_trapezoids (cairo_operator_t		operator,
     if (dst->backend->composite_trapezoids) {
 	status = dst->backend->composite_trapezoids (operator,
 						     pattern, dst,
+						     antialias,
 						     src_x, src_y,
 						     dst_x, dst_y,
 						     width, height,
@@ -974,6 +1093,7 @@ _cairo_surface_composite_trapezoids (cairo_operator_t		operator,
     }
 
     return  _fallback_composite_trapezoids (operator, pattern, dst,
+					    antialias,
 					    src_x, src_y,
 					    dst_x, dst_y,
 					    width, height,
@@ -1076,7 +1196,8 @@ _cairo_surface_reset_clip (cairo_surface_t *surface)
 	status = surface->backend->intersect_clip_path (surface,
 							NULL,
 							CAIRO_FILL_RULE_WINDING,
-							0);
+							0,
+							CAIRO_ANTIALIAS_DEFAULT);
 	if (status)
 	    return status;
     }
@@ -1122,7 +1243,8 @@ cairo_int_status_t
 _cairo_surface_intersect_clip_path (cairo_surface_t    *surface,
 				    cairo_path_fixed_t *path,
 				    cairo_fill_rule_t   fill_rule,
-				    double		tolerance)
+				    double		tolerance,
+				    cairo_antialias_t	antialias)
 {
     if (surface->status)
 	return surface->status;
@@ -1135,7 +1257,8 @@ _cairo_surface_intersect_clip_path (cairo_surface_t    *surface,
     return surface->backend->intersect_clip_path (surface,
 						  path,
 						  fill_rule,
-						  tolerance);
+						  tolerance,
+						  antialias);
 }
 
 static cairo_status_t
@@ -1154,21 +1277,20 @@ _cairo_surface_set_clip_path_recursive (cairo_surface_t *surface,
     return surface->backend->intersect_clip_path (surface,
 						  &clip_path->path,
 						  clip_path->fill_rule,
-						  clip_path->tolerance);
+						  clip_path->tolerance,
+						  clip_path->antialias);
 }
 
 /**
  * _cairo_surface_set_clip_path:
- * @surface: the #cairo_surface_t to reset the clip on
- * @path: the path to intersect against the current clipping path
- * @fill_rule: fill rule to use for clipping
- * @tolerance: tesselation to use for tesselating clipping path
- * @serial: the clip serial number associated with the region
+ * @surface: the #cairo_surface_t to set the clip on
+ * @clip_path: the clip path to set
+ * @serial: the clip serial number associated with the clip path
  * 
- * Sets the clipping path to be the intersection of the current
- * clipping path of the surface and the given path.
+ * Sets the given clipping path for the surface and assigns the
+ * clipping serial to the surface.
  **/
-cairo_status_t
+static cairo_status_t
 _cairo_surface_set_clip_path (cairo_surface_t	*surface,
 			      cairo_clip_path_t	*clip_path,
 			      unsigned int	serial)
@@ -1186,7 +1308,8 @@ _cairo_surface_set_clip_path (cairo_surface_t	*surface,
     status = surface->backend->intersect_clip_path (surface,
 						    NULL,
 						    CAIRO_FILL_RULE_WINDING,
-						    0);
+						    0,
+						    CAIRO_ANTIALIAS_DEFAULT);
     if (status)
 	return status;
 
@@ -1197,6 +1320,27 @@ _cairo_surface_set_clip_path (cairo_surface_t	*surface,
     surface->current_clip_serial = serial;
 
     return CAIRO_STATUS_SUCCESS;
+}
+
+cairo_status_t
+_cairo_surface_set_clip (cairo_surface_t *surface, cairo_clip_t *clip)
+{
+    if (!surface)
+	return CAIRO_STATUS_NULL_POINTER;
+    if (clip->serial == _cairo_surface_get_current_clip_serial (surface))
+	return CAIRO_STATUS_SUCCESS;
+    
+    if (clip->path)
+	return _cairo_surface_set_clip_path (surface,
+					     clip->path,
+					     clip->serial);
+    
+    if (clip->region)
+	return _cairo_surface_set_clip_region (surface, 
+					       clip->region,
+					       clip->serial);
+    
+    return _cairo_surface_reset_clip (surface);
 }
 
 /**
@@ -1260,3 +1404,154 @@ _cairo_surface_show_glyphs (cairo_scaled_font_t	        *scaled_font,
 
     return status;
 }
+
+/**
+ * _cairo_surface_composite_fixup_unbounded:
+ * @dst: the destination surface
+ * @src_attr: source surface attributes (from _cairo_pattern_acquire_surface())
+ * @src_width: width of source surface
+ * @src_height: height of source surface
+ * @mask_attr: mask surface attributes or %NULL if no mask
+ * @mask_width: width of mask surface
+ * @mask_height: height of mask surface
+ * @src_x: @src_x from _cairo_surface_composite()
+ * @src_y: @src_y from _cairo_surface_composite()
+ * @mask_x: @mask_x from _cairo_surface_composite()
+ * @mask_y: @mask_y from _cairo_surface_composite()
+ * @dst_x: @dst_x from _cairo_surface_composite()
+ * @dst_y: @dst_y from _cairo_surface_composite()
+ * @width: @width from _cairo_surface_composite()
+ * @height: @height_x from _cairo_surface_composite()
+ * 
+ * Eeek! Too many parameters! This is a helper function to take care of fixing
+ * up for bugs in libpixman and RENDER where, when asked to composite an
+ * untransformed surface with an unbounded operator (like CLEAR or SOURCE)
+ * only the region inside both the source and the mask is affected.
+ * This function clears the region that should have been drawn but was wasn't.
+ **/
+void
+_cairo_surface_composite_fixup_unbounded (cairo_surface_t            *dst,
+					  cairo_surface_attributes_t *src_attr,
+					  int                         src_width,
+					  int                         src_height,
+					  cairo_surface_attributes_t *mask_attr,
+					  int                         mask_width,
+					  int                         mask_height,
+					  int			      src_x,
+					  int			      src_y,
+					  int			      mask_x,
+					  int			      mask_y,
+					  int			      dst_x,
+					  int			      dst_y,
+					  unsigned int		      width,
+					  unsigned int		      height)
+{
+    cairo_bool_t have_src = TRUE;
+    cairo_bool_t have_mask = mask_attr != NULL;
+    cairo_rectangle_t dst_rectangle;
+    cairo_rectangle_t drawn_rectangle;
+    cairo_rectangle_t rects[4];
+    int num_rects = 0;
+
+    /* The RENDER/libpixman operators are clipped to the bounds of the untransformed,
+     * non-repeating sources and masks. Other sources and masks can be ignored.
+     */
+    if (!_cairo_matrix_is_integer_translation (&src_attr->matrix, NULL, NULL) ||
+	src_attr->extend != CAIRO_EXTEND_NONE)
+	have_src = FALSE;
+    
+    if (have_mask &&
+	(!_cairo_matrix_is_integer_translation (&mask_attr->matrix, NULL, NULL) ||
+	 mask_attr->extend != CAIRO_EXTEND_NONE))
+	have_mask = FALSE;
+
+    /* The area that was drawn is the area in the destination rectangle but not within
+     * the source or the mask.
+     */
+    dst_rectangle.x = dst_x;
+    dst_rectangle.y = dst_y;
+    dst_rectangle.width = width;
+    dst_rectangle.height = height;
+
+    drawn_rectangle = dst_rectangle;
+
+    if (have_src) {
+	cairo_rectangle_t src_rectangle;
+	
+	src_rectangle.x = (dst_x - (src_x + src_attr->x_offset));
+	src_rectangle.y = (dst_y - (src_y + src_attr->y_offset));
+	src_rectangle.width = src_width;
+	src_rectangle.height = src_height;
+	
+	_cairo_rectangle_intersect (&drawn_rectangle, &src_rectangle);
+    }
+
+    if (have_mask) {
+	cairo_rectangle_t mask_rectangle;
+	
+	mask_rectangle.x = (dst_x - (mask_x + mask_attr->x_offset));
+	mask_rectangle.y = (dst_y - (mask_y + mask_attr->y_offset));
+	mask_rectangle.width = mask_width;
+	mask_rectangle.height = mask_height;
+
+	_cairo_rectangle_intersect (&drawn_rectangle, &mask_rectangle);
+    }
+
+    /* Now compute the area that is in dst_rectangle but not in drawn_rectangle;
+     * this is the area we must clear; This computation could be done with
+     * regions, but the clumsiness of the libpixman API makes this easier.
+     */
+    if (drawn_rectangle.width == 0 || drawn_rectangle.height == 0)
+    {
+	    rects[num_rects].x = dst_rectangle.x;
+	    rects[num_rects].y = dst_rectangle.y;
+	    rects[num_rects].width = dst_rectangle.width;
+	    rects[num_rects].height = dst_rectangle.height;
+	    
+	    num_rects++;
+    }
+    else
+    {
+	if (dst_rectangle.y < drawn_rectangle.y) {
+	    rects[num_rects].x = dst_rectangle.x;
+	    rects[num_rects].y = dst_rectangle.y;
+	    rects[num_rects].width = dst_rectangle.width;
+	    rects[num_rects].height = drawn_rectangle.y - dst_rectangle.y;
+	    
+	    num_rects++;
+	}
+	
+	if (dst_rectangle.x < drawn_rectangle.x) {
+	    rects[num_rects].x = dst_rectangle.x;
+	    rects[num_rects].y = drawn_rectangle.y;
+	    rects[num_rects].width = drawn_rectangle.x - dst_rectangle.x;
+	    rects[num_rects].height = drawn_rectangle.height;
+	    
+	    num_rects++;
+	}
+	
+	if (dst_rectangle.x + dst_rectangle.width > drawn_rectangle.x + drawn_rectangle.width) {
+	    rects[num_rects].x = drawn_rectangle.x + drawn_rectangle.width;
+	    rects[num_rects].y = drawn_rectangle.y;
+	    rects[num_rects].width = (dst_rectangle.x + dst_rectangle.width) - (drawn_rectangle.x + drawn_rectangle.width);
+	    rects[num_rects].height = drawn_rectangle.height;
+	    
+	    num_rects++;
+	}
+	
+	if (dst_rectangle.y + dst_rectangle.height > drawn_rectangle.y + drawn_rectangle.height) {
+	    rects[num_rects].x = dst_rectangle.x;
+	    rects[num_rects].y = drawn_rectangle.y + drawn_rectangle.height;
+	    rects[num_rects].width = dst_rectangle.width;
+	    rects[num_rects].height = (dst_rectangle.y + dst_rectangle.height) - (drawn_rectangle.y + drawn_rectangle.height);
+	    
+	    num_rects++;
+	}
+    }
+	
+    if (num_rects > 0) {
+	_cairo_surface_fill_rectangles (dst, CAIRO_OPERATOR_SOURCE, CAIRO_COLOR_TRANSPARENT,
+					rects, num_rects);
+    }
+}
+

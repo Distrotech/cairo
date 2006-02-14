@@ -58,7 +58,6 @@ typedef struct {
     cairo_scaled_font_t base;
 
     LOGFONTW logfont;
-    cairo_font_options_t options;
 
     BYTE quality;
 
@@ -227,7 +226,6 @@ _win32_scaled_font_create (LOGFONTW                   *logfont,
 	return NULL;
 
     f->logfont = *logfont;
-    f->options = *options;
 
     /* We don't have any control over the hinting style or subpixel
      * order in the Win32 font API, so we ignore those parts of
@@ -263,7 +261,7 @@ _win32_scaled_font_create (LOGFONTW                   *logfont,
     cairo_matrix_multiply (&scale, font_matrix, ctm);
     _compute_transform (f, &scale);
 
-    _cairo_scaled_font_init (&f->base, font_matrix, ctm, &cairo_win32_scaled_font_backend);
+    _cairo_scaled_font_init (&f->base, font_matrix, ctm, options, &cairo_win32_scaled_font_backend);
 
     return &f->base;
 }
@@ -429,13 +427,11 @@ _cairo_win32_scaled_font_done_unscaled_font (cairo_scaled_font_t *scaled_font)
 /* implement the font backend interface */
 
 static cairo_status_t
-_cairo_win32_scaled_font_create (const char                  *family, 
-				 cairo_font_slant_t          slant, 
-				 cairo_font_weight_t         weight,
-				 const cairo_matrix_t       *font_matrix,
-				 const cairo_matrix_t       *ctm,
-				 const cairo_font_options_t *options,
-				 cairo_scaled_font_t       **scaled_font_out)
+_cairo_win32_scaled_font_create_toy (const cairo_toy_font_face_t *toy_face,
+				     const cairo_matrix_t        *font_matrix,
+				     const cairo_matrix_t        *ctm,
+				     const cairo_font_options_t  *options,
+				     cairo_scaled_font_t        **scaled_font_out)
 {
     LOGFONTW logfont;
     cairo_scaled_font_t *scaled_font;
@@ -443,7 +439,8 @@ _cairo_win32_scaled_font_create (const char                  *family,
     int face_name_len;
     cairo_status_t status;
 
-    status = _cairo_utf8_to_utf16 (family, -1, &face_name, &face_name_len);
+    status = _cairo_utf8_to_utf16 (toy_face->family, -1,
+				   &face_name, &face_name_len);
     if (status)
 	return status;
 
@@ -460,7 +457,7 @@ _cairo_win32_scaled_font_create (const char                  *family,
     logfont.lfEscapement = 0;	/* filled in later */
     logfont.lfOrientation = 0;	/* filled in later */
 
-    switch (weight) {
+    switch (toy_face->weight) {
     case CAIRO_FONT_WEIGHT_NORMAL:
     default:
 	logfont.lfWeight = FW_NORMAL;
@@ -470,7 +467,7 @@ _cairo_win32_scaled_font_create (const char                  *family,
 	break;
     }
 
-    switch (slant) {
+    switch (toy_face->slant) {
     case CAIRO_FONT_SLANT_NORMAL:
     default:
 	logfont.lfItalic = FALSE;
@@ -506,7 +503,7 @@ _cairo_win32_scaled_font_create (const char                  *family,
 }
 
 static void 
-_cairo_win32_scaled_font_destroy (void *abstract_font)
+_cairo_win32_scaled_font_fini (void *abstract_font)
 {
     cairo_win32_scaled_font_t *scaled_font = abstract_font;
 
@@ -1059,7 +1056,6 @@ _cairo_win32_scaled_font_show_glyphs (void		       *abstract_font,
 	 */
 	COLORREF new_color;
 	
-	/* XXX Use the unpremultiplied or premultiplied color? */
 	new_color = RGB (((int)solid_pattern->color.red_short) >> 8,
 			 ((int)solid_pattern->color.green_short) >> 8,
 			 ((int)solid_pattern->color.blue_short) >> 8);
@@ -1274,15 +1270,15 @@ FAIL:
 }
 
 const cairo_scaled_font_backend_t cairo_win32_scaled_font_backend = {
-    _cairo_win32_scaled_font_create,
-    _cairo_win32_scaled_font_destroy,
+    _cairo_win32_scaled_font_create_toy,
+    _cairo_win32_scaled_font_fini,
     _cairo_win32_scaled_font_font_extents,
     _cairo_win32_scaled_font_text_to_glyphs,
     _cairo_win32_scaled_font_glyph_extents,
     _cairo_win32_scaled_font_glyph_bbox,
     _cairo_win32_scaled_font_show_glyphs,
     _cairo_win32_scaled_font_glyph_path,
-    _cairo_win32_scaled_font_get_glyph_cache_key,
+    _cairo_win32_scaled_font_get_glyph_cache_key
 };
 
 /* cairo_win32_font_face_t */
@@ -1302,11 +1298,11 @@ _cairo_win32_font_face_destroy (void *abstract_face)
 }
 
 static cairo_status_t
-_cairo_win32_font_face_create_font (void                       *abstract_face,
-				    const cairo_matrix_t       *font_matrix,
-				    const cairo_matrix_t       *ctm,
-				    const cairo_font_options_t *options,
-				    cairo_scaled_font_t       **font)
+_cairo_win32_font_face_scaled_font_create (void			*abstract_face,
+					   const cairo_matrix_t	*font_matrix,
+					   const cairo_matrix_t	*ctm,
+					   const cairo_font_options_t *options,
+					   cairo_scaled_font_t **font)
 {
     cairo_win32_font_face_t *font_face = abstract_face;
 
@@ -1320,7 +1316,7 @@ _cairo_win32_font_face_create_font (void                       *abstract_face,
 
 static const cairo_font_face_backend_t _cairo_win32_font_face_backend = {
     _cairo_win32_font_face_destroy,
-    _cairo_win32_font_face_create_font,
+    _cairo_win32_font_face_scaled_font_create
 };
 
 /**
