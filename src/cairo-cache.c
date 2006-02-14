@@ -43,7 +43,7 @@
  * Packard.
  */
 
-static cairo_cache_arrangement_t cache_arrangements [] = {
+static const cairo_cache_arrangement_t cache_arrangements [] = {
     { 16,		43,		41        },
     { 32,		73,		71        },
     { 64,		151,		149       },
@@ -114,7 +114,6 @@ static cairo_cache_arrangement_t cache_arrangements [] = {
  (!((NULL_ENTRY_P((cache),(i))) || (DEAD_ENTRY_P((cache),(i)))))
 
 #ifdef CAIRO_DO_SANITY_CHECKING
-#include <assert.h>
 static void 
 _cache_sane_state (cairo_cache_t *cache)
 {
@@ -122,13 +121,12 @@ _cache_sane_state (cairo_cache_t *cache)
     assert (cache->entries != NULL);
     assert (cache->backend != NULL);
     assert (cache->arrangement != NULL);
-    assert (cache->refcount > 0);
-    assert (cache->used_memory <= cache->max_memory);
+    /* Cannot check this, a single object may larger */
+    /* assert (cache->used_memory <= cache->max_memory); */
     assert (cache->live_entries <= cache->arrangement->size);   
 }
 #else
 #define _cache_sane_state(c) 
-#define assert(x) 
 #endif
 
 static void
@@ -140,7 +138,7 @@ _entry_destroy (cairo_cache_t *cache, unsigned long i)
     {
 	cairo_cache_entry_base_t *entry = cache->entries[i];
 	assert(cache->live_entries > 0);
-	assert(cache->used_memory > entry->memory);
+	assert(cache->used_memory >= entry->memory);
 
 	cache->live_entries--;
  	cache->used_memory -= entry->memory;
@@ -183,10 +181,12 @@ _cache_lookup (cairo_cache_t *cache,
 	if (predicate != NULL)
 	{
 	    /* We are looking up an exact entry. */
-	    if (*probe != NULL 
-		&& *probe != DEAD_ENTRY 
-		&& (*probe)->hashcode == hash
-		&& predicate (cache, key, *probe))
+	    if (*probe == NULL)
+		/* Found an empty spot, there can't be a match */
+		break;
+	    else if (*probe != DEAD_ENTRY 
+		     && (*probe)->hashcode == hash
+		     && predicate (cache, key, *probe))
 		return probe;
 	}
 	else
@@ -230,8 +230,7 @@ _find_exact_live_entry_for (cairo_cache_t *cache,
     return _cache_lookup (cache, key, cache->backend->keys_equal);
 }
 
-
-static cairo_cache_arrangement_t *
+static const cairo_cache_arrangement_t *
 _find_cache_arrangement (unsigned long proposed_size)
 {
     unsigned long idx;
@@ -302,7 +301,7 @@ _cairo_cache_init (cairo_cache_t *cache,
 		   const cairo_cache_backend_t *backend,
 		   unsigned long max_memory)
 {    
-    assert(backend != NULL);
+    assert (backend != NULL);
 
     if (cache != NULL){
 	cache->arrangement = &cache_arrangements[0];
@@ -342,7 +341,7 @@ _cairo_cache_destroy (cairo_cache_t *cache)
 	
 	_cache_sane_state (cache);
 
-	if (cache->refcount-- > 0)
+	if (--cache->refcount > 0)
 	    return;
 	
 	for (i = 0; i < cache->arrangement->size; ++i) {
@@ -419,7 +418,8 @@ _cairo_cache_lookup (cairo_cache_t *cache,
 	_entry_destroy (cache, idx);
     }
     
-    assert(cache->max_memory >= (cache->used_memory + new_entry->memory));
+    /* Can't assert this; new_entry->memory may be larger than max_memory */
+    /* assert(cache->max_memory >= (cache->used_memory + new_entry->memory)); */
     
     /* Make room in the table for a new slot. */
     status = _resize_cache (cache, cache->live_entries + 1);

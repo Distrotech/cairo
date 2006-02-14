@@ -36,7 +36,7 @@
 
 #include "cairoint.h"
 
-static cairo_color_t const CAIRO_COLOR_DEFAULT = {
+static cairo_color_t const CAIRO_COLOR_WHITE = {
     1.0, 1.0, 1.0, 1.0,
     0xffff, 0xffff, 0xffff, 0xffff
 };
@@ -47,7 +47,7 @@ _cairo_color_compute_shorts (cairo_color_t *color);
 void
 _cairo_color_init (cairo_color_t *color)
 {
-    *color = CAIRO_COLOR_DEFAULT;
+    *color = CAIRO_COLOR_WHITE;
 }
 
 void
@@ -69,9 +69,12 @@ _cairo_color_set_rgb (cairo_color_t *color, double red, double green, double blu
 void
 _cairo_color_get_rgb (cairo_color_t *color, double *red, double *green, double *blue)
 {
-    *red   = color->red;
-    *green = color->green;
-    *blue  = color->blue;
+    if (red)
+	*red   = color->red;
+    if (green)
+	*green = color->green;
+    if (blue)
+	*blue  = color->blue;
 }
 
 void

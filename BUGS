@@ -1,3 +1,35 @@
+cairo_surface_create_for_image is claiming ownership of the user's data.
+
+--
+
+cairo_font_set_transform should be renamed cairo_font_set_matrix
+cairo_font_current_transform should be renamed cairo_font_get_matrix
+
+--
+
+Alexis Georges reports a segfault on AMD64 with a simple program,
+(that works in a 32bit chroot).
+
+--
+
+The caches need to have some locking (see: [cairo] Static caches and thread-safety)
+
+--
+
+Scaling of surface patterns is all broken, (try xsvg
+gradPatt-pattern-BE-07.svg and zoom in and out).
+
+--
+
+centi_unfinished.svg has big black portions when drawn with svg2png,
+(but not when drawn with xsvg).
+
+--
+
+The caches need to be invalidated at font destruction time.
+
+--
+
 cairo_clip is really slow, (with at least the Xlib and image
 backends). An accelerated implementation of the IN operator would
 probably help a lot here.
@@ -92,3 +124,15 @@ move_to_show_surface (see cairo/test):
  *   call to cairo_move_to to any coordinate other than 0,0. A little
  *   bit of poking around suggests this isn't a regression, (at least
  *   not since the last pixman snapshot).
+
+--
+
+cairo falls over with XFree86 4.2 (probably braindead depth handling
+somewhere).
+
+--
+
+The caches abort when asked for a too-large item, (should be possible
+to trigger by asking for a giant font, "cairo_scale_font (cr, 2000)"
+perhaps). Even if the caches don't want to hold them, we need to be
+able to allocate these objects.

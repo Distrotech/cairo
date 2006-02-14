@@ -23,8 +23,12 @@
  * Author: Carl D. Worth <cworth@cworth.org>
  */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
 #include <unistd.h>
 #include <errno.h>
+#include <string.h>
 
 #include "cairo_test.h"
 
@@ -127,10 +131,17 @@ cairo_test (cairo_test_t *test, cairo_test_draw_function_t draw)
 
     cairo_destroy (cr);
 
+    /* Skip image check for tests with no image (width,height == 0,0) */
+    if (test->width == 0 || test->height == 0) {
+	free (png_buf);
+	free (diff_buf);
+	return CAIRO_TEST_SUCCESS;
+    }
+
     /* Then we've got a bunch of string manipulation and file I/O for the check */
     srcdir = getenv ("srcdir");
     if (!srcdir)
-	srcdir = "";
+	srcdir = ".";
     xasprintf (&png_name, "%s%s", test->name, CAIRO_TEST_PNG_SUFFIX);
     xasprintf (&ref_name, "%s/%s%s", srcdir, test->name, CAIRO_TEST_REF_SUFFIX);
     xasprintf (&diff_name, "%s%s", test->name, CAIRO_TEST_DIFF_SUFFIX);

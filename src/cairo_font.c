@@ -36,7 +36,6 @@
 
 #include "cairoint.h"
 
-
 /* First we implement a global font cache for named fonts. */
 
 typedef struct {
@@ -54,9 +53,9 @@ typedef struct {
 static unsigned long
 _font_cache_hash (void *cache, void *key)
 {
+    unsigned long hash;
     cairo_font_cache_key_t *in;
     in = (cairo_font_cache_key_t *) key;
-    unsigned long hash;
 
     /* 1607 and 1451 are just a couple random primes. */
     hash = _cairo_hash_string (in->family);
@@ -86,11 +85,10 @@ _font_cache_create_entry (void *cache,
 			  void *key,
 			  void **return_value)
 {
+    const cairo_font_backend_t *backend = CAIRO_FONT_BACKEND_DEFAULT;
     cairo_font_cache_key_t *k;
     cairo_font_cache_entry_t *entry;
     k = (cairo_font_cache_key_t *) key;
-
-    const struct cairo_font_backend *backend = CAIRO_FONT_BACKEND_DEFAULT;
 
     /* XXX: The current freetype backend may return NULL, (for example
      * if no fonts are installed), but I would like to guarantee that
@@ -145,14 +143,13 @@ _font_cache_destroy_cache (void *cache)
     free (cache);
 }
 
-const struct cairo_cache_backend cairo_font_cache_backend = {
+static const cairo_cache_backend_t cairo_font_cache_backend = {
     _font_cache_hash,
     _font_cache_keys_equal,
     _font_cache_create_entry,
     _font_cache_destroy_entry,
     _font_cache_destroy_cache
 };
-
 
 static void
 _lock_global_font_cache (void)
@@ -239,8 +236,8 @@ _cairo_font_init (cairo_font_t *scaled,
 }
 
 cairo_status_t
-_cairo_unscaled_font_init (cairo_unscaled_font_t 		*font, 
-			   const struct cairo_font_backend	*backend)
+_cairo_unscaled_font_init (cairo_unscaled_font_t 	*font, 
+			   const cairo_font_backend_t	*backend)
 {
     font->refcount = 1;
     font->backend = backend;
@@ -476,14 +473,13 @@ _image_glyph_cache_destroy_cache (void *cache)
     free (cache);
 }
 
-const cairo_cache_backend_t cairo_image_cache_backend = {
+static const cairo_cache_backend_t cairo_image_cache_backend = {
     _cairo_glyph_cache_hash,
     _cairo_glyph_cache_keys_equal,
     _image_glyph_cache_create_entry,
     _image_glyph_cache_destroy_entry,
     _image_glyph_cache_destroy_cache
 };
-
 
 void
 _cairo_lock_global_image_glyph_cache()

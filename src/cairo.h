@@ -34,18 +34,16 @@
  *	Carl D. Worth <cworth@isi.edu>
  */
 
-#ifndef _CAIRO_H_
-#define _CAIRO_H_
+#ifndef CAIRO_H
+#define CAIRO_H
 
 #include <cairo-features.h>
-
 #include <pixman.h>
-#include <stdio.h>
 
-typedef struct cairo cairo_t;
-typedef struct cairo_surface cairo_surface_t;
-typedef struct cairo_matrix cairo_matrix_t;
-typedef struct cairo_pattern cairo_pattern_t;
+typedef struct _cairo cairo_t;
+typedef struct _cairo_surface cairo_surface_t;
+typedef struct _cairo_matrix cairo_matrix_t;
+typedef struct _cairo_pattern cairo_pattern_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -97,67 +95,6 @@ cairo_set_target_image (cairo_t	*cr,
 			int		width,
 			int		height,
 			int		stride);
-
-#ifdef CAIRO_HAS_PS_SURFACE
-
-#include <stdio.h>
-
-void
-cairo_set_target_ps (cairo_t	*cr,
-		     FILE	*file,
-		     double	width_inches,
-		     double	height_inches,
-		     double	x_pixels_per_inch,
-		     double	y_pixels_per_inch);
-
-#endif /* CAIRO_HAS_PS_SURFACE */
-
-#ifdef CAIRO_HAS_PNG_SURFACE
-
-#include <stdio.h>
-
-void
-cairo_set_target_png (cairo_t	*cr,
-		      FILE	*file,
-		      cairo_format_t	format,
-		      int	       	width,
-		      int		height);
-
-#endif /* CAIRO_HAS_PNG_SURFACE */
-
-#ifdef CAIRO_HAS_XLIB_SURFACE
-
-#include <X11/extensions/Xrender.h>
-
-/* XXX: This shold be renamed to cairo_set_target_xlib to match the
- * other backends */
-void
-cairo_set_target_drawable (cairo_t	*cr,
-			   Display	*dpy,
-			   Drawable	drawable);
-#endif /* CAIRO_HAS_XLIB_SURFACE */
-
-#ifdef CAIRO_HAS_XCB_SURFACE
-
-#include <X11/XCB/xcb.h>
-#include <X11/XCB/render.h>
-
-void
-cairo_set_target_xcb (cairo_t		*cr,
-		      XCBConnection	*dpy,
-		      XCBDRAWABLE	drawable,
-		      XCBVISUALTYPE	*visual,
-		      cairo_format_t	format);
-#endif /* CAIRO_HAS_XCB_SURFACE */
-
-#ifdef CAIRO_HAS_GLITZ_SURFACE
-
-#include <glitz.h>
-
-void
-cairo_set_target_glitz (cairo_t *cr,
-			glitz_surface_t *surface);
-#endif /* CAIRO_HAS_GLITZ_SURFACE */
 
 typedef enum cairo_operator { 
     CAIRO_OPERATOR_CLEAR,
@@ -393,7 +330,7 @@ cairo_clip (cairo_t *cr);
 
 /* Font/Text functions */
 
-typedef struct cairo_font cairo_font_t;
+typedef struct _cairo_font cairo_font_t;
 
 typedef struct {
   unsigned long        index;
@@ -492,27 +429,6 @@ cairo_font_set_transform (cairo_font_t *font,
 void
 cairo_font_current_transform (cairo_font_t *font, 
 			      cairo_matrix_t *matrix);
-
-/* Fontconfig/Freetype platform-specific font interface */
-
-#include <fontconfig/fontconfig.h>
-#include <ft2build.h>
-#include FT_FREETYPE_H
-
-cairo_font_t *
-cairo_ft_font_create (FT_Library ft_library, FcPattern *pattern);
-
-cairo_font_t *
-cairo_ft_font_create_for_ft_face (FT_Face face);
-
-void
-cairo_ft_font_destroy (cairo_font_t *ft_font);
-
-FT_Face
-cairo_ft_font_face (cairo_font_t *ft_font);
-
-FcPattern *
-cairo_ft_font_pattern (cairo_font_t  *ft_font);
 
 /* Image functions */
 
@@ -738,59 +654,6 @@ cairo_pattern_set_filter (cairo_pattern_t *pattern, cairo_filter_t filter);
 cairo_filter_t
 cairo_pattern_get_filter (cairo_pattern_t *pattern);
 
-#ifdef CAIRO_HAS_PS_SURFACE
-
-/* PS-surface functions */
-
-cairo_surface_t *
-cairo_ps_surface_create (FILE	*file,
-			 double	width_inches,
-			 double height_inches,
-			 double	x_pixels_per_inch,
-			 double	y_pixels_per_inch);
-
-#endif /* CAIRO_HAS_PS_SURFACE */
-
-#ifdef CAIRO_HAS_PNG_SURFACE
-
-/* PNG-surface functions */
-
-cairo_surface_t *
-cairo_png_surface_create (FILE			*file,
-			  cairo_format_t	format,
-			  int			width,
-			  int			height);
-
-#endif /* CAIRO_HAS_PNG_SURFACE */
-
-#ifdef CAIRO_HAS_XLIB_SURFACE
-
-/* XXX: This is a mess from the user's POV. Should the Visual or the
-   cairo_format_t control what render format is used? Maybe I can have
-   cairo_surface_create_for_window with a visual, and
-   cairo_surface_create_for_pixmap with a cairo_format_t. Would that work?
-*/
-cairo_surface_t *
-cairo_xlib_surface_create (Display		*dpy,
-			   Drawable		drawable,
-			   Visual		*visual,
-			   cairo_format_t	format,
-			   Colormap		colormap);
-  
-/* XXX: This has been proposed
-cairo_status_t
-cairo_xlib_surface_set_size (cairo_surface_t *surface, int width, int height);
-*/
-
-#endif /* CAIRO_HAS_XLIB_SURFACE */
-
-#ifdef CAIRO_HAS_GLITZ_SURFACE
-
-cairo_surface_t *
-cairo_glitz_surface_create (glitz_surface_t *surface);
-
-#endif /* CAIRO_HAS_GLITZ_SURFACE */
-
 /* Matrix functions */
 
 /* XXX: Rename all of these to cairo_transform_t */
@@ -865,4 +728,4 @@ cairo_matrix_transform_point (cairo_matrix_t *matrix, double *x, double *y);
 }
 #endif
 
-#endif
+#endif /* CAIRO_H */

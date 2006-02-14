@@ -1,3 +1,47 @@
+* Add support for non-antialiased rendering. API ?
+
+* Cleanup cairo_snippets so they operate in a more default cairo
+  environment, (particularly with a default CTM).
+
+* Add one of cairo_surface_finish/_finalize/_close to resolve the
+  "reference counting vs garbage collection" thread.
+
+* Shove experimental snapping code from libsvg-cairo down int cairo
+  proper.
+
+* Clean up the cache code a bit, (there is at least one redundant
+  level of cacheing, and there are some minor style issues).
+
+* Implement the parallel install stuff, (most importantly, push
+  cairo.h down into into one directory below $(includedir)).
+
+* Add CAIRO_FILL_RULE_INVERSE_WINDING and CAIRO_FILL_RULE_INVERSE_EVEN_ODD
+
+* Simplifying the operator set?
+
+* Fix clipping to work for all operators. The equation we have come up
+  with is:
+
+	((src Op dest) In clip) Add (dest Out clip)
+
+* Resolve the rest of the rendering equation. We need a fundamental
+  equation upon which more convenient operations are based, (at least
+  formally). Some of the common operations that should be convenient:
+
+	* display surface
+	* display surface multiplied by constant alpha
+	* display pattern masked by surface
+
+  So this involves deciding whether to expose a new mask object in the
+  graphics state, and deciding exactly what set_alpha means. It almost
+  certainly means adding cairo_show_surface_mask.
+
+* Implement a hidden transform, (as per the result of the hidden
+  offset thread on the mailing list).
+
+* Replace PNG backend with an image_surface function to save a PNG
+  image.
+
 * Clean up the API in preparation for freezing and release.
 
 * Implement a PDF backend.
@@ -69,10 +113,39 @@ functions:
   current path. We may also need to provide the coordinates of the
   faces of every dash as well.
 
+* Should add geometry pruning as appropriate.
+
 * We need a way to get at the image data after something
   like cairo_surface_create_similar with the image backend.
 
+* Three suggestions from Owen that will help GTK+ performance:
+
+  - The ability have an additional rectangle-list clip in the
+   Xlib surface. Frequently during an expose event, GTK+ is
+   drawing L shaped areas
+
+         XXXXXX
+         X.....
+         X.....
+
+   And passing the real clip to the server is going to save
+   a lot of pixel operations that will be thrown away.
+
+ - The ability to pass in a width/height to cairo_xlib_surface_create()
+   to avoid a round-trip. (Round-trips are bad to the point where
+   querying the the server is something you don't want to do in
+   production software)
+
+ - More of a future thing, the ability to hint to to cairo that
+   the contents of the Xlib surface passed to
+   cairo_xlib_surface_create() are a solid fill ... this is
+   very much the normal case for GTK+ usage and allows for
+   big optimization in the no-RENDER case.
+   (see http://mail.gnome.org/archives/gtk-devel-list/2003-March/msg00045.html
+
 * Verification, profiling, optimization.
+
+	centi_unfinished.svg may provide a good test case.
 
 A comparison with PostScript
 ============================

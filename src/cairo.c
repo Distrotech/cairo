@@ -39,12 +39,14 @@
 
 #define CAIRO_TOLERANCE_MINIMUM	0.0002 /* We're limited by 16 bits of sub-pixel precision */
 
-
 #ifdef CAIRO_DO_SANITY_CHECKING
 #include <assert.h>
 static int 
 cairo_sane_state (cairo_t *cr)
 {    
+    if (cr == NULL)
+	return 0;
+
     switch (cr->status) {
     case CAIRO_STATUS_SUCCESS:
     case CAIRO_STATUS_NO_MEMORY:
@@ -56,7 +58,6 @@ cairo_sane_state (cairo_t *cr)
     case CAIRO_STATUS_NULL_POINTER:
 	break;
     default:
-	printf ("cairo status is bad: %d\n", cr->status);
 	return 0;
     }
     return 1;
@@ -159,6 +160,12 @@ cairo_restore (cairo_t *cr)
 
     if (cr->gstate == NULL)
 	cr->status = CAIRO_STATUS_INVALID_RESTORE;
+    
+    if (cr->status)
+	return;
+   
+    cr->status = _cairo_gstate_restore_external_state (cr->gstate);
+    
     CAIRO_CHECK_SANITY (cr);
 }
 slim_hidden_def(cairo_restore);

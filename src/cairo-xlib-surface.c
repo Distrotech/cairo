@@ -35,6 +35,7 @@
  */
 
 #include "cairoint.h"
+#include "cairo-xlib.h"
 
 void
 cairo_set_target_drawable (cairo_t	*cr,
@@ -61,7 +62,7 @@ cairo_set_target_drawable (cairo_t	*cr,
     cairo_surface_destroy (surface);
 }
 
-typedef struct cairo_xlib_surface {
+typedef struct _cairo_xlib_surface {
     cairo_surface_t base;
 
     Display *dpy;
@@ -118,6 +119,16 @@ _CAIRO_FORMAT_DEPTH (cairo_format_t format)
 }
 
 static cairo_surface_t *
+_cairo_xlib_surface_create_with_size (Display		*dpy,
+				      Drawable		drawable,
+				      Visual		*visual,
+				      cairo_format_t	format,
+				      Colormap		colormap,
+				      int               width,
+				      int               height);
+
+
+static cairo_surface_t *
 _cairo_xlib_surface_create_similar (void		*abstract_src,
 				    cairo_format_t	format,
 				    int			drawable,
@@ -149,7 +160,9 @@ _cairo_xlib_surface_create_similar (void		*abstract_src,
 			 _CAIRO_FORMAT_DEPTH (format));
     
     surface = (cairo_xlib_surface_t *)
-	cairo_xlib_surface_create (dpy, pix, NULL, format, DefaultColormap (dpy, scr));
+	_cairo_xlib_surface_create_with_size (dpy, pix, NULL, format,
+					      DefaultColormap (dpy, scr),
+					      width, height);
     surface->owns_pixmap = 1;
 
     surface->width = width;
@@ -199,6 +212,7 @@ _cairo_xlib_surface_get_image (void *abstract_surface)
 		  &surface->width, &surface->height,
 		  &bwidth_ignore, &depth_ignore);
 
+    /* XXX: This should try to use the XShm extension if availible */
     ximage = XGetImage (surface->dpy,
 			surface->drawable,
 			0, 0,
@@ -684,13 +698,13 @@ _cairo_xlib_surface_show_glyphs (cairo_unscaled_font_t  *font,
 				 cairo_font_scale_t	*scale,
 				 cairo_operator_t       operator,
 				 cairo_surface_t        *source,
-				 cairo_surface_t        *surface,
+				 void			*abstract_surface,
 				 int                    source_x,
 				 int                    source_y,
 				 const cairo_glyph_t    *glyphs,
 				 int                    num_glyphs);
 
-static const struct cairo_surface_backend cairo_xlib_surface_backend = {
+static const cairo_surface_backend_t cairo_xlib_surface_backend = {
     _cairo_xlib_surface_create_similar,
     _cairo_xlib_surface_destroy,
     _cairo_xlib_surface_pixels_per_inch,
@@ -709,17 +723,17 @@ static const struct cairo_surface_backend cairo_xlib_surface_backend = {
     _cairo_xlib_surface_show_glyphs
 };
 
-cairo_surface_t *
-cairo_xlib_surface_create (Display		*dpy,
-			   Drawable		drawable,
-			   Visual		*visual,
-			   cairo_format_t	format,
-			   Colormap		colormap)
+static cairo_surface_t *
+_cairo_xlib_surface_create_with_size (Display		*dpy,
+				      Drawable		drawable,
+				      Visual		*visual,
+				      cairo_format_t	format,
+				      Colormap		colormap,
+				      int               width,
+				      int               height)
 {
     cairo_xlib_surface_t *surface;
     int render_standard;
-    Window w;
-    unsigned int ignore;
 
     surface = malloc (sizeof (cairo_xlib_surface_t));
     if (surface == NULL)
@@ -736,7 +750,9 @@ cairo_xlib_surface_create (Display		*dpy,
     surface->drawable = drawable;
     surface->owns_pixmap = 0;
     surface->visual = visual;
-
+    surface->width = width;
+    surface->height = height;
+    
     if (! XRenderQueryVersion (dpy, &surface->render_major, &surface->render_minor)) {
 	surface->render_major = -1;
 	surface->render_minor = -1;
@@ -758,12 +774,6 @@ cairo_xlib_surface_create (Display		*dpy,
 	break;
     }
 
-    XGetGeometry(dpy, drawable, 
-		 &w, &ignore, &ignore, 
-		 &surface->width,
-		 &surface->height,
-		 &ignore, &ignore);
-
     /* XXX: I'm currently ignoring the colormap. Is that bad? */
     if (CAIRO_SURFACE_RENDER_HAS_CREATE_PICTURE (surface))
 	surface->picture = XRenderCreatePicture (dpy, drawable,
@@ -776,8 +786,31 @@ cairo_xlib_surface_create (Display		*dpy,
 
     return (cairo_surface_t *) surface;
 }
-DEPRECATE (cairo_surface_create_for_drawable, cairo_xlib_surface_create);
 
+cairo_surface_t *
+cairo_xlib_surface_create (Display		*dpy,
+			   Drawable		drawable,
+			   Visual		*visual,
+			   cairo_format_t	format,
+			   Colormap		colormap)
+{
+    Window window_ignore;
+    unsigned int int_ignore;
+    unsigned int width, height;
+
+    /* XXX: This call is a round-trip. We probably want to instead (or
+     * also?) export a version that accepts width/height. Then, we'll
+     * likely also need a resize function too.
+     */
+    XGetGeometry(dpy, drawable,
+		 &window_ignore, &int_ignore, &int_ignore,
+		 &width, &height,
+		 &int_ignore, &int_ignore);
+
+    return _cairo_xlib_surface_create_with_size (dpy, drawable, visual, format,
+						 colormap, width, height);
+}
+DEPRECATE (cairo_surface_create_for_drawable, cairo_xlib_surface_create);
 
 /* RENDER glyphset cache code */
 
@@ -839,8 +872,45 @@ _xlib_glyphset_cache_create_entry (void *cache,
 
     v->info.width = im->image ? im->image->stride : im->size.width;
     v->info.height = im->size.height;
-    v->info.x = - im->extents.x_bearing;
-    v->info.y = im->extents.y_bearing;
+
+    /*
+     *  Most of the font rendering system thinks of glyph tiles as having
+     *  an origin at (0,0) and an x and y bounding box "offset" which
+     *  extends possibly off into negative coordinates, like so:
+     *
+     *     
+     *       (x,y) <-- probably negative numbers
+     *         +----------------+
+     *         |      .         |
+     *         |      .         |
+     *         |......(0,0)     |
+     *         |                |
+     *         |                |
+     *         +----------------+
+     *                  (width+x,height+y)
+     *
+     *  This is a postscript-y model, where each glyph has its own
+     *  coordinate space, so it's what we expose in terms of metrics. It's
+     *  apparantly what everyone's expecting. Everyone except the Render
+     *  extension. Render wants to see a glyph tile starting at (0,0), with
+     *  an origin offset inside, like this:
+     *
+     *       (0,0)
+     *         +---------------+
+     *         |      .        |
+     *         |      .        |
+     *         |......(x,y)    |
+     *         |               |
+     *         |               |
+     *         +---------------+
+     *                   (width,height)
+     *
+     *  Luckily, this is just the negation of the numbers we already have
+     *  sitting around for x and y. 
+     */
+
+    v->info.x = -im->size.x;
+    v->info.y = -im->size.y;
     v->info.xOff = 0;
     v->info.yOff = 0;
 
@@ -875,7 +945,7 @@ _xlib_glyphset_cache_destroy_entry (void *cache, void *entry)
     free (v);	
 }
 
-const cairo_cache_backend_t _xlib_glyphset_cache_backend = {
+static const cairo_cache_backend_t _xlib_glyphset_cache_backend = {
     _cairo_glyph_cache_hash,
     _cairo_glyph_cache_keys_equal,
     _xlib_glyphset_cache_create_entry,
@@ -964,6 +1034,7 @@ _cairo_xlib_surface_show_glyphs32 (cairo_unscaled_font_t  *font,
     unsigned int stack_chars [N_STACK_BUF];
 
     int i;    
+    int thisX, thisY;
     int lastX = 0, lastY = 0;
 
     /* Acquire arrays of suitable sizes. */
@@ -987,10 +1058,12 @@ _cairo_xlib_surface_show_glyphs32 (cairo_unscaled_font_t  *font,
 	elts[i].chars = &(chars[i]);
 	elts[i].nchars = 1;
 	elts[i].glyphset = g->glyphset;
-	elts[i].xOff = glyphs[i].x - lastX;
-	elts[i].yOff = glyphs[i].y - lastY;
-	lastX = glyphs[i].x;
-	lastY = glyphs[i].y;
+	thisX = (int) floor (glyphs[i].x + 0.5);
+	thisY = (int) floor (glyphs[i].y + 0.5);
+	elts[i].xOff = thisX - lastX;
+	elts[i].yOff = thisY - lastY;
+	lastX = thisX;
+	lastY = thisY;
     }
 
     XRenderCompositeText32 (self->dpy,
@@ -1039,6 +1112,7 @@ _cairo_xlib_surface_show_glyphs16 (cairo_unscaled_font_t  *font,
     unsigned short stack_chars [N_STACK_BUF];
 
     int i;
+    int thisX, thisY;
     int lastX = 0, lastY = 0;
 
     /* Acquire arrays of suitable sizes. */
@@ -1062,10 +1136,12 @@ _cairo_xlib_surface_show_glyphs16 (cairo_unscaled_font_t  *font,
 	elts[i].chars = &(chars[i]);
 	elts[i].nchars = 1;
 	elts[i].glyphset = g->glyphset;
-	elts[i].xOff = glyphs[i].x - lastX;
-	elts[i].yOff = glyphs[i].y - lastY;
-	lastX = glyphs[i].x;
-	lastY = glyphs[i].y;
+	thisX = (int) floor (glyphs[i].x + 0.5);
+	thisY = (int) floor (glyphs[i].y + 0.5);
+	elts[i].xOff = thisX - lastX;
+	elts[i].yOff = thisY - lastY;
+	lastX = thisX;
+	lastY = thisY;
     }
 
     XRenderCompositeText16 (self->dpy,
@@ -1113,6 +1189,7 @@ _cairo_xlib_surface_show_glyphs8 (cairo_unscaled_font_t  *font,
     char stack_chars [N_STACK_BUF];
 
     int i;
+    int thisX, thisY;
     int lastX = 0, lastY = 0;
 
     /* Acquire arrays of suitable sizes. */
@@ -1136,10 +1213,12 @@ _cairo_xlib_surface_show_glyphs8 (cairo_unscaled_font_t  *font,
 	elts[i].chars = &(chars[i]);
 	elts[i].nchars = 1;
 	elts[i].glyphset = g->glyphset;
-	elts[i].xOff = glyphs[i].x - lastX;
-	elts[i].yOff = glyphs[i].y - lastY;
-	lastX = glyphs[i].x;
-	lastY = glyphs[i].y;
+	thisX = (int) floor (glyphs[i].x + 0.5);
+	thisY = (int) floor (glyphs[i].y + 0.5);
+	elts[i].xOff = thisX - lastX;
+	elts[i].yOff = thisY - lastY;
+	lastX = thisX;
+	lastY = thisY;
     }
 
     XRenderCompositeText8 (self->dpy,
@@ -1172,14 +1251,14 @@ _cairo_xlib_surface_show_glyphs (cairo_unscaled_font_t  *font,
 				 cairo_font_scale_t	*scale,
 				 cairo_operator_t       operator,
 				 cairo_surface_t        *source,
-				 cairo_surface_t        *surface,
+				 void		        *abstract_surface,
 				 int                    source_x,
 				 int                    source_y,
 				 const cairo_glyph_t    *glyphs,
 				 int                    num_glyphs)
 {
     unsigned int elt_size;
-    cairo_xlib_surface_t *self = (cairo_xlib_surface_t *) surface;
+    cairo_xlib_surface_t *self = abstract_surface;
     cairo_image_surface_t *tmp = NULL;
     cairo_xlib_surface_t *src = NULL;
     glyphset_cache_t *g;
@@ -1200,7 +1279,7 @@ _cairo_xlib_surface_show_glyphs (cairo_unscaled_font_t  *font,
     }
 
     /* prep the source surface. */
-    if (source->backend == surface->backend) {
+    if (source->backend == self->base.backend) {
 	src = (cairo_xlib_surface_t *) source;
 
     } else {
@@ -1209,7 +1288,7 @@ _cairo_xlib_surface_show_glyphs (cairo_unscaled_font_t  *font,
 	    goto FREE_ENTRIES;
 
 	src = (cairo_xlib_surface_t *) 
-	    _cairo_surface_create_similar_scratch (surface, self->format, 1,
+	    _cairo_surface_create_similar_scratch (&self->base, self->format, 1,
 						   tmp->width, tmp->height);
 
 	if (src == NULL)
