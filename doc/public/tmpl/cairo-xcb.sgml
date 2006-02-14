@@ -14,15 +14,18 @@ XCB Backend
 
 </para>
 
-<!-- ##### FUNCTION cairo_set_target_xcb ##### -->
+<!-- ##### SECTION Stability_Level ##### -->
+
+
+<!-- ##### FUNCTION cairo_xcb_surface_create ##### -->
 <para>
 
 </para>
 
-@cr: 
 @dpy: 
 @drawable: 
 @visual: 
 @format: 
+@Returns: 
 
 

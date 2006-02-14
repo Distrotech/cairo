@@ -36,12 +36,7 @@
 
 #include "cairoint.h"
 #include "cairo-xcb.h"
-
-cairo_surface_t *
-cairo_xcb_surface_create (XCBConnection		*dpy,
-			   XCBDRAWABLE		drawable,
-			   XCBVISUALTYPE		*visual,
-			   cairo_format_t	format);
+#include "cairo-xcb-xrender.h"
 
 #define AllPlanes               ((unsigned long)~0L)
 
@@ -71,10 +66,12 @@ format_from_visual(XCBConnection *c, XCBVISUALID visual)
     return nil;
 }
 
-static XCBRenderPICTFORMAT
-format_from_cairo(XCBConnection *c, cairo_format_t fmt)
+/* XXX: Why is this ridiculously complex compared to the equivalent
+ * function in cairo-xlib-surface.c */
+static XCBRenderPICTFORMINFO
+_format_from_cairo(XCBConnection *c, cairo_format_t fmt)
 {
-    XCBRenderPICTFORMAT ret = { 0 };
+    XCBRenderPICTFORMINFO ret = {{ 0 }};
     struct tmpl_t {
 	XCBRenderDIRECTFORMAT direct;
 	CARD8 depth;
@@ -151,36 +148,20 @@ format_from_cairo(XCBConnection *c, cairo_format_t fmt)
 	if(t->alpha_mask && (t->alpha_mask != f->alpha_mask || t->alpha_shift != f->alpha_shift))
 	    continue;
 
-	ret = fi.data->id;
+	ret = *fi.data;
     }
 
     free(r);
     return ret;
 }
 
-void
-cairo_set_target_xcb (cairo_t		*cr,
-		      XCBConnection	*dpy,
-		      XCBDRAWABLE		drawable,
-		      XCBVISUALTYPE	*visual,
-		      cairo_format_t	format)
-{
-    cairo_surface_t *surface;
+/*
+ * Instead of taking two round trips for each blending request,
+ * assume that if a particular drawable fails GetImage that it will
+ * fail for a "while"; use temporary pixmaps to avoid the errors
+ */
 
-    if (cr->status && cr->status != CAIRO_STATUS_NO_TARGET_SURFACE)
-	    return;
-
-    surface = cairo_xcb_surface_create (dpy, drawable, visual, format);
-    if (surface == NULL) {
-	cr->status = CAIRO_STATUS_NO_MEMORY;
-	return;
-    }
-
-    cairo_set_target_surface (cr, surface);
-
-    /* cairo_set_target_surface takes a reference, so we must destroy ours */
-    cairo_surface_destroy (surface);
-}
+#define CAIRO_ASSUME_PIXMAP	20
 
 typedef struct cairo_xcb_surface {
     cairo_surface_t base;
@@ -190,15 +171,19 @@ typedef struct cairo_xcb_surface {
     XCBDRAWABLE drawable;
     int owns_pixmap;
     XCBVISUALTYPE *visual;
-    cairo_format_t format;
+
+    int use_pixmap;
 
     int render_major;
     int render_minor;
 
     int width;
     int height;
+    int depth;
 
     XCBRenderPICTURE picture;
+    XCBRenderPICTFORMINFO format;
+    int has_format;
 } cairo_xcb_surface_t;
 
 #define CAIRO_SURFACE_RENDER_AT_LEAST(surface, major, minor)	\
@@ -222,6 +207,9 @@ typedef struct cairo_xcb_surface {
 #define CAIRO_SURFACE_RENDER_HAS_PICTURE_TRANSFORM(surface)	CAIRO_SURFACE_RENDER_AT_LEAST((surface), 0, 6)
 #define CAIRO_SURFACE_RENDER_HAS_FILTERS(surface)	CAIRO_SURFACE_RENDER_AT_LEAST((surface), 0, 6)
 
+static void
+_cairo_xcb_surface_ensure_gc (cairo_xcb_surface_t *surface);
+
 static int
 _CAIRO_FORMAT_DEPTH (cairo_format_t format)
 {
@@ -239,46 +227,43 @@ _CAIRO_FORMAT_DEPTH (cairo_format_t format)
 }
 
 static cairo_surface_t *
-_cairo_xcb_surface_create_similar (void		*abstract_src,
-				    cairo_format_t	format,
-				    int			drawable,
-				    int			width,
-				    int			height)
+_cairo_xcb_surface_create_similar (void		       *abstract_src,
+				   cairo_format_t	format,
+				   int			drawable,
+				   int			width,
+				   int			height)
 {
     cairo_xcb_surface_t *src = abstract_src;
     XCBConnection *dpy = src->dpy;
     XCBDRAWABLE d;
     cairo_xcb_surface_t *surface;
+    XCBRenderPICTFORMINFO xrender_format = _format_from_cairo (dpy, format);
 
-    /* XXX: There's a pretty lame heuristic here. This assumes that
-     * all non-Render X servers do not support depth-32 pixmaps, (and
-     * that they do support depths 1, 8, and 24). Obviously, it would
-     * be much better to check the depths that are actually
-     * supported. */
-    if (!dpy
-	|| (!CAIRO_SURFACE_RENDER_HAS_COMPOSITE (src)
-	    && format == CAIRO_FORMAT_ARGB32))
-    {
-	return NULL;
+    /* As a good first approximation, if the display doesn't have COMPOSITE,
+     * we're better off using image surfaces for all temporary operations
+     */
+    if (!CAIRO_SURFACE_RENDER_HAS_COMPOSITE (src)) {
+	return cairo_image_surface_create (format, width, height);
     }
 
     d.pixmap = XCBPIXMAPNew (dpy);
     XCBCreatePixmap (dpy, _CAIRO_FORMAT_DEPTH (format),
 		     d.pixmap, src->drawable,
-		     width, height);
+		     width <= 0 ? 1 : width,
+		     height <= 0 ? 1 : height);
     
     surface = (cairo_xcb_surface_t *)
-	cairo_xcb_surface_create (dpy, d, NULL, format);
-    surface->owns_pixmap = 1;
+	cairo_xcb_surface_create_with_xrender_format (dpy, d,
+						      &xrender_format,
+						      width, height);
 
-    surface->width = width;
-    surface->height = height;
+    surface->owns_pixmap = TRUE;
 
     return &surface->base;
 }
 
-static void
-_cairo_xcb_surface_destroy (void *abstract_surface)
+static cairo_status_t
+_cairo_xcb_surface_finish (void *abstract_surface)
 {
     cairo_xcb_surface_t *surface = abstract_surface;
     if (surface->picture.xid)
@@ -290,20 +275,13 @@ _cairo_xcb_surface_destroy (void *abstract_surface)
     if (surface->gc.xid)
 	XCBFreeGC (surface->dpy, surface->gc);
 
-    surface->dpy = 0;
+    surface->dpy = NULL;
 
-    free (surface);
-}
-
-static double
-_cairo_xcb_surface_pixels_per_inch (void *abstract_surface)
-{
-    /* XXX: We should really get this value from somewhere like Xft.dpy */
-    return 96.0;
+    return CAIRO_STATUS_SUCCESS;
 }
 
 static int
-bits_per_pixel(XCBConnection *c, int depth)
+_bits_per_pixel(XCBConnection *c, int depth)
 {
     XCBFORMAT *fmt = XCBConnSetupSuccessRepPixmapFormats(XCBGetSetup(c));
     XCBFORMAT *fmtend = fmt + XCBConnSetupSuccessRepPixmapFormatsLength(XCBGetSetup(c));
@@ -322,10 +300,50 @@ bits_per_pixel(XCBConnection *c, int depth)
 }
 
 static int
-bytes_per_line(XCBConnection *c, int width, int bpp)
+_bytes_per_line(XCBConnection *c, int width, int bpp)
 {
     int bitmap_pad = XCBGetSetup(c)->bitmap_format_scanline_pad;
     return ((bpp * width + bitmap_pad - 1) & -bitmap_pad) >> 3;
+}
+
+static cairo_bool_t
+_CAIRO_MASK_FORMAT (cairo_format_masks_t *masks, cairo_format_t *format)
+{
+    switch (masks->bpp) {
+    case 32:
+	if (masks->alpha_mask == 0xff000000 &&
+	    masks->red_mask == 0x00ff0000 &&
+	    masks->green_mask == 0x0000ff00 &&
+	    masks->blue_mask == 0x000000ff)
+	{
+	    *format = CAIRO_FORMAT_ARGB32;
+	    return 1;
+	}
+	if (masks->alpha_mask == 0x00000000 &&
+	    masks->red_mask == 0x00ff0000 &&
+	    masks->green_mask == 0x0000ff00 &&
+	    masks->blue_mask == 0x000000ff)
+	{
+	    *format = CAIRO_FORMAT_RGB24;
+	    return 1;
+	}
+	break;
+    case 8:
+	if (masks->alpha_mask == 0xff)
+	{
+	    *format = CAIRO_FORMAT_A8;
+	    return 1;
+	}
+	break;
+    case 1:
+	if (masks->alpha_mask == 0x1)
+	{
+	    *format = CAIRO_FORMAT_A1;
+	    return 1;
+	}
+	break;
+    }
+    return 0;
 }
 
 static cairo_status_t
@@ -335,18 +353,12 @@ _get_image_surface (cairo_xcb_surface_t    *surface,
 		    cairo_rectangle_t      *image_rect)
 {
     cairo_image_surface_t *image;
-    XCBGetGeometryRep *geomrep;
     XCBGetImageRep *imagerep;
-    int bpp;
+    int bpp, bytes_per_line;
     int x1, y1, x2, y2;
-
-    geomrep = XCBGetGeometryReply(surface->dpy, XCBGetGeometry(surface->dpy, surface->drawable), 0);
-    if(!geomrep)
-	return 0;
-
-    surface->width = geomrep->width;
-    surface->height = geomrep->height;
-    free(geomrep);
+    unsigned char *data;
+    cairo_format_t format;
+    cairo_format_masks_t masks;
 
     x1 = 0;
     y1 = 0;
@@ -354,14 +366,21 @@ _get_image_surface (cairo_xcb_surface_t    *surface,
     y2 = surface->height;
 
     if (interest_rect) {
-	if (interest_rect->x > x1)
-	    x1 = interest_rect->x;
-	if (interest_rect->y > y1)
-	    y1 = interest_rect->y;
-	if (interest_rect->x + interest_rect->width < x2)
-	    x2 = interest_rect->x + interest_rect->width;
-	if (interest_rect->y + interest_rect->height < y2)
-	    y2 = interest_rect->y + interest_rect->height;
+	cairo_rectangle_t rect;
+
+	rect.x = interest_rect->x;
+	rect.y = interest_rect->y;
+	rect.width = interest_rect->width;
+	rect.height = interest_rect->width;
+    
+	if (rect.x > x1)
+	    x1 = rect.x;
+	if (rect.y > y1)
+	    y1 = rect.y;
+	if (rect.x + rect.width < x2)
+	    x2 = rect.x + rect.width;
+	if (rect.y + rect.height < y2)
+	    y2 = rect.y + rect.height;
 
 	if (x1 >= x2 || y1 >= y2) {
 	    *image_out = NULL;
@@ -376,47 +395,132 @@ _get_image_surface (cairo_xcb_surface_t    *surface,
 	image_rect->height = y2 - y1;
     }
 
-    imagerep = XCBGetImageReply(surface->dpy,
-	    XCBGetImage(surface->dpy, ZPixmap,
-			surface->drawable,
-			x1, y1,
-			x2 - x1, y2 - y1,
-			AllPlanes), 0);
-    if(!imagerep)
-	return 0;
+    /* XXX: This should try to use the XShm extension if available */
 
-    bpp = bits_per_pixel(surface->dpy, imagerep->depth);
+    if (surface->use_pixmap == 0)
+    {
+	XCBGenericError *error;
+	imagerep = XCBGetImageReply(surface->dpy,
+				    XCBGetImage(surface->dpy, ZPixmap,
+						surface->drawable,
+						x1, y1,
+						x2 - x1, y2 - y1,
+						AllPlanes), &error);
 
+	/* If we get an error, the surface must have been a window,
+	 * so retry with the safe code path.
+	 */
+	if (error)
+	    surface->use_pixmap = CAIRO_ASSUME_PIXMAP;
+    }
+    else
+    {
+	surface->use_pixmap--;
+	imagerep = NULL;
+    }
+
+    if (!imagerep)
+    {
+	/* XCBGetImage from a window is dangerous because it can
+	 * produce errors if the window is unmapped or partially
+	 * outside the screen. We could check for errors and
+	 * retry, but to keep things simple, we just create a
+	 * temporary pixmap
+	 */
+	XCBDRAWABLE drawable;
+	drawable.pixmap = XCBPIXMAPNew (surface->dpy);
+	XCBCreatePixmap (surface->dpy,
+			 surface->depth,
+			 drawable.pixmap,
+			 surface->drawable,
+			 x2 - x1, y2 - y1);
+	_cairo_xcb_surface_ensure_gc (surface);
+
+	XCBCopyArea (surface->dpy, surface->drawable, drawable, surface->gc,
+		     x1, y1, 0, 0, x2 - x1, y2 - y1);
+
+	imagerep = XCBGetImageReply(surface->dpy,
+				    XCBGetImage(surface->dpy, ZPixmap,
+						drawable,
+						x1, y1,
+						x2 - x1, y2 - y1,
+						AllPlanes), 0);
+	XCBFreePixmap (surface->dpy, drawable.pixmap);
+
+    }
+    if (!imagerep)
+	return CAIRO_STATUS_NO_MEMORY;
+
+    bpp = _bits_per_pixel(surface->dpy, imagerep->depth);
+    bytes_per_line = _bytes_per_line(surface->dpy, surface->width, bpp);
+
+    data = malloc (bytes_per_line * surface->height);
+    if (data == NULL) {
+	free (imagerep);
+	return CAIRO_STATUS_NO_MEMORY;
+    }
+
+    memcpy (data, XCBGetImageData (imagerep), bytes_per_line * surface->height);
+    free (imagerep);
+
+    /*
+     * Compute the pixel format masks from either an XCBVISUALTYPE or
+     * a XCBRenderPCTFORMINFO, failing we assume the drawable is an
+     * alpha-only pixmap as it could only have been created that way
+     * through the cairo_xlib_surface_create_for_bitmap function.
+     */
     if (surface->visual) {
-	cairo_format_masks_t masks;
-
-	/* XXX: Add support here for pictures with external alpha? */
-
 	masks.bpp = bpp;
 	masks.alpha_mask = 0;
 	masks.red_mask = surface->visual->red_mask;
 	masks.green_mask = surface->visual->green_mask;
 	masks.blue_mask = surface->visual->blue_mask;
-
-	image = _cairo_image_surface_create_with_masks (XCBGetImageData(imagerep),
-							&masks,
-							x2 - x1, 
-							y2 - y1,
-							bytes_per_line(surface->dpy, surface->width, bpp));
+    } else if (surface->has_format) {
+	masks.bpp = bpp;
+	masks.red_mask = surface->format.direct.red_mask << surface->format.direct.red_shift;
+	masks.green_mask = surface->format.direct.green_mask << surface->format.direct.green_shift;
+	masks.blue_mask = surface->format.direct.blue_mask << surface->format.direct.blue_shift;
+	masks.alpha_mask = surface->format.direct.alpha_mask << surface->format.direct.alpha_shift;
     } else {
+	masks.bpp = bpp;
+	masks.red_mask = 0;
+	masks.green_mask = 0;
+	masks.blue_mask = 0;
+	if (surface->depth < 32)
+	    masks.alpha_mask = (1 << surface->depth) - 1;
+	else
+	    masks.alpha_mask = 0xffffffff;
+    }
+
+    /*
+     * Prefer to use a standard pixman format instead of the
+     * general masks case.
+     */
+    if (_CAIRO_MASK_FORMAT (&masks, &format)) {
 	image = (cairo_image_surface_t *)
-	    cairo_image_surface_create_for_data (XCBGetImageData(imagerep),
-						 surface->format,
+	    cairo_image_surface_create_for_data (data,
+						 format,
 						 x2 - x1, 
 						 y2 - y1,
-						 bytes_per_line(surface->dpy, surface->width, bpp));
+						 bytes_per_line);
+    } else {
+	/*
+	 * XXX This can't work.  We must convert the data to one of the
+	 * supported pixman formats.  Pixman needs another function
+	 * which takes data in an arbitrary format and converts it
+	 * to something supported by that library.
+	 */
+	image = _cairo_image_surface_create_with_masks (data,
+							&masks,
+							x2 - x1,
+							y2 - y1,
+							bytes_per_line);
+
     }
 
     /* Let the surface take ownership of the data */
-    /* XXX: Can probably come up with a cleaner API here. */
     _cairo_image_surface_assume_ownership_of_data (image);
-    /* FIXME: imagerep can't be freed correctly, I think. must copy. :-( */
-     
+
     _cairo_image_surface_set_repeat (image, surface->base.repeat);
     _cairo_image_surface_set_matrix (image, &(surface->base.matrix));
 
@@ -443,8 +547,8 @@ _draw_image_surface (cairo_xcb_surface_t    *surface,
     int bpp, data_len;
 
     _cairo_xcb_surface_ensure_gc (surface);
-    bpp = bits_per_pixel(surface->dpy, image->depth);
-    data_len = bytes_per_line(surface->dpy, image->width, bpp) * image->height;
+    bpp = _bits_per_pixel(surface->dpy, image->depth);
+    data_len = _bytes_per_line(surface->dpy, image->width, bpp) * image->height;
     XCBPutImage(surface->dpy, ZPixmap, surface->drawable, surface->gc,
 	      image->width,
 	      image->height,
@@ -465,13 +569,8 @@ _cairo_xcb_surface_acquire_source_image (void                    *abstract_surfa
     cairo_status_t status;
 
     status = _get_image_surface (surface, NULL, &image, NULL);
-    if (status == CAIRO_STATUS_SUCCESS) {
-	cairo_surface_set_filter (&image->base, surface->base.filter);
-	cairo_surface_set_matrix (&image->base, &surface->base.matrix);
-	cairo_surface_set_repeat (&image->base, surface->base.repeat);
-
+    if (status == CAIRO_STATUS_SUCCESS)
 	*image_out = image;
-    }
 
     return status;
 }
@@ -562,13 +661,13 @@ _cairo_xcb_surface_set_matrix (cairo_xcb_surface_t *surface,
     if (!surface->picture.xid)
 	return CAIRO_STATUS_SUCCESS;
 
-    xtransform.matrix11 = _cairo_fixed_from_double (matrix->m[0][0]);
-    xtransform.matrix12 = _cairo_fixed_from_double (matrix->m[1][0]);
-    xtransform.matrix13 = _cairo_fixed_from_double (matrix->m[2][0]);
+    xtransform.matrix11 = _cairo_fixed_from_double (matrix->xx);
+    xtransform.matrix12 = _cairo_fixed_from_double (matrix->xy);
+    xtransform.matrix13 = _cairo_fixed_from_double (matrix->x0);
 
-    xtransform.matrix21 = _cairo_fixed_from_double (matrix->m[0][1]);
-    xtransform.matrix22 = _cairo_fixed_from_double (matrix->m[1][1]);
-    xtransform.matrix23 = _cairo_fixed_from_double (matrix->m[2][1]);
+    xtransform.matrix21 = _cairo_fixed_from_double (matrix->yx);
+    xtransform.matrix22 = _cairo_fixed_from_double (matrix->yy);
+    xtransform.matrix23 = _cairo_fixed_from_double (matrix->y0);
 
     xtransform.matrix31 = 0;
     xtransform.matrix32 = 0;
@@ -685,25 +784,25 @@ _render_operator (cairo_operator_t operator)
     switch (operator) {
     case CAIRO_OPERATOR_CLEAR:
 	return XCBRenderPictOpClear;
-    case CAIRO_OPERATOR_SRC:
+    case CAIRO_OPERATOR_SOURCE:
 	return XCBRenderPictOpSrc;
-    case CAIRO_OPERATOR_DST:
+    case CAIRO_OPERATOR_DEST:
 	return XCBRenderPictOpDst;
     case CAIRO_OPERATOR_OVER:
 	return XCBRenderPictOpOver;
-    case CAIRO_OPERATOR_OVER_REVERSE:
+    case CAIRO_OPERATOR_DEST_OVER:
 	return XCBRenderPictOpOverReverse;
     case CAIRO_OPERATOR_IN:
 	return XCBRenderPictOpIn;
-    case CAIRO_OPERATOR_IN_REVERSE:
+    case CAIRO_OPERATOR_DEST_IN:
 	return XCBRenderPictOpInReverse;
     case CAIRO_OPERATOR_OUT:
 	return XCBRenderPictOpOut;
-    case CAIRO_OPERATOR_OUT_REVERSE:
+    case CAIRO_OPERATOR_DEST_OUT:
 	return XCBRenderPictOpOutReverse;
     case CAIRO_OPERATOR_ATOP:
 	return XCBRenderPictOpAtop;
-    case CAIRO_OPERATOR_ATOP_REVERSE:
+    case CAIRO_OPERATOR_DEST_ATOP:
 	return XCBRenderPictOpAtopReverse;
     case CAIRO_OPERATOR_XOR:
 	return XCBRenderPictOpXor;
@@ -840,6 +939,7 @@ _cairo_xcb_surface_composite_trapezoids (cairo_operator_t	operator,
     cairo_int_status_t		status;
     int				render_reference_x, render_reference_y;
     int				render_src_x, render_src_y;
+    XCBRenderPICTFORMINFO	render_format;
 
     if (!CAIRO_SURFACE_RENDER_HAS_TRAPEZOIDS (dst))
 	return CAIRO_INT_STATUS_UNSUPPORTED;
@@ -863,13 +963,14 @@ _cairo_xcb_surface_composite_trapezoids (cairo_operator_t	operator,
     render_src_y = src_y + render_reference_y - dst_y;
 
     /* XXX: The XTrapezoid cast is evil and needs to go away somehow. */
-    /* XXX: format_from_cairo is slow. should cache something. */
+    /* XXX: _format_from_cairo is slow. should cache something. */
+    render_format = _format_from_cairo (dst->dpy, CAIRO_FORMAT_A8),
     status = _cairo_xcb_surface_set_attributes (src, &attributes);
     if (CAIRO_OK (status))
 	XCBRenderTrapezoids (dst->dpy,
 			     _render_operator (operator),
 			     src->picture, dst->picture,
-			     format_from_cairo (dst->dpy, CAIRO_FORMAT_A8),
+			     render_format.id,
 			     render_src_x + attributes.x_offset, 
 			     render_src_y + attributes.y_offset,
 			     num_traps, (XCBRenderTRAP *) traps);
@@ -880,29 +981,31 @@ _cairo_xcb_surface_composite_trapezoids (cairo_operator_t	operator,
 }
 
 static cairo_int_status_t
-_cairo_xcb_surface_copy_page (void *abstract_surface)
-{
-    return CAIRO_INT_STATUS_UNSUPPORTED;
-}
-
-static cairo_int_status_t
-_cairo_xcb_surface_show_page (void *abstract_surface)
-{
-    return CAIRO_INT_STATUS_UNSUPPORTED;
-}
-
-static cairo_int_status_t
 _cairo_xcb_surface_set_clip_region (void *abstract_surface,
 				    pixman_region16_t *region)
 {
-    /* FIXME */
+    /* XXX: FIXME */
     return CAIRO_INT_STATUS_UNSUPPORTED;
+}
+
+static cairo_int_status_t
+_cairo_xcb_surface_get_extents (void		  *abstract_surface,
+				cairo_rectangle_t *rectangle)
+{
+    cairo_xcb_surface_t *surface = abstract_surface;
+
+    rectangle->x = 0;
+    rectangle->y = 0;
+
+    rectangle->width  = surface->width;
+    rectangle->height = surface->height;
+
+    return CAIRO_STATUS_SUCCESS;
 }
 
 static const cairo_surface_backend_t cairo_xcb_surface_backend = {
     _cairo_xcb_surface_create_similar,
-    _cairo_xcb_surface_destroy,
-    _cairo_xcb_surface_pixels_per_inch,
+    _cairo_xcb_surface_finish,
     _cairo_xcb_surface_acquire_source_image,
     _cairo_xcb_surface_release_source_image,
     _cairo_xcb_surface_acquire_dest_image,
@@ -911,11 +1014,26 @@ static const cairo_surface_backend_t cairo_xcb_surface_backend = {
     _cairo_xcb_surface_composite,
     _cairo_xcb_surface_fill_rectangles,
     _cairo_xcb_surface_composite_trapezoids,
-    _cairo_xcb_surface_copy_page,
-    _cairo_xcb_surface_show_page,
+    NULL, /* copy_page */
+    NULL, /* show_page */
     _cairo_xcb_surface_set_clip_region,
+    _cairo_xcb_surface_get_extents,
     NULL /* show_glyphs */
 };
+
+/**
+ * _cairo_surface_is_xcb:
+ * @surface: a #cairo_surface_t
+ * 
+ * Checks if a surface is a #cairo_xcb_surface_t
+ * 
+ * Return value: True if the surface is an xcb surface
+ **/
+static cairo_bool_t
+_cairo_surface_is_xcb (cairo_surface_t *surface)
+{
+    return surface->backend == &cairo_xcb_surface_backend;
+}
 
 static void
 query_render_version (XCBConnection *c, cairo_xcb_surface_t *surface)
@@ -937,11 +1055,14 @@ query_render_version (XCBConnection *c, cairo_xcb_surface_t *surface)
     free(r);
 }
 
-cairo_surface_t *
-cairo_xcb_surface_create (XCBConnection		*dpy,
-			   XCBDRAWABLE		drawable,
-			   XCBVISUALTYPE	*visual,
-			   cairo_format_t	format)
+static cairo_surface_t *
+_cairo_xcb_surface_create_internal (XCBConnection	     *dpy,
+				    XCBDRAWABLE		      drawable,
+				    XCBVISUALTYPE	     *visual,
+				    XCBRenderPICTFORMINFO    *format,
+				    int			      width,
+				    int			      height,
+				    int			      depth)
 {
     cairo_xcb_surface_t *surface;
 
@@ -952,27 +1073,199 @@ cairo_xcb_surface_create (XCBConnection		*dpy,
     _cairo_surface_init (&surface->base, &cairo_xcb_surface_backend);
 
     surface->dpy = dpy;
+
     surface->gc.xid = 0;
     surface->drawable = drawable;
-    surface->owns_pixmap = 0;
+    surface->owns_pixmap = FALSE;
     surface->visual = visual;
-    surface->format = format;
+    if (format) {
+	surface->format = *format;
+	surface->has_format = 1;
+    } else {
+	surface->format.id.xid = 0;
+	surface->has_format = 0;
+    }
+    surface->use_pixmap = 0;
+    surface->width = width;
+    surface->height = height;
+    surface->depth = depth;
+
+    if (format) {
+	surface->depth = format->depth;
+    } else if (visual) {
+	XCBSCREENIter roots;
+	XCBDEPTHIter depths;
+	XCBVISUALTYPEIter visuals;
+
+	/* This is ugly, but we have to walk over all visuals
+	 * for the display to find the depth.
+	 */
+        roots = XCBConnSetupSuccessRepRootsIter(XCBGetSetup(surface->dpy));
+        for(; roots.rem; XCBSCREENNext(&roots))
+        {
+	    depths = XCBSCREENAllowedDepthsIter(roots.data);
+	    for(; depths.rem; XCBDEPTHNext(&depths))
+	    {
+		visuals = XCBDEPTHVisualsIter(depths.data);
+		for(; visuals.rem; XCBVISUALTYPENext(&visuals))
+		{
+		    if(visuals.data->visual_id.id == visual->visual_id.id)
+		    {
+			surface->depth = depths.data->depth;
+			goto found;
+		    }
+		}
+	    }
+        }
+    found:
+	;
+    }
 
     query_render_version(dpy, surface);
 
+    surface->picture.xid = 0;
+
     if (CAIRO_SURFACE_RENDER_HAS_CREATE_PICTURE (surface))
     {
-	XCBRenderPICTFORMAT fmt;
-	if(visual)
-	    fmt = format_from_visual (dpy, visual->visual_id);
-	else
-	    fmt = format_from_cairo (dpy, format);
+	XCBRenderPICTFORMAT pict_format = {0};
+	XCBRenderPICTFORMINFO format_info;
+
 	surface->picture = XCBRenderPICTURENew(dpy);
-	XCBRenderCreatePicture (dpy, surface->picture, drawable,
-				fmt, 0, NULL);
+
+	if (!format) {
+	    if (visual) {
+		pict_format = format_from_visual (dpy, visual->visual_id);
+	    } else if (depth == 1) {
+		format_info = _format_from_cairo (dpy, CAIRO_FORMAT_A1);
+		pict_format = format_info.id;
+	    }
+	    XCBRenderCreatePicture (dpy, surface->picture, drawable,
+				    pict_format, 0, NULL);
+	} else {
+	    XCBRenderCreatePicture (dpy, surface->picture, drawable,
+				    format->id, 0, NULL);
+	}
     }
-    else
-	surface->picture.xid = 0;
 
     return (cairo_surface_t *) surface;
 }
+
+/**
+ * cairo_xcb_surface_create:
+ * @c: an XCB connection
+ * @drawable: an XCB drawable
+ * @visual: the visual to use for drawing to @drawable. The depth
+ *          of the visual must match the depth of the drawable.
+ *          Currently, only TrueColor visuals are fully supported.
+ * @width: the current width of @drawable.
+ * @height: the current height of @drawable.
+ * 
+ * Creates an XCB surface that draws to the given drawable.
+ * The way that colors are represented in the drawable is specified
+ * by the provided visual.
+ *
+ * NOTE: If @drawable is a window, then the function
+ * cairo_xcb_surface_set_size must be called whenever the size of the
+ * window changes.
+ * 
+ * Return value: the newly created surface
+ **/
+cairo_surface_t *
+cairo_xcb_surface_create (XCBConnection *c,
+			  XCBDRAWABLE	 drawable,
+			  XCBVISUALTYPE *visual,
+			  int		 width,
+			  int		 height)
+{
+    return _cairo_xcb_surface_create_internal (c, drawable,
+					       visual, NULL,
+					       width, height, 0);
+}
+
+/**
+ * cairo_xcb_surface_create_for_bitmap:
+ * @c: an XCB connection
+ * @bitmap: an XCB Pixmap (a depth-1 pixmap)
+ * @width: the current width of @bitmap
+ * @height: the current height of @bitmap
+ *
+ * Creates an XCB surface that draws to the given bitmap.
+ * This will be drawn to as a CAIRO_FORMAT_A1 object.
+ * 
+ * Return value: the newly created surface
+ **/
+cairo_surface_t *
+cairo_xcb_surface_create_for_bitmap (XCBConnection     *c,
+				     XCBPIXMAP		bitmap,
+				     int		width,
+				     int		height)
+{
+    XCBDRAWABLE drawable;
+    drawable.pixmap = bitmap;
+    return _cairo_xcb_surface_create_internal (c, drawable,
+					       NULL, NULL,
+					       width, height, 1);
+}
+
+/**
+ * cairo_xcb_surface_create_with_xrender_format:
+ * @c: an XCB connection
+ * @drawable: an XCB drawable
+ * @format: the picture format to use for drawing to @drawable. The
+ *          depth of @format mush match the depth of the drawable.
+ * @width: the current width of @drawable
+ * @height: the current height of @drawable
+ * 
+ * Creates an XCB surface that draws to the given drawable.
+ * The way that colors are represented in the drawable is specified
+ * by the provided picture format.
+ *
+ * NOTE: If @drawable is a Window, then the function
+ * cairo_xlib_surface_set_size must be called whenever the size of the
+ * window changes.
+ * 
+ * Return value: the newly created surface. 
+ **/
+cairo_surface_t *
+cairo_xcb_surface_create_with_xrender_format (XCBConnection	    *c,
+					      XCBDRAWABLE	     drawable,
+					      XCBRenderPICTFORMINFO *format,
+					      int		     width,
+					      int		     height)
+{
+    return _cairo_xcb_surface_create_internal (c, drawable,
+					       NULL, format,
+					       width, height, 0);
+}
+
+/**
+ * cairo_xcb_surface_set_size:
+ * @surface: a #cairo_surface_t for the XCB backend
+ * @width: the new width of the surface
+ * @height: the new height of the surface
+ * 
+ * Informs cairo of the new size of the XCB drawable underlying the
+ * surface. For a surface created for a window (rather than a pixmap),
+ * this function must be called each time the size of the window
+ * changes. (For a subwindow, you are normally resizing the window
+ * yourself, but for a toplevel window, it is necessary to listen for
+ * ConfigureNotify events.)
+ *
+ * A pixmap can never change size, so it is never necessary to call
+ * this function on a surface created for a pixmap.
+ **/
+void
+cairo_xcb_surface_set_size (cairo_surface_t *surface,
+			    int              width,
+			    int              height)
+{
+    cairo_xcb_surface_t *xcb_surface = (cairo_xcb_surface_t *)surface;
+
+    /* XXX: How do we want to handle this error case? */
+    if (! _cairo_surface_is_xcb (surface))
+	return;
+
+    xcb_surface->width = width;
+    xcb_surface->height = height;
+}
+

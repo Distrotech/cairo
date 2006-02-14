@@ -57,7 +57,7 @@
  *   builtin font to cairo for pixel-perfect tests with text.
  */
 
-#include "cairo_test.h"
+#include "cairo-test.h"
 
 #define WIDTH  150
 #define HEIGHT 150
@@ -65,25 +65,25 @@
 #define TEXT_SIZE 12
 
 cairo_test_t test = {
-    "text_rotate",
+    "text-rotate",
     "Tests show_text under various rotations",
     WIDTH, HEIGHT
 };
 
 /* Draw the word cairo at NUM_TEXT different angles */
-static void
+static cairo_test_status_t
 draw (cairo_t *cr, int width, int height)
 {
     int i, x_off, y_off;
     cairo_text_extents_t extents;
     static char text[] = "cairo";
 
-    cairo_select_font (cr, "Bitstream Vera Sans",
-		       CAIRO_FONT_SLANT_NORMAL,
-		       CAIRO_FONT_WEIGHT_NORMAL);
-    cairo_scale_font (cr, TEXT_SIZE);
+    cairo_select_font_face (cr, "Bitstream Vera Sans",
+			    CAIRO_FONT_SLANT_NORMAL,
+			    CAIRO_FONT_WEIGHT_NORMAL);
+    cairo_set_font_size (cr, TEXT_SIZE);
 
-    cairo_set_rgb_color (cr, 0,0,0);
+    cairo_set_source_rgb (cr, 0, 0, 0);
 
     cairo_translate (cr, WIDTH/2.0, HEIGHT/2.0);
 
@@ -101,17 +101,20 @@ draw (cairo_t *cr, int width, int height)
 	cairo_rotate (cr, 2*M_PI*i/NUM_TEXT);
 	cairo_set_line_width (cr, 1.0);
 	cairo_rectangle (cr, x_off - 0.5, y_off - 0.5, extents.width + 1, extents.height + 1);
-	cairo_set_rgb_color (cr, 1, 0, 0);
+	cairo_set_source_rgb (cr, 1, 0, 0);
 	cairo_stroke (cr);
 	cairo_move_to (cr, x_off - extents.x_bearing, y_off - extents.y_bearing);
-	cairo_set_rgb_color (cr, 0, 0, 0);
+	cairo_set_source_rgb (cr, 0, 0, 0);
 	cairo_show_text (cr, "cairo");
 	cairo_restore (cr);
     }
+
+    return CAIRO_TEST_SUCCESS;
 }
 
 int
 main (void)
 {
-    return cairo_test (&test, draw);
+    return cairo_test_expect_failure (&test, draw,
+				      "known bugs in positioning rotated glyphs");
 }

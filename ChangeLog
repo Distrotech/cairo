@@ -1,3 +1,2244 @@
+2005-05-17  Carl Worth  <cworth@cworth.org>
+
+	* PORTING_GUIDE: Added porting guide to help with transition to
+	cairo 0.5 API.
+
+	* NEWS: Added notes for snapshot 0.5.0
+	
+	* configure.in: Increment CAIRO_VERSION to 0.5.0
+
+2005-05-17  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-xcb-surface.c: (_get_image_surface),
+	(_cairo_xcb_surface_create_internal): Bring up to date with
+	Keith's latest improvements to cairo-xlib-surface.c: Add some
+	comments about how and why masks are computed.  Generalize
+	overflow detection in mask computation.  Expand on pixman format
+	conversion comment. Fix the broken visual->format case.
+
+2005-05-17  Carl Worth  <cworth@cworth.org>
+
+	Two fixes from Kristian Høgsberg:
+
+	* src/cairo-output-stream.c: (_cairo_output_stream_create),
+	(_cairo_output_stream_destroy),
+	(_cairo_output_stream_create_for_file): Fix to close the file if
+	we opened it.
+	
+	* src/cairo-pdf-surface.c: (_cairo_pdf_document_finish): Grab the
+	status from out of the stream _before_ we destroy the stream.
+
+2005-05-17  Keith Packard  <keithp@keithp.com>
+
+	* src/cairo-xlib-surface.c: (_get_image_surface):
+	Add some comments about how and why masks are computed.
+	Generalize overflow detection in mask computation.
+	Expand on pixman format conversion comment.
+
+2005-05-17  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-xcb-surface.c:
+	* src/cairo-xlib-surface.c: Fix documentation to not mention
+	set_size for the _for_bitmap functions.
+
+2005-05-17  Carl Worth  <cworth@cworth.org>
+
+	* util/cairo-api-update: Remove #ifdef munging since we once again
+	support either #if or #ifdef.
+
+2005-05-17  Carl Worth  <cworth@cworth.org>
+
+	* RELEASING: Update instructions to match output of 'make
+	distcheck'
+	
+	* src/Makefile.am:
+	* test/Makefile.am: Add private headers and flesh out CLEANFILES
+	so that 'make distcheck' actually passes.
+
+2005-05-17  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h: Add a few more REPLACED_BY and DEPRECATED_BY
+	definitions.
+	
+	* util/cairo-api-update: Add some helpful warnings.
+
+2005-05-17  Carl Worth  <cworth@cworth.org>
+
+	* src/Makefile.am (libcairo_xlib_headers): Add
+	cairo-xlib-xrender.h which was missed from an earlier commit.
+
+2005-05-17  Carl Worth  <cworth@cworth.org>
+
+	* src/Makefile.am:
+	* src/cairo-xcb.h:
+	* src/cairo-xcb-xrender.h:
+	* src/cairo-xcb-surface.c:
+	(cairo_xcb_surface_create),
+	(cairo_xcb_surface_create_for_bitmap),
+	(cairo_xcb_surface_create_with_xrender_format): Update cairo-xcb.h
+	to provide the same style of interface as cairo-xlib.h.
+
+	* test/cairo-test.c: Update to match new cairo_xcb_surface_t
+	create functions.
+
+2005-05-17  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-xlib-surface.c (_get_image_surface): Avoid shifting
+	32-bit quanity by 32 bits, which is undefined behavior.
+
+2005-05-17  Carl Worth  <cworth@cworth.org>
+
+	Rework of cairo_xlib_surface create functions by Keith Packard:
+
+	* src/cairo-xlib-xrender.h:
+	Add cairo_xlib_surface_create_with_render_format.
+	
+	* src/cairo-xlib.h:
+	* src/cairo-xlib-surface.c:
+	(cairo_xlib_surface_create),
+	(cairo_xlib_surface_create_for_bitmap): Reduce Xlib constructors
+	down to two simple forms. Add width, height to constructors and
+	eliminate any synchronous size queries from the implementation.
+
+	* test/cairo-test.c: (create_xlib_surface):
+	* test/xlib-surface.c: (do_test): Update to match new
+	cairo_xlib_surface_t create functions.
+
+2005-05-17  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h:
+	* src/cairo-output-stream.c: Remove destroy_closure from
+	cairo_output_stream_t interface.
+	
+	* src/cairo-pdf.h:
+	* src/cairo-pdf-surface.c: Remove destroy_closure argument from
+	cairo_pdf_surface_create_for_stream. Rename width,height to
+	width_in_points, height_in_points for better clarity.
+
+	* src/cairo-ps.h:
+	* src/cairo-ps-surface.c: Brush a bunch of dust off of the PS
+	backend and bring it up to date with the latest API conventions
+	from the PDF backend. These include: accepting a filename rather
+	than a FILE in the primary constructor, providing a stream-based
+	interface for more flexibility, and accepting a surface size in
+	device-space units (points) rather than inches.
+
+	* test/pdf-surface.c: (main): Make it a little more clear that the
+	width and height being passed around are in units of points.
+	
+	* test/ps-surface.c: (main): Update to the latest cairo-ps.h
+	changes as described above. Notice how much more sane things
+	become now that the surface size is described in device-space
+	units.
+
+2005-05-17  Carl Worth  <cworth@cworth.org>
+
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/ps-surface.c: (draw), (main): Add simple test for ps
+	surface backend (modeled after pdf-surface.c).
+
+	* test/pdf-surface.c: (main): Add print message telling user to
+	examine resulting file.
+
+2005-05-17  Carl Worth  <cworth@cworth.org>
+
+	* test/pdf-surface.c: (draw), (main): Update PDF test case to make
+	sure we're actually getting the right paper size, image scaling
+	etc. And it should now be easier to see if cairo is happy by manually
+	viewing the resulting PDF file.
+
+2005-05-17  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-xlib-test.h: Fix to include cairo-xlib.h, (which also
+	fixes test/xlib-surface.c).
+
+2005-05-17  Carl Worth  <cworth@cworth.org>
+
+	* test/pdf-surface.c: (main): Update to the latest PDF surface API
+	changes: use filename not FILE* and use surface dimension in
+	points, not inches.
+
+2005-05-16  Keith Packard  <keithp@keithp.com>
+
+	* src/cairo-pattern.c: (_cairo_pattern_shader_init):
+	Initialize op->stops[0].scale = 0.  
+	
+	This scale value is used only when computing gradient values
+	before the defined range, in which case stop 0 is used for both
+	ends of the interpolation, making the value of 'scale' not
+	actually matter, except that valgrind notices we're using
+	an undefined value.
+
+2005-05-16  Carl Worth  <cworth@cworth.org>
+
+	* test/.cvsignore:
+	* test/Makefile.am: Remove quarter-over test name accidentally
+	added to Makefile.
+
+2005-05-16  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo-pdf-surface.c (cairo_pdf_surface_create):
+	* src/cairo-output-stream.c
+	(_cairo_output_stream_create_for_file): Take a filename instead of
+	a FILE pointer.
+
+2005-05-14  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-xcb.h:
+	* src/cairo-xcb-surface.c: (_cairo_xcb_surface_create_similar),
+	(_cairo_xcb_surface_finish), (_cairo_xcb_surface_get_size),
+	(_bits_per_pixel), (_bytes_per_line), (_get_image_surface),
+	(_draw_image_surface), (_cairo_xcb_surface_get_extents),
+	(_cairo_surface_is_xcb), (_cairo_xcb_surface_create_internal),
+	(cairo_xcb_surface_create_for_pixmap),
+	(cairo_xcb_surface_create_for_pixmap_with_visual),
+	(cairo_xcb_surface_create_for_window_with_visual),
+	(cairo_xcb_surface_set_size):
+	Brush the dust off the XCB backend and get it compiling and
+	working again. This patch makes the XCB surface API match that of
+	the Xlib surface API as of yesterday. But, it's already stale as
+	the Xlib API changed again. So we'll need one more revision of the
+	XCB backend before the next snapshot.
+
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/cairo-test.c: (create_xcb_surface), (cleanup_xcb):
+	* test/cairo-test.h: Add support for testing of the xcb backend as
+	well.
+
+2005-05-14  Carl Worth  <cworth@cworth.org>
+
+	* test/cairo-test.c: (cairo_test_real):
+	* test/pdf-surface.c: (main):
+	* test/xlib-surface.c: (do_test), (main): Cleanup output a bit,
+	move verbose messages to test-specific log file.
+
+2005-05-14  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-xlib-surface.c: (cairo_xlib_surface_create_with_visual): 
+	Fix the last commit so it actually compiles now.
+
+2005-05-14  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-xlib-surface.c: (cairo_test_xlib_disable_render),
+	(cairo_xlib_surface_create_with_visual)
+
+	* test/.cvsignore: Fix a few documentation typos in the recent
+	xlib surface rework.
+
+2005-05-14  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-atsui.h:
+	* src/cairo-ft.h:
+	* src/cairo-glitz.h:
+	* src/cairo-pdf.h:
+	* src/cairo-ps.h:
+	* src/cairo-quartz.h:
+	* src/cairo-win32.h:
+	* src/cairo-xcb.h:
+	* src/cairo-xlib.h: Add an #error if cairo-foo.h is included when
+	cairo was compiled without support for the foo backend.
+
+2005-05-14  Carl Worth  <cworth@cworth.org>
+
+	* test/pdf-surface.c (main): Update for change in
+	cairo_pdf_surface_create which no longer accepts DPI values.
+
+2005-05-13  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-xlib-surface.c src/cairo-xlib.h
+	doc/public/cairo-sections.txt: Drop the _for_pixmap() and
+	_for_window() out of the create functions and use some lazy
+	cleverness to sniff the information out as needed.
+
+	* src/cairo-xlib-surface.c src/cairo-xlib-test.h Makefile.am: 
+	add cairo_test_xlib_disable_render() to turn off RENDER
+	for tests.
+
+	* test/xlib-surface.c: Test various different types of 
+	Xlib surface creation.
+
+	* src/cairo-xlib.h: Remove left-over include of Xrender.h.
+
+2005-05-13  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo-pdf-surface.c (_cairo_pdf_document_open_stream): Make
+	this a varg function and use the new
+	_cairo_output_stream_vprintf() function to format extra dict
+	contents.
+
+	* src/cairo-output-stream.c (_cairo_output_stream_vprintf):
+	Reimplement the printf logic so we can special case formatting of
+	doubles to be locale independent and trim trailing zeros.
+
+	* src/cairo-pdf-surface.c: Rename
+	cairo_pdf_surface_create_for_callback() to
+	cairo_pdf_surface_create_for_stream(), and change PDF constructors
+	to take width and height as points and move PPI setting to
+	cairo_pdf_surface_set_ppi()
+
+2005-05-13  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-xlib-surface.c (_cairo_xlib_surface_create_internal): Fix
+	misplaced goto.
+	
+2005-05-12  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h:
+	* src/cairo-image-surface.c: (_cairo_image_surface_create_with_masks):
+	  Fix image->data to be unsigned
+
+	* src/cairo-glitz-surface.c: (_cairo_glitz_surface_get_image):
+	* src/cairo-image-surface.c:
+	(_cairo_image_surface_create_for_pixman_image),
+	* src/cairo-xlib-surface.c: (_get_image_surface),
+	(_draw_image_surface), (_xlib_glyphset_cache_create_entry):
+	Track change in signedness of data member/parameter.
+
+2005-05-12  Carl Worth  <cworth@cworth.org>
+
+	Update xcb backend to compile after recent API changes:
+
+	* src/cairo-xcb-surface.c: (_cairo_xcb_surface_finish):
+	Fix missing return value.
+	(_cairo_xcb_surface_acquire_source_image): Remove calls to
+	non-existent cairo_surface functions.
+	(_cairo_xcb_surface_set_matrix): Update for new matrix member names.
+	(_cairo_xcb_surface_get_extents): Fix typo.
+
+2005-05-12  Carl Worth  <cworth@cworth.org>
+
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/paint-with-alpha-ref.png:
+	* test/paint-with-alpha.c: (draw), (main): Add new test for bug in
+	cairo_paint_with_alpha not transforming the source.
+
+	* src/cairo-gstate.c: (_cairo_gstate_mask): Use a transformed copy
+	of the source just like we do in all the other calls to
+	cairo_surface_composite. Fixes the bug tested by
+	test/paint-with-alpha.
+
+2005-05-12  Keith Packard  <keithp@keithp.com>
+
+	reviewed by: otaylor
+
+	* src/cairo-gstate.c: (_get_mask_extents):
+	_get_mask_extents creates a pixman region but
+	neglects to destroy it.
+
+2005-05-11  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-win32-surface.c (categorize_solid_dest_operator):
+	Handle more cases by assuming no-super-luminescent colors.
+
+2005-05-11  T Rowley  <tim.rowley@gmail.com>
+
+	* src/cairo-atsui-font.c:
+	* src/cairo-atsui.h:
+	* src/cairo-quartz-surface.c: Revive quartz backend.
+
+2005-05-11  David Reveman  <davidr@novell.com>
+
+	* src/cairo-glitz-surface.c (_cairo_glitz_surface_fill_rectangles): 
+	Set fill type repeat on source surface.
+	(_cairo_glitz_surface_show_glyphs): Add missing cairo operator to
+	glitz operator conversion.
+	(_cairo_glitz_surface_show_glyphs): Only render glyphs with non zero
+	size. 
+
+2005-05-11  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-surface.c (_fallback_fill_rectangles):
+	Fix bounding box computation.
+
+	* src/cairo-win32-surface.c: Patch from Tor Lillqvist
+	to make things compile and work again.
+
+	* test/cairo-test.c (create_win32_surface): Don't
+	#error because there is no win32 test, it isn't useful. 
+	Just skip it.
+
+	* src/cairo-win32-font.c: Fix up matrix constness.
+
+	* test/Makefile.am (TESTS): Skip the pdf-surface test
+	if we don't have the PDF backend.
+
+	* src/cairo-win32-surface.c (categorize_solid_dest_operator):
+	Optimize fill_rectangles for all cases where the destination
+	ends up a solid color.
+
+2005-05-11  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-xlib-surface.c src/cairo-xlib.h: Remove leftover
+	cairo_xlib_surface_create().
+
+2005-05-10  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo.c src/cairo-path-data.c src/cairo-path-data-private.h:
+	Pass the gstate to _cairo_path_data_create[_flat] and use
+	_cairo_gstate_backend_to_user() so as to properly handle
+	the surface device offset.
+
+2005-05-10  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-arc.c (_cairo_arc_path_negative): Don't use return
+	when calling a void function (thanks to Damien Carbery
+	<damien.carbery@sun.com>). Closes bug #3134.
+
+2005-05-10  Carl Worth  <cworth@cworth.org>
+
+	* test/cairo-test.c:
+	* test/cairo-test.h: Removing mucking around with stderr and add a
+	cairo_test_log function instead.
+	
+	* test/buffer-diff.c:
+	* test/create-for-png.c:
+	* test/pdf-surface.c:
+	* test/read-png.c:
+	* test/trap-clip.c:
+	* test/xmalloc.c: Switch all error messages from
+	fprintf(stderr,...) to cairo_test_log(...).
+
+2005-05-10  Carl Worth  <cworth@cworth.org>
+
+	* configure.in: Fix URLs for glitz and xlibs, (thanks to Jason
+	Dorje Short <jdorje@users.sf.net>).
+
+2005-05-10  Carl Worth  <cworth@cworth.org>
+
+	* configure.in: Update to current canonical URL for XCB.
+
+2005-05-10  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-wideint.h: Don't guess and make our own definitions
+	for uint8_t, etc. Just error out if we can't find a suitable
+	header file.
+
+	* src/cairo-png.c: (unpremultiply_data), (premultiply_data):
+	* test/read-png.c: (premultiply_data): Fix to use fixed-size type
+	so that this code works when sizeof(unsigned long) != 32. Thanks
+	to Manish Singh.
+
+2005-05-10  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-gstate.c: (_cairo_gstate_get_font_matrix):
+	* src/cairo.c: (cairo_get_font_matrix):
+	* src/cairo.h:
+	* src/cairoint.h: Fix cairo_get_font_matrix to actually use its
+	out-parameter. And change the return type to void.
+
+2005-05-09  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-ft-font.c (_cairo_ft_unscaled_font_create_glyph): 
+	Get the glyphslot point *after* we get the FT_Face. (Robert O'Callahan)
+
+2005-05-09  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h (cairo_current_target_surface): Fix deprecation
+	macro to point to the right function, (thanks to John Ellson).
+
+2005-05-09  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-font.c: (_cairo_simple_font_face_create_font),
+	(cairo_scaled_font_create), (_cairo_scaled_font_init):
+	* src/cairo-ft-font.c: (_ft_scaled_font_create),
+	(_cairo_ft_scaled_font_create), (_ft_font_face_create_font):
+	* src/cairo-gstate.c: (_cairo_gstate_transform),
+	(_cairo_gstate_set_matrix), (_cairo_gstate_set_font_matrix):
+	* src/cairo-image-surface.c: (_cairo_image_surface_set_matrix):
+	* src/cairo-matrix.c: (_cairo_matrix_get_affine),
+	(cairo_matrix_transform_distance), (cairo_matrix_transform_point),
+	(_cairo_matrix_transform_bounding_box),
+	(_cairo_matrix_compute_determinant),
+	(_cairo_matrix_compute_eigen_values),
+	(_cairo_matrix_compute_scale_factors),
+	(_cairo_matrix_is_integer_translation):
+	* src/cairo-pattern.c: (cairo_pattern_set_matrix),
+	(_cairo_pattern_transform):
+	* src/cairo.c: (cairo_transform), (cairo_set_matrix),
+	(cairo_set_font_matrix):
+	* src/cairo.h:
+	* src/cairoint.h: Push cairo_matrix_t const-correctness down
+	through the entire implmentation, (expanding on preliminary work
+	by Robert O'Callahan <rocallahan@novell.com>)
+
+2005-05-09  Carl Worth  <cworth@cworth.org>
+
+	* configure.in:
+	* src/cairo-features.h.in: Change cairo-features again so that
+	either #if or #ifdef will work to test any feature.
+
+2005-05-07  Owen Taylor  <otaylor@redhat.com>
+
+	* doc/public/language-bindings.xml doc/public/cairo-doc.xml
+	doc/public/Makefile.am: Document suggested conventions and
+	techniques for many aspects of creating a language binding 
+	for Cairo.
+
+2005-05-07  Owen Taylor  <otaylor@redhat.com>
+
+	* doc/public/cairo-sections.txt: Update.
+
+2005-05-07  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h (cairo_set_alpha): Point to both
+	cairo_set_source_rgba and cairo_paint_with_alpha in deprecation of
+	cairo_set_alpha.
+
+2005-05-07  Carl Worth  <cworth@cworth.org>
+
+	* util/cairo-api-update: Make idempotent substitutions that extend
+	old names:
+
+	cairo_select_font		-> cairo_select_font_face
+	cairo_pattern_add_color_stop	-> cairo_pattern_add_color_stop_rgba
+
+	by only substituting if the old name is not immediately followed
+	by an underscore.
+
+	Tweak the substitution slightly to allow the script to be run on
+	the cairo source itself, (eg. avoid changing the REPLACED_BY and
+	DEPRECATED_BY macros that must mention the old names).
+	
+2005-05-07  Carl Worth  <cworth@cworth.org>
+
+	* configure.in:
+
+	* src/cairo-features.h.in: Change definitions of everything in
+	cairo-features.h to prefer #if over #ifdef.
+
+	* src/cairo-atsui.h:
+	* src/cairo-cache.c:
+	* src/cairo-ft-private.h:
+	* src/cairo-ft.h:
+	* src/cairo-glitz.h:
+	* src/cairo-pdf.h:
+	* src/cairo-ps.h:
+	* src/cairo-quartz.h:
+	* src/cairo-win32.h:
+	* src/cairo-xcb.h:
+	* src/cairo-xlib.h:
+	* src/cairo.c:
+	* src/cairo.h:
+	* src/cairoint.h:
+	* test/cairo-test.c: Track #ifdef -> #if changes.
+	
+	* util/cairo-api-update: Add support to automatically change all
+	#ifdef CAIRO_HAS to #if CAIRO_HAS.
+
+2005-05-07  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-gstate.c:
+	* src/cairo-pattern.c:
+	* src/cairo.c:
+	* src/cairo.h:
+	* src/cairoint.h: Remove deprecated cairo_get_rgb_color that was
+	accidentally missed in the recent purge of deprecated functions.
+
+2005-05-07  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-xcb-surface.c (_render_operator): 
+	* src/cairo-win32-surface.c (_cairo_win32_surface_composite)
+	(_cairo_win32_surface_fill_rectangles): Update to track new
+	CAIRO_OPERATOR names.
+
+	* test/select-font-no-show-text.c: 
+	* src/cairo-surface.c (cairo_surface_set_user_data): Fix
+	documentation to refer to functions by their current names.
+
+	* src/cairo-gstate.c (_cairo_gstate_begin_group): Update to track
+	latest API (in currently unused function).
+
+2005-05-06  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-glitz-surface.c (_cairo_glitz_surface_show_glyphs):
+	Fix return type from cairo_status_t to cairo_int_status_t.
+
+2005-05-06  Carl Worth  <cworth@cworth.org>
+
+	* ROADMAP: Note that cairo_mask, and "just eliminate a bunch of
+	functions are now done".
+	
+	* TODO: Note that all backwards-compatible and
+	backwards-incompatible cahnges for the API Shakeup are now
+	done. Sort "new functionality" of API Shakeup into its own
+	category.
+
+2005-05-06  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.c:
+	* src/cairo.h: Eliminate the following deprecated functions from
+	cairo's interface:
+
+	        cairo_copy
+		cairo_get_path
+		cairo_get_path_flat
+	        cairo_matrix_create
+	        cairo_matrix_destroy
+	        cairo_matrix_copy
+	        cairo_matrix_get_affine
+		cairo_surface_set_repeat
+		cairo_surface_set_matrix
+		cairo_surface_get_matrix
+		cairo_surface_set_filter
+		cairo_surface_get_filter
+
+	Also, eliminate all support for compiling against, or running with
+	old, deprecated names for functions.
+
+	* src/cairo-ft-font.c: (_compute_transform):
+	* src/cairo-gstate.c:
+	* src/cairo-image-surface.c: (cairo_image_surface_create_for_data):
+	* src/cairo-matrix.c: (_cairo_matrix_get_affine),
+	(_cairo_matrix_compute_adjoint),
+	(_cairo_matrix_is_integer_translation):
+	* src/cairo-pattern.c: (cairo_pattern_add_color_stop_rgba),
+	(cairo_pattern_set_matrix), (cairo_pattern_get_matrix),
+	(_cairo_image_data_set_linear), (_cairo_linear_pattern_classify),
+	(_cairo_image_data_set_radial):
+	* src/cairo-pdf-surface.c: (_cairo_pdf_surface_composite_image),
+	(_cairo_pdf_surface_composite_pdf), (emit_surface_pattern),
+	(emit_linear_pattern), (emit_radial_pattern):
+	* src/cairo-surface.c:
+	* src/cairo-xlib-surface.c:
+	(_cairo_xlib_surface_acquire_source_image),
+	(cairo_xlib_surface_create):
+	* src/cairo.c: (cairo_set_source_rgba), (cairo_set_source),
+	(cairo_get_source), (cairo_transform), (cairo_identity_matrix),
+	(cairo_user_to_device), (cairo_user_to_device_distance),
+	(cairo_device_to_user), (cairo_device_to_user_distance),
+	(cairo_reset_clip), (cairo_select_font_face), (cairo_font_extents),
+	(cairo_set_font_size), (cairo_get_operator), (cairo_get_rgb_color),
+	(cairo_get_tolerance), (cairo_get_fill_rule),
+	(cairo_get_line_width), (cairo_get_line_cap),
+	(cairo_get_line_join), (cairo_get_miter_limit), (cairo_get_matrix),
+	(cairo_get_target), (cairo_status), (cairo_status_string):
+	* src/cairoint.h:
+	* test/cairo-test.c: (cairo_test_create_png_pattern):
+	* test/gradient-alpha.c: (draw):
+	* test/mask.c: (set_gradient_pattern), (set_image_pattern):
+	* test/move-to-show-surface.c: (draw):
+	* test/select-font-no-show-text.c: (draw):
+	* test/set-source.c: (draw):
+	* test/text-cache-crash.c: (draw):
+	* test/text-rotate.c: (draw):
+	* test/transforms.c: (draw_L_shape):
+	* test/translate-show-surface.c: (draw):
+	* test/trap-clip.c: (set_gradient_pattern), (set_image_pattern):
+	* util/cairo-api-update:
+
+	Deal with all of the removals.
+
+2005-05-06  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-glitz-surface.c: (_glitz_operator),
+	(_cairo_glitz_surface_fill_rectangles):
+	* src/cairo-gstate.c: (_cairo_gstate_mask):
+	* src/cairo-image-surface.c: (_pixman_operator),
+	(_cairo_image_surface_composite_trapezoids):
+	* src/cairo-ps-surface.c: (_cairo_ps_surface_erase),
+	(_cairo_ps_surface_copy_page):
+	* src/cairo-surface.c: (_cairo_surface_create_similar_solid):
+	* src/cairo-xlib-surface.c: (_render_operator):
+	* src/cairo.h:
+	* test/cairo-test.c: (cairo_test_for_target):
+	* test/mask.c: (mask_polygon), (draw):
+
+	Rename and re-order the cairo_operator_t enum to names that
+	abbreviate less and are easier to understand,
+	(eg. CAIRO_OPERATOR_DEST_OVER instead of
+	CAIRO_OPEERATOR_OVER_REVERSE).
+
+2005-05-06  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.c: (cairo_create), (cairo_save), (cairo_get_target):
+	* src/cairo.h:
+	* src/cairoint.h:
+	* src/cairo-gstate.c: (_cairo_gstate_create), (_cairo_gstate_init),
+	(_cairo_gstate_get_target):
+	* src/cairo-glitz.h:
+	* src/cairo-pdf.h:
+	* src/cairo-ps.h:
+	* src/cairo-quartz-surface.c:
+	* src/cairo-quartz.h:
+	* src/cairo-surface.c: (_cairo_surface_begin):
+	* src/cairo-win32.h:
+	* src/cairo-xcb.h:
+	* src/cairo-xlib.h: Remove cairo_set_target_surface and all other
+	backend-specific cairo_set_target functions. Require a
+	cairo_surface_t* to call cairo_create.
+
+	* test/cairo-test.c: (create_image_surface), (cleanup_image),
+	(create_glitz_surface), (cleanup_glitz), (create_quartz_surface),
+	(cleanup_quartz), (create_win32_surface), (cleanup_win32),
+	(create_xcb_surface), (cleanup_xcb), (create_xlib_surface),
+	(cleanup_xlib), (cairo_test_for_target), (cairo_test_real):
+
+	Port to use new cairo_create interface.
+	
+	* test/clip-nesting.c: (draw):
+	* test/mask.c: (mask_polygon), (draw):
+	* test/path-data.c: (main):
+	* test/pdf-surface.c: (main):
+	* test/pixman-rotate.c: (draw):
+	* test/scale-source-surface-paint.c: (draw):
+	* test/self-copy.c: (draw):
+	* test/source-clip.c: (draw):
+	* test/source-surface-scale-paint.c: (draw):
+	* test/surface-pattern.c: (draw):
+
+	Rewrite all tests that were using cairo_set_target_surface to
+	instead create a temporary cairo_t, (eventually to be replaced
+	with cairo_begin_group).
+
+2005-05-05  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo.[ch] doc/public/cairo-sections.txt: Add 
+	cairo_paint_with_alpha().
+
+	* src/cairo-pattern.c (_cairo_pattern_acquire_surfaces): Fix 
+	segfault when mask == NULL.
+
+	* test/mask.c test/mask-ref.png: Add testing of cairo_paint_with_alpha().
+
+	* test/coverage.c test/coverage-ref.png: Remove ... it's not testing
+	anything that mask doesn't test better.
+
+2005-05-04  David Reveman  <davidr@novell.com>
+
+	* src/cairo-glitz-surface.c: Add glyph caching to glitz backend.
+
+2005-05-03  Kristian Høgsberg  <krh@redhat.com>
+
+	Fills as paths patch originally by Owen Taylor.
+
+	* src/cairo-path.c: (_cairo_path_fixed_rel_move_to),
+	(_cairo_path_fixed_line_to), (_cairo_path_fixed_rel_line_to),
+	(_cairo_path_fixed_curve_to), (_cairo_path_fixed_rel_curve_to):
+	Make sure we have a current point for the relative path operators.
+	
+	* src/cairoint.h:
+	* src/cairo-gstate.c: (_cairo_gstate_fill):
+	* src/cairo-surface.c: (_cairo_surface_fill_path): Add fill_path
+	backend method.
+
+	* src/cairo-pdf-surface.c: (_cairo_pdf_document_close_stream),
+	(emit_image_data), (emit_surface_pattern),
+	(_cairo_pdf_path_move_to), (_cairo_pdf_path_line_to),
+	(_cairo_pdf_path_curve_to), (_cairo_pdf_path_close_path),
+	(_cairo_pdf_surface_fill_path): Implement fill_path in the PDF
+	backend.
+	
+2005-05-03  Carl Worth  <cworth@cworth.org>
+
+	Originally 2005-04-20  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h:
+	* src/cairo.c: Remove cairo_show_surface. Add new
+	cairo_set_source_surface.
+	
+	* src/cairo-gstate.c: Remove _cairo_gstate_show_surface.
+	
+	* test/create-for-png.c: (draw):
+	* test/pixman-rotate.c: (draw):
+	* test/move-to-show-surface.c: (draw):
+	* test/translate-show-surface.c: (draw): Replace calls to
+	cairo_show_surface with cairo_set_source_surface; cairo_paint.
+
+	* test/cairo-test.c: (cairo_test_real): Fix messages to prefer -
+	over _.
+
+	* src/cairo-png.c: (cairo_surface_write_to_png): Fix
+	documentation.
+
+	* test/filter-nearest-offset-ref.png:
+	* test/filter-nearest-offset.c:
+	* test/scale-source-surface-paint-ref.png:
+	* test/scale-source-surface-paint.c:
+	* test/source-surface-scale-paint-ref.png:
+	* test/source-surface-scale-paint.c: Three new tests to exercise
+	set_source_surface more completely, (two of these are expected
+	failures dues to outstanding bugs).
+
+2005-05-03  Carl Worth  <cworth@cworth.org>
+
+	* TODO: Add suggestion for copy-on-write regions to fix clip
+	region problems.
+
+	* src/Makefile.am (install-data-local): Fix check for old headers
+	to respect DESTDIR, (to work better when cross-compiling, etc.).
+	Thanks to Luke-Jr <luke-jr@utopios.org>.
+	
+2005-05-02  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-ft-font.c (_cairo_ft_scaled_font_font_extents): Changes the
+	sign of extents->descent to match win32 backend and the conventional
+	convention.
+
+	* src/cairo.h: Document cairo_font_extents_t.
+
+2005-04-28  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-surface.c src/cairoint.h: Add _cairo_surface_begin/end
+	to save and restore the clip state of a surface. Copy and store
+	clip regions set on a surface so that we can save and restore them.
+
+	* src/cairo.[ch]: Add a CAIRO_STATUS_BAD_NESTING error
+	for interleaved use of two cairo_t's on the same surface. Also,
+	add a skeleton doc comment for cairo_status_t.
+
+	* src/cairo.c src/cairo-gstate.c src/cairoint.h: Use
+	_cairo_surface_begin/end to replace
+	_cairo_gstate_restore_external_state.
+
+	* src/cairo-gstate.c: Use _cairo_surface_begin/end to save the 
+	state of a surface when we start drawing at it and restore it
+	at the end. Check that the save level of the surface is what
+	we expect on drawing operations and fail with CAIRO_STATUS_BAD_NESTING
+	otherwise.
+
+	* src/cairo-pattern.c src/cairoint.h (_cairo_pattern_acquire_surface_for_surface) 
+	(_cairo_pattern_release_surface): Surround use of pattern->surface
+	with _cairo_surface->begin/end so we don't clip surfaces used as 
+	sources.
+
+	* test/clip-nesting.c test/Makefile.am: Test of destinatin
+	clipping with the nested creation of cairo_t's for the same
+	context.
+
+	* test/source-clip.c test/Makefile.am: Test that clipping on
+	a source as a destination doesn't affect use of it as a source.
+
+	* test/self-copy.c: XFAIL test for copying from a surface as
+	a source to itself as a destination with a clip.
+
+2005-05-02  Keith Packard  <keithp@keithp.com>
+
+	reviewed by: cworth
+
+	* src/cairo-path.c: (_cairo_path_fixed_rel_curve_to):
+	Use correct arguments to compute absolute positions.
+	
+	* test/Makefile.am:
+	* test/rel-path-ref.png:
+	* test/rel-path.c: (draw), (main):
+	Test cairo_rel_move_to, cairo_rel_line_to and cairo_rel_curve_to
+
+2005-05-02  Owen Taylor  <otaylor@redhat.com>
+
+	* test/Makefile.am (EXTRA_DIST): mask-ref.png, not
+	mask.png. (Pointed out by Carl)
+
+2005-05-02  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo.[ch] src/cairo-gstate.c: Add cairo_mask()
+	and cairo_mask_surface().
+
+	* test/maks.c tests/Makefile.am tests/mask-ref.png: Add a
+	comprehensive tests for cairo_mask().
+
+	* docs/public/cairo-sections.txt: Updated
+
+2005-05-02  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo-gstate.c (_cairo_gstate_glyph_path): Also call
+	_cairo_gstate_ensure_font() for this function.
+
+2005-04-28  Owen Taylor  <otaylor@redhat.com>
+
+	* TODO, ROADMAP: Add a item about reworking cairo_format_t.
+
+2005-04-28  Carl Worth  <cworth@cworth.org>
+
+	* test/.cvsignore:
+	* test/cairo-test.c: (cairo_test_for_target): Replace annoying _
+	in output image filenames with - for better consistency.
+
+2005-04-27  Carl Worth  <cworth@cworth.org>
+
+	* test/cairo-test.c: (set_xlib_target), (cleanup_xlib_target):
+	Use 1 instead of 0 for width and height to avoid BadValue errors
+	from XCreatePixmap.
+
+2005-04-27  Carl Worth  <cworth@cworth.org>
+
+	* test/.cvsignore:
+	* test/buffer-diff.c: (xunlink), (buffer_diff), (image_diff):
+	* test/buffer-diff.h:
+	* test/cairo-test.c: (set_image_target), (cleanup_image_target),
+	(set_glitz_target), (cleanup_glitz_target), (set_quartz_target),
+	(cleanup_quartz_target), (set_win32_target),
+	(cleanup_win32_target), (set_xcb_target), (cleanup_xcb_target),
+	(set_xlib_target), (cleanup_xlib_target), (cairo_test_for_target),
+	(cairo_test_real), (cairo_test_expect_failure), (cairo_test):
+	* test/cairo-test.h:
+	* test/read-png.c: (read_png_argb32):
+	* test/xmalloc.h: Add support for testing multiple backends,
+	courtesy of cairo_surface_write_to_png. Currently, only image and
+	xlib backends are fullk hooked-up, but other backends should be
+	quite easy to add for anyone skilled in the appropriate art.
+
+2005-04-27  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-traps.c src/cairoint.h (_cairo_traps_init_box):
+	New function to create a single trapezoid box.
+
+	* src/cairo.c src/cairo-gstate.c src/cairoint.h: Move 
+	the implementation of cairo_paint() into cairo-gstate.c
+	for a better fix for the problem with backend/user coordinate
+	confusion. Also no longer clear the current path on
+	cairo_paint().
+
+2005-04-26  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.c (cairo_paint): Build rectangle with an identity
+	matrix in place so that the entire target surface will be filled
+	even when there is a transformation in place.
+
+2005-04-26  Owen Taylor  <otaylor@redhat.com>
+
+	* doc/public/cairo-sections.txt: Updated.
+
+	* src/cairo-png.c src/cairo.h: Fix up some doc build issues.
+
+2005-04-26  Carl Worth  <cworth@cworth.org>
+
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/paint-ref.png:
+	* test/paint.c: (draw), (main): Add test to demonstrate bug in
+	cairo_paint when under a non-identity transformation.
+
+2005-04-26  Carl Worth  <cworth@cworth.org>
+
+	* ROADMAP: 
+	* TODO: Note that cairo_paint and cairo_clip/fill/stroke_preserve
+	are all done now.
+
+2005-04-26  Carl Worth  <cworth@cworth.org>
+
+	Originally: 2005-04-19  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h: Add cairo_stroke_preserve, cairo_fill_preserve,
+	and cairo_clip_preserve.
+
+	* src/cairoint.h:
+	* src/cairo-gstate-private.h:
+	* src/cairo-gstate.c: Rip the path out of cairo_gstate_t.
+
+	* src/cairo-private.h: Add path to cairo_t.
+	
+	* src/cairo.c: Bring in most of the path code that used to live in
+	cairo-gstate.c
+
+	* src/Makefile.am:
+	* src/cairo-arc-private.h:
+	* src/cairo-arc.c: Move arc generation code into its own file.
+	
+	* src/cairo-path-data-private.h:
+	* src/cairo-path-data.c: Accept path+ctm_inverse+tolerance instead
+	of gstate. Absorb flattening and device space->user space
+	conversion that used to be in _cairo_gstate_intepret_path.
+
+	* src/cairo-path.c: Prefer cairo_fixed_t parameters over
+	ciaro_point_t for cross-file interfaces.
+
+	* src/cairo-ft-font.c: Track changes in _cairo_path_fixed
+	interfaces.
+
+	* test/fill-and-stroke.c: (draw): Port to use cairo_fill_preserve
+	rather than cairo_save/cairo_restore which no longer work for
+	saving the path.
+	
+	* test/get-and-set.c: (settings_set), (settings_get),
+	(settings_equal): Remove get and set of current point since it is
+	no longer affected by cairo_save and cairo_restore. Add get and
+	set testing for cairo_matrix_t.
+
+2005-04-26  Carl Worth  <cworth@cworth.org>
+
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/cairo-test.h:
+	* test/pdf-surface.c: (main): Add very simple test to generate PDF
+	output, (no automated verification yet).
+
+	* test/cairo-test.c: (cairo_test):
+	* test/create-for-png.c: (draw):
+	* test/pixman-rotate.c: Track PNG interface changes, (no more
+	include of cairo-png.h, cairo_surface_write_png renamed to
+	cairo_surface_write_to_png).
+
+2005-04-26  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo-png.h: Prototypes moved to cairo.h, this file removed.
+
+	* src/cairo-png.c (cairo_surface_write_to_png_stream): Renamed
+	from cairo_surface_write_png_to_stream() for consistency.
+	(cairo_surface_write_to_png): Renamed from
+	cairo_surface_write_png() for consistency.
+
+2005-04-25  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo-png.c (cairo_surface_write_png): Factor out bulk of
+	the code into a new callback based function, write_png().  Call it
+	with a stdio write callback.
+	(cairo_surface_write_png_to_stream): New function to write a
+	surface to a PNG stream.
+	(cairo_image_surface_create_from_png): Likewise, move most of the
+	code to read_png(), clean up error handling and reduce this
+	function to calling read_png() with a stdio based read function.
+	(cairo_image_surface_create_from_png_stream): New function to
+	create an image surface from a PNG stream.
+
+	* src/cairo-image-surface.c (cairo_image_surface_get_width)
+	(cairo_image_surface_get_height): New functions to get widht and
+	height of an image surface.
+
+	* src/cairo.h: Add new prototype and error codes.
+
+	* test/create-for-png.c (draw): Adjust to new PNG API.
+
+2005-04-25  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-win32-surface.c (cairo_win32_surface_create): Initialize
+	the saved_dc_bitmap field here as well ... not strictly needed,
+	but cleaner. (Reported by Peter Arsoff)
+
+2005-04-23  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo-gstate.c (_composite_trap_region): Finalize the
+	correct pattern.
+
+2005-04-22  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo-png.c (cairo_image_surface_create_for_png): Only check
+	PNG signature if we read all the bytes.  Don't fclose() the FILE
+	argument (Steve Chaplin <stevech1097@yahoo.com.au>).
+
+	Rename to cairo_image_surface_create_for_png() to
+	cairo_image_surface_create_from_png() and change FILE arguments
+	for this function and cairo_surface_write_png() to be a filename
+	argument instead.
+
+2005-04-21  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo-surface.c (_cairo_surface_set_clip_region): Handle
+	backends that don't have a set_clip_region implementation (PDF).
+
+2005-04-19  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.c: (cairo_paint):
+	* src/cairo.h: Add new cairo_paint function.
+
+	* src/cairoint.h: Add new get_extents function to the surface
+	backend interface.
+
+	* src/cairo-gstate.c: (_cairo_gstate_get_clip_extents): Add
+	function to query current clip_extents.
+
+	* src/cairo-glitz-surface.c: (_cairo_glitz_surface_get_extents):
+	* src/cairo-image-surface.c: (_cairo_image_surface_get_extents),
+	(_cairo_image_abstract_surface_get_extents):
+	* src/cairo-pdf-surface.c: (_cairo_pdf_surface_get_extents):
+	* src/cairo-ps-surface.c: (_cairo_ps_surface_get_extents):
+	* src/cairo-quartz-surface.c: (_cairo_quartz_surface_get_extents):
+	* src/cairo-win32-surface.c: (_cairo_win32_get_extents):
+	* src/cairo-xcb-surface.c: (_cairo_xcb_surface_get_extents):
+	* src/cairo-xlib-surface.c: (_cairo_xlib_surface_get_extents):
+	Implement the new get_extents function for each backend.
+	
+	* src/cairo-surface.c: (_cairo_surface_init),
+	(_cairo_surface_set_clip_region),
+	(_cairo_surface_get_clip_extents): Save the clip extents from
+	set_clip_region and implement _cairo_surface_get_clip_extents.
+
+	* src/cairo-xlib-surface.c: (_cairo_xlib_surface_get_size),
+	(_get_image_surface): Abstract away the evil XGetGeometry
+	roundtrip in _cairo_xlib_surface_get_size.
+	
+	* test/gradient-alpha.c: (draw):
+	* test/linear-gradient.c: (draw): Rewrite a couple of tests to
+	call cairo_paint.
+
+2005-04-19  Carl Worth  <cworth@cworth.org>
+
+	* TODO: Update API Shakeup chart to indicate that cairo_paint and
+	cairo_fill_preserve patches have been sent.
+
+2005-04-19  Carl Worth  <cworth@cworth.org>
+
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/surface-pattern-ref.png:
+	* test/surface-pattern.c: (draw), (main): Add a test of a
+	repeating surface pattern.
+
+2005-04-18  Carl Worth  <cworth@cworth.org>
+
+	* ROADMAP: Mark a couple of items that are now complete.
+	
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/fill-and-stroke-ref.png:
+	* test/fill-and-stroke.c: (draw), (main): Add test case that fills
+	and strokes the same shapes, (in preparation for testing
+	cairo_fill_preserve patch).
+
+2005-04-14  Carl Worth  <cworth@cworth.org>
+
+	* TODO: Update API Shakeup chart to indicate that cairo_set_source
+	is done.
+
+2005-04-14  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h:
+	* src/cairo.c: Rename, add, and delete:
+
+		cairo_set_pattern	-> cairo_set_source
+		cairo_get_pattern	-> cairo_get_source
+		cairo_set_rgb_color	-> cairo_set_source_rgb
+					-> cairo_set_source_rgba
+		cairo_set_alpha		->
+		cairo_get_alpha		->
+
+	Note that we'll likely want to add cairo_set_source_surface.
+
+	* src/cairo-color.c: Add _cairo_stock_color helper function.
+	Improve some interfaces:
+
+		_cairo_color_init	   _cairo_color_init_rgb
+		_cairo_color_set_rgb	-> _cairo_color_init_rgba
+		_cairo_color_set_alpha	   _cairo_color_multiply_alpha
+
+		_cairo_color_get_rgb	-> _cairo_color_get_rbga
+					   _cairo_color_get_rgba_premultiplied
+
+	* src/cairoint.h: Add cairo_stock_t and some helper macros:
+
+		CAIRO_COLOR_WHITE
+		CAIRO_COLOR_BLACK
+		CAIRO_COLOR_TRANSPARENT
+
+	Fix cairo_pattern_t by eliminating pattern->alpha.
+	Fix cairo_solid_pattern_t to use cairo_color_t rather than three
+	doubles.
+	
+	* src/cairo-glitz-surface.c:
+	(_cairo_glitz_pattern_acquire_surface),
+	(_cairo_glitz_pattern_acquire_surfaces),
+	(_cairo_glitz_surface_composite_trapezoids): Track removal of
+	pattern->alpha, simplifying the code considerably
+	
+	* src/cairo-gstate-private.h:
+
+	* src/cairo-gstate.c: Track _cairo_color interface changes. Remove
+	gstate->alpha. Propagate down set_source renamings.
+
+	* src/cairo.h:
+	* src/cairo-pattern.c: Rename:
+
+		cairo_pattern_add_color_stop -> cairo_pattern_add_color_stop_rgba
+
+	and add:
+
+		cairo_pattern_add_color_stop_rgb
+
+	Remove pattern->alpha, simplifying the code considerably.
+
+	* src/cairo-pdf-surface.c:
+	* src/cairo-ps-surface.c: Track pattern and color interface
+	changes.
+	
+	* src/cairo-surface.c: Add const where appropriate on
+	cairo_color_t*.
+
+	* src/cairo-xlib-surface.c: (_cairo_surface_is_xlib): Add private
+	type inspection predicate.
+	(cairo_xlib_surface_set_size): Add check for surface type
+	mismatch, (no useful error reporting yet, though).
+
+	* test/Makefile.am: Note coverage as en expected failure.
+
+	* test/cairo-test.c: (cairo_test_expect_failure): Improve line
+	wrap on expected failure messages.
+	
+	* test/clip-twice.c:
+	* test/coverage.c:
+	* test/fill-rule.c:
+	* test/line-width.c:
+	* test/linear-gradient.c:
+	* test/pixman-rotate.c:
+	* test/set-source.c:
+	* test/text-rotate.c:
+	* test/trap-clip.c: Port all tests to new cairo_set_source
+	interfaces.
+
+2005-04-14  Carl Worth  <cworth@cworth.org>
+
+	* test/gradient-alpha-ref.png:
+	* test/gradient-alpha.c: (draw): Make gradient change color in
+	addition to just changing alpha in order to highlight distinction
+	between interpolating in premultiplied vs. non-premultiplied
+	space.
+	
+2005-04-14  Carl Worth  <cworth@cworth.org>
+
+	* test/Makefile.am: Improve instructions for when to add a test to
+	the XFAIL list.
+
+	* test/cairo-test.c: (cairo_test_expect_failure):
+	* test/cairo-test.h:
+	* test/pixman-rotate.c: (main):
+	* test/text-rotate.c: (main): Print explanations for expected
+	failures.
+
+2005-04-14  Carl Worth  <cworth@cworth.org>
+
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/gradient-alpha-ref.png:
+	* test/gradient-alpha.c: (draw), (main): Add gradient-alpha test
+	in preparation for upcoming cairo_set_source patch.
+
+2005-04-14  Carl Worth  <cworth@cworth.org>
+
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/set-source-ref.png:
+	* test/set-source.c: (draw), (main): Add set-source test in
+	preparation for upcoming cairo_set_source patch.
+
+2005-04-14  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-font.c (_cairo_simple_font_face_destroy): Remove
+	a stray free() (#3029, Carl Worth)
+
+	* test/select-font-no-show-text.c: Note that the bug is fixed.
+
+2005-04-13  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-image-surface.c:
+	(_cairo_image_abstract_surface_finish): Set freed pointer to NULL.
+	
+	* src/cairo-surface.c: (cairo_surface_finish): Fix to actually set
+	surface->finished when done. Closes bug #2950 as documented in
+	test/surface-finish-twice.c.
+
+	* test/surface-finish-twice.c: Note that this bug is fixed.
+
+2005-04-13  Carl Worth  <cworth@cworth.org>
+
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/surface-finish-twice.c: (draw), (main): Add new test to
+	exercise crash when calling cairo_surface_finish twice on the same
+	surface.
+
+2005-04-13  Carl Worth  <cworth@cworth.org>
+
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/select-font-no-show-text.c: (draw), (main): Add new
+	set-surface-no-show-text test.
+
+	* test/cairo-test.c: (cairo_test): Be sure to call cairo_destroy
+	even if the image size is 0,0 so that we can test bugs triggered
+	during cleanup.
+
+2005-04-13  Carl Worth  <cworth@cworth.org>
+
+	* test/coverage-ref.png:
+	* test/coverage.c: (draw_funcs), (draw): Temporarily remove all
+	text from this test case until we come up with an approach for
+	drawing the same text with different freetype configurations.
+
+2005-04-13  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-traps.c (_cairo_traps_extract_region): Work around
+	a pair of bugs elsewhere (denegerate trapezoids from tesellator,
+	pixman_region_union_rect() failing on width/height zero rectangles)
+
+2005-04-13  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairoint.h src/cairo-traps.c: Add _cairo_traps_extract_region
+	for converting trapezoids into a pixman region.
+
+	* src/cairo-gstate.c (cairo_clip): Represent all rectangular
+	pixel-aligned regions as regions, not just single rectangles.
+
+	* src/cairo-gstate.c (_cairo_gstate_clip_and_composite_trapezoid):
+	Split into manageable pieces, optimize rectangular pixel-
+	aligned regions by using _cairo_surface_fill_rectangles()
+	or _cairo_surface_set_clip_region() as appropriate.
+
+	* tests/trap-clip.c tests/trap-clip-ref.png tests/Makefile.am:
+	Add a test for trapezoids clipping.
+
+	* doc/public/cairo-docs.xml: Add an index.
+
+2005-04-12  Carl Worth  <cworth@cworth.org>
+
+	* test/translate-show-surface.c: Note that bug is now fixed.
+
+2005-04-12  Carl Worth  <cworth@cworth.org>
+
+	* autogen.sh: Replace errant use of aclocal with $ACLOCAL, as
+	reported by Martin Hedenfalk. Closes bug #3000.
+
+2005-04-12  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-pattern.c:
+	* src/cairo-surface.c: (_cairo_surface_init): Default to
+	CAIRO_FILTER_GOOD rather than CAIRO_FILTER_BEST.
+
+	* src/cairo-pattern.c:
+	(_cairo_pattern_acquire_surface_for_surface): Optimize to use
+	CAIRO_FILTER_NEAREST when the pattern matrix is an integer
+	translation.
+
+2005-04-12  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-pattern.c:
+	(_cairo_pattern_acquire_surface_for_surface):
+	* src/cairo-surface.c: (_cairo_surface_init): Use
+	CAIRO_FILTER_BEST by default rather than CAIRO_FILTER_NEAREST.
+
+2005-04-12  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-gstate.c (_cairo_gstate_show_surface): Offset the src
+	pattern by (0,0)->CTM. This fixes test/translate-show-surface.
+
+	* src/cairo-glitz-surface.c
+	(_cairo_glitz_surface_composite_trapezoids): Use unsigned cahr* to
+	match new prototype for cairo_image_surface_create_for_data.
+
+2005-04-11  Carl Worth  <cworth@cworth.org>
+
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/translate-show-surface-ref.png:
+	* test/translate-show-surface.c: (draw), (main): Add new test
+	demonstrating bug in the sequence: cairo_translate;
+	cairo_show_surface.
+
+2005-04-11  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.c (cairo_select_font_face): Add deprecation alias from
+	cairo_scale_font to cairo_set_font_size.
+
+2005-04-11  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.c (cairo_select_font_face): Add deprecation alias from
+	cairo_select_font to cairo_select_font_face.
+
+2005-04-11  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo.h doc/public/cairo-sections.txt 
+	src/cairo-matrix.c: Update.
+
+	* doc/public/cairo-docs.xml: Include cairo-font.xml
+	
+2005-04-08  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h: 
+	* src/cairo.h: Move include of pixman.h from cairo.h to cairoint.h
+	since libpixman isn't part of cairo's public interface.
+
+	* test/move-to-show-surface.c (draw): Use unsigned long rather
+	than uint32_t since we no longer have pixman.h setting that type
+	up for us.
+
+	* src/cairo-font.c (cairo_font_face_destroy): Remove unused
+	variable user_data_copy.
+
+2005-04-08  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo.h src/cairo-font.c src/cairoint.h
+	doc/public/cairo-sections.txt:
+	Add cairo_font_face_set/get_user_data().
+
+	* src/cairo-array.c src/cairoint.h src/cairo-surface.c:
+	Refactor user data code from cairo-surface.c into 
+	cairo_user_data_array_t.
+
+	* src/cairo-font.c (cairo_font_face_destroy,
+	(cairo_scaled_font_destroy, _cairo_unscaled_font_destroy):
+	Switch these types to be like cairo_surface_t where the
+	generic code frees the wrapper object.
+
+	* src/cairo-atsui-font.c src/cairo-ft-font.c
+	src/cairo-win32-font.c: Fix up for the above changes.
+
+	* src/cairo-ft-font.c (_cairo_ft_unscaled_font_destroy,
+	_ft_font_face_destroy): Implement a complicated mutual-referencing
+	scheme to make sure that a face from cairo_ft_font_face_create_for_ft_face()
+	is freed only when the FT_Face is no longer needed.
+
+	* src/cairo-ft-font.c (cairo_ft_font_face_create_for_ft_face): 
+	Update the docs to describe how to figure out when the FT_Face
+	can be freed.
+
+	* src/cairo-ft-font.c: Fix refcount leaks when creating fonts.
+
+	* src/cairo-pdf-surface.c (cairo_pdf_ft_font_create): Remove
+	excess call to _cairo_unscaled_font_reference().
+
+	* src/cairo-gstate.c (_cairo_gstate_set_font_face): Remove
+	stray initialization of font matrix to the identity.
+
+	* src/cairo-array.c (_cairo_user_data_array_set_data) test/user-data.c:
+	Fix a bug when setting/unsetting a key with a free key slot before it,
+	add that to the test case.
+
+	* src/cairo-array.c (_cairo_user_data_array_set_data): 
+	Don't append an element when user_data is NULL.
+
+2005-04-08  Dave Beckett  <Dave.Beckett@bristol.ac.uk>
+
+	* src/cairo-glitz-surface.c (_cairo_glitz_surface_set_matrix):
+	Update to track changes to cairo_matrix_t interface.
+
+2005-04-08  Carl Worth  <cworth@cworth.org>
+
+	* ROADMAP: Add ROADMAP file with an initial stab at 1.0 items.
+
+2005-04-08  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-gstate.c:
+	(_cairo_gstate_transform), (_cairo_gstate_set_matrix),
+	(_cairo_gstate_interpret_path): Eliminate internal use of
+	deprecated cairo_matrix_copy.
+
+	* src/cairo-gstate.c: (_cairo_gstate_get_matrix),
+	* src/cairo-matrix.c: (cairo_matrix_copy):
+	* src/cairo.c: (cairo_get_matrix):
+	* src/cairo.h:
+	* src/cairoint.h: Change cairo_get_matrix to accept a pointer to
+	the return value cairo_matrix_t rather than returning the value
+	directly.
+
+2005-04-08  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-matrix.c (cairo_matrix_init_identity): Don't try to
+	return a value (even a void value) from a void function. Closes
+	bug #2931.
+
+2005-04-07  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-wideint.h: Remove broken code for defining
+	uint64_t.
+
+2005-04-07  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-surface.c: (_cairo_surface_release_source_image),
+	(_cairo_surface_release_dest_image),
+	(_cairo_surface_clone_similar), (_cairo_surface_composite),
+	(_cairo_surface_fill_rectangles),
+	(_cairo_surface_composite_trapezoids), (_cairo_surface_copy_page),
+	(_cairo_surface_show_page), (_cairo_surface_show_glyphs):
+
+	Change to allow NULL backend function pointers to indicate
+	unsupported functions.
+
+	* src/cairo-glitz-surface.c:
+	* src/cairo-image-surface.c:
+	* src/cairo-pdf-surface.c:
+	* src/cairo-ps-surface.c:
+	* src/cairo-quartz-surface.c:
+	* src/cairo-win32-surface.c:
+	* src/cairo-xcb-surface.c:
+	* src/cairo-xlib-surface.c: Eliminate stub functions and replace
+	with NULL in surface backend table.
+
+2005-04-07  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo.[ch] src/cairoint.h src/cairo-gstate.c 
+	docs/public/cairo-sections.txt: 
+	cairo_select_font() => cairo_select_font_face()
+	cairo_scale_font() => cairo_set_font_size()
+	cairo_transform_font() => cairo_set_font_matrix()
+	Add cairo_get_font_matrix(). Make cairo_set_font_face()
+	not reset the font matrix. Default the font matrix
+	to SCALE(10). Document cairo_select_font_face().
+
+	* test/coverage.c (draw) test/text-cache-crash.c (draw)
+	test/text-rotate.c (draw): Use cairo_set_font_size().
+
+	* src/cairo-font.c src/cairo.h: Fix up some parameter
+	names for docs.
+
+2005-04-07  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-win32-font.c: Fix various compilation errors.
+
+2005-04-07  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-gstate.c:
+	* src/cairo-png.c:
+	* src/cairo-win32-font.c:
+	* src/cairo-win32-surface.c:
+	* src/cairo-win32.h:
+	* src/cairoint.h: Minor changes to header file inclusion
+	recommended by Oleg Smolsky for better portability to MSVC.
+
+2005-04-07  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-png.c (PNG_SIG_SIZE): Use a preprocessor macro to get
+	a literal value in the array size declaration, (for better
+	portability to lame compilers that can't deal with a const int
+	variable for the array size). Reported by Oleg Smolsky.
+	(PNG_SIG_SIZE): Fix typo.
+
+2005-04-07  Carl Worth  <cworth@cworth.org>
+
+	* configure.in:
+	* src/cairo-wideint.h:
+	* src/cairoint.h: Use configure-time checks for stdint.h
+	vs. inttypes.h vs. sys/int_types.h rather than ad-hoc
+	system-specific macros. Also define these types manually none of
+	these header are available. (Thanks to Jason Dorje Short
+	<jdorje@users.sf.net>).
+
+2005-04-07  Carl Worth  <cworth@cworth.org>
+
+	* test/imagediff.c (main): Fix to return non-zero status on error.
+
+2005-04-06  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo.h src/cairo-gstate.c src/cairo-font.c: Add
+	a cairo_font_face_t type to hold a description of a font
+	face. Replace cairo_set_font() with cairo_set_font_face().
+
+	* src/cairoint.h src/cairo-font.c src/cairo-gstate.c: Add 
+	"cairo_simple_font_face" for family/weight/slant and use
+	it to implement font naming for the toy API.
+
+	* src/cairo-ft.h src/cairo-ft-font.c cairo-win32.h
+	cairo-win32-font.c: Switch the FreeType and Win32 backends
+	over to using cairo_font_face_t.
+
+	* src/cairo.h src/cairo-font.c src/cairo-ft-font.c 
+	src/cairo-win32-font.c: Pass in font matrix and CTM separately
+	rather than as a composite scale when creating fonts; allows
+	removing font_matrix argument to metrics functions.
+
+	* src/cairoint.h src/cairo-font.c src/cairo-ft-font.c 
+	src/cairo-win32-font.c: Remove cairo_font_scale_t type,
+	just use cairo_matrix_t and ignore translations.
+
+	* src/cairo-ft.h src/cairo-ft-font.c: Remove 
+	cairo_ft_font_get_pattern() -- it can't work for all FreeType
+	backend fonts and doesn't seem particularly useful.
+
+	* src/cairo.[ch]: Rename cairo_font_get_extents() to
+	cairo_font_extents()
+
+	* doc/public/cairo-sections.txt: Update, split font functions
+	into a separate section.
+	
+	* src/cairo-ft-font.c (_ft_unscaled_font_get_for_pattern): Fix
+	locking order problem.
+
+	* src/cairo-font.c: Add caches for simple font faces and from
+	cairo_font_face_t to cairo_scaled_font_t.
+
+	* src/cairo.h src/cairoint.h src/cairo-font.c src/cairo-win32-font.c
+	src/cairo-ft-font.c src/cairo-gstate.c src/cairo-gstate-private.h:
+	Rename cairo_font_t to cairo_scaled_font_t.
+
+2005-04-06  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h: Rework the cairo_matrix_t interface in several ways.
+	Expose a struct for cairo_matrix_t.
+
+	Add new function to return current matrix:
+		cairo_get_matrix
+
+	Deprecate the following functions (in documentation):
+		cairo_matrix_create
+		cairo_matrix_destroy
+		cairo_matrix_get_affine
+
+	Rename:
+		cairo_matrix_set_affine   ->	cairo_matrix_init
+		cairo_matrix_set_identity ->	cairo_matrix_init_identity
+
+	Add other new matrix initialization functions:
+		cairo_matrix_init_translate
+		cairo_matrix_init_scale
+		cairo_matrix_init_rotate
+
+	Change return type of almost all cairo_matrix functions from
+	cairo_status_t to void.
+
+	* src/cairo-atsui-font.c:
+	* src/cairo-ft-font.c:
+	* src/cairo-gstate.c:
+	* src/cairo-image-surface.c:
+	* src/cairo-matrix.c:
+	* src/cairo-pattern.c:
+	* src/cairo-pdf-surface.c:
+	* src/cairo-pen.c:
+	* src/cairo-surface.c:
+	* src/cairo-win32-font.c:
+	* src/cairo-xlib-surface.c:
+	* src/cairo.c:
+	* src/cairoint.h: Track changes to cairo_matrix_t interface.
+	
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/transforms-ref.png:
+	* test/transforms.c: Add a test case showing the same path drawn
+	under various transforms, (including skews set directly by
+	initializing a cairo_matrix_t).
+
+2005-04-06  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h: Make handling of unsigned char* vs. char*
+	consistent. Change all parameters that are actual string data from
+	unsigned char* to char* (cairo_text_extents, cairo_show_text,
+	cairo_text_path). Change all data buffers from char* to unsigned
+	char* (cairo_write_func_t).
+
+	* src/cairo-gstate.c: (_cairo_gstate_text_to_glyphs):
+	* src/cairo-ft-font.c: (_cairo_ft_font_text_to_glyphs):
+	* src/cairo-font.c: (_cairo_font_text_to_glyphs):
+	* src/cairo-atsui-font.c: (_cairo_atsui_font_text_to_glyphs):
+	* src/cairoint.h:
+	* src/cairo.c: (cairo_text_extents), (cairo_show_text),
+	(cairo_text_path): Track changes from unsigned char* to
+	char*. Convert to unsigned only at the internal interface to
+	unicode processing.
+
+	* test/move-to-show-surface.c: (draw):
+	* src/cairo-output-stream.c: (_cairo_output_stream_printf),
+	(stdio_write): Track change from char* to unsigned char*.
+
+2005-04-06  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-cache.c (_cairo_cache_init): Fix reversed arguments in
+	call to calloc.
+
+2005-04-04  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h (cairo_set_target_image,
+	cairo_image_surface_create_for_data):
+	* src/cairo.c: (cairo_set_target_image): Change type of data
+	parameter from char* to unsigned char*.
+
+	* src/cairo-ft-font.c: (_cairo_ft_font_create_glyph):
+	* src/cairo-image-surface.c: (cairo_image_surface_create_for_data):
+	* src/cairo-pattern.c:
+	(_cairo_pattern_acquire_surface_for_gradient):
+	* test/buffer-diff.c: (buffer_diff):
+	* test/buffer-diff.h:
+	* test/write-png.c: (write_png_argb32):
+	* test/write-png.h: Propagate the unsigned char* change down the
+	stack.
+
+	* src/cairo-xlib-surface.c: (_get_image_surface): Add cast since
+	XImage uses char* rather than unsigned char*.
+	
+	* src/cairo-png.c: (cairo_image_surface_create_for_png): Fix
+	memory leak of image data.
+
+	* test/cairo-test.c: (cairo_test), (cairo_test_create_png_pattern):
+	* test/cairo-test.h: Switch to use cairo_surface_write_png rather
+	than a custom write_png_argb32.
+
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/create-for-png-ref.png:
+	* test/create-for-png.c: (draw), (main): Add test to exercise the
+	cairo_image_surface_create_for_png function.
+
+2005-04-04  Carl Worth  <cworth@cworth.org>
+
+	* TODO: Remove items for PNG backend removal and trapezoid
+	reasterization re-implementation since they have been completed.
+
+2005-04-04  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.c:
+	* src/cairo.h: Drop cairo_default_matrix since it is now always
+	identical to cairo_identity_matrix.
+
+	* src/cairo-gstate-private.h:
+	* src/cairo-gstate.c: (_cairo_gstate_init),
+	(_cairo_gstate_set_target_surface): Remove gstate->pixels_per
+	inch. Change default matrix to always be the identity matrix.
+
+	* src/cairo-glitz-surface.c:
+	* src/cairo-image-surface.c:
+	* src/cairo-pdf-surface.c:
+	* src/cairo-ps-surface.c:
+	* src/cairo-quartz-surface.c:
+	* src/cairo-surface.c:
+	* src/cairo-win32-surface.c:
+	* src/cairo-xcb-surface.c:
+	* src/cairo-xlib-surface.c:
+	* src/cairoint.h: Drop pixels_per_inch function from surface
+	backend interface as it is no longer needed.
+
+2005-04-02  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-gstate.c: (_cairo_gstate_show_surface): Use the
+	current point to offset just the destination, not the source and
+	destination. With this fix, cairo_show_surface should work with
+	the current point at places other than the origin.
+
+	* test/Makefile.am: Move move-to-show-surface off the expected
+	failure list.
+
+	* test/move-to-show-surface.c: Add comment indicating that bug is
+	resolved.
+	
+	* test/testsvg: Don't use diff to compare images, just imagediff.
+
+2005-04-02  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h:
+	* src/cairo.c: (cairo_set_target_image), (cairo_text_extents),
+	(cairo_show_text), (cairo_text_path):
+	* src/cairo-image-surface.c: (cairo_image_surface_create_for_data):
+	* src/cairo-gstate.c: (_cairo_gstate_text_to_glyphs):
+	* src/cairo-font.c: (_cairo_font_create): Style and indentation
+	fixes.
+	
+	* src/cairo-ft-font.c: (_cairo_ft_font_create): Add (unsigned
+	char*) cast to quiet new gcc-4 warnings.
+
+	* src/cairo-ft-font.c: (_cairo_ft_font_glyph_extents): Initialize
+	variables to quiet new gcc-4 warnings.
+	
+	* src/cairo-pdf-surface.c: (cairo_pdf_ft_font_write_generic_table),
+	(cairo_pdf_ft_font_write_glyf_table):
+	* src/cairo-png.c: (cairo_surface_write_png),
+	(cairo_image_surface_create_for_png):
+	* src/cairo-xlib-surface.c: (_get_image_surface):
+	* src/cairo-ps-surface.c: (_cairo_ps_surface_copy_page):
+	Use unsigned char* as expected by freetype, libpng, Xlib, and zlib.
+
+	* src/cairoint.h:
+	* src/cairo-unicode.c: (_utf8_get_char), (_utf8_get_char_extended),
+	(_cairo_utf8_to_ucs4), (_cairo_utf8_to_utf16): Propagate unsigned
+	char* down from cairo_text_extents.
+
+2005-04-01  Carl Worth  <cworth@cworth.org>
+
+	* TODO: Update API shakeup chart.
+
+	* src/cairo.h:
+	* src/cairo.c: (cairo_set_target_image_no_data): Add a standin for
+	the function that should be cairo_set_target_image which should
+	then have some other name. We can straighten that mess out when we
+	eliminate the set_target functions. Add deprecation alias for
+	cairo_current_pattern.
+
+	* src/cairoint.h:
+	* src/cairo-image-surface.c:
+	* src/cairo-surface.c: Deprecate cairo_surface_create_for_image in
+	favor of cairo_image_surface_create_for_data.
+
+2005-03-31  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo.c (cairo_set_target_png): Remove this function now
+	that the PNG backend is gone.
+
+2005-03-30  Carl Worth  <cworth@cworth.org>
+
+	* configure.in: Fix typo I had introduced into Jason's patch that
+	made configure fail.
+
+2005-03-30  Carl Worth  <cworth@cworth.org>
+	
+	A few fixes courtesy of Jason Dorje Short <jdorje@users.sf.net>:
+
+	* configure.in: Disable PS backend if zlib is not found.
+
+	* src/cairo-win32-font.c: (_cairo_win32_font_glyph_path): Fix
+	mistyped parameter.
+	
+	* src/cairo-win32-surface.c: (_cairo_win32_surface_finish): Fix
+	missing return value.
+
+2005-03-30  T Rowley  <tim.rowley@gmail.com>
+
+	* src/cairo-gstate.c (_cairo_gstate_stroke_extents): call
+	_cairo_pen_init so that the result takes into account the caps.
+
+2005-03-29  T Rowley  <tim.rowley@gmail.com>
+
+	* src/cairo-xlib.h: include Xlib.h to fix solaris build bustage.
+
+2005-03-29  T Rowley  <tim.rowley@gmail.com>
+
+	* src/cairo-wideint.h: add preprocessor tests for stdint.h/inttypes.h
+
+	* src/cairoint.h: add preprocessor tests for stdint.h/inttypes.h
+
+2005-03-29  T Rowley  <tim.rowley@gmail.com>
+
+	* configure.in: re-enable quartz backend
+
+	* src/cairo-quartz-surface.c: update to compilable/workable version
+
+	* src/cairo-atsui-font.c: update to compilable/workable version
+
+2005-03-29  Carl Worth  <cworth@cworth.org>
+
+	* test/Makefile.am:
+	* test/*_*.c: More _/- renames in the test directory.
+
+2005-03-28  Carl Worth  <cworth@cworth.org>
+
+	* src/Makefile.am:
+	* src/cairo_*.c: Renamed a bunch of files to use - rather than _
+	as a separator. Copy happened in the master repository to preserve
+	history, so this is just a big remove.
+
+2005-03-28  Carl Worth  <cworth@cworth.org>
+
+	* TODO: Sorted API shakeup chart.
+
+2005-03-28  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo-png.c (cairo_image_surface_write_png) 
+	(cairo_image_surface_create_from_png): New PNG utility functions.
+
+	* src/cairo_pdf_surface.c, src/cairo-pdf.h: Reverse the naming of
+	the pdf constructors so the callback based ones have the long
+	names.
+
+2005-03-25  Jamey Sharp  <jamey@minilop.net>
+
+	* src/cairo-xcb.h:
+	* src/cairo_xcb_surface.c:
+	Fix "implicit declaration" warning in cairo.c by moving
+	cairo_xcb_surface_create prototype into cairo-xcb.h.
+
+2005-03-23  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-path-fixed-private.h:
+	* src/cairo_path.c: Clean up names of cairo_path internals.
+
+2005-03-23  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo_path_fill.c: 
+	* src/cairo_path_stroke.c: Remove unneeded includes of
+	cairo-path-fixed-private.h.
+
+	* src/cairo_ft_font.c (_cairo_ft_font_glyph_path): Fix
+	indentation.
+
+2005-03-23  Carl Worth  <cworth@cworth.org>
+
+	* TODO: More updates to the API Shakeup chart.
+
+2005-03-23  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo_path.c: (_cairo_path_fixed_init),
+	(_cairo_path_fixed_init_copy), (_cairo_path_fixed_fini),
+	(_cairo_path_fixed_move_to), (_cairo_path_fixed_rel_move_to),
+	(_cairo_path_fixed_line_to), (_cairo_path_fixed_rel_line_to),
+	(_cairo_path_fixed_curve_to), (_cairo_path_fixed_rel_curve_to),
+	(_cairo_path_fixed_close_path),
+	(_cairo_path_fixed_get_current_point), (_cairo_path_add),
+	(_cairo_path_add_op_buf), (_cairo_path_new_op_buf),
+	(_cairo_path_add_arg_buf), (_cairo_path_new_arg_buf),
+	(_cairo_path_fixed_interpret):
+	* src/cairo_path_bounds.c: (_cairo_path_fixed_bounds):
+	* src/cairo_path_fill.c: (_cairo_path_fixed_fill_to_traps):
+	* src/cairo_path_stroke.c: (_cairo_path_fixed_stroke_to_traps):
+	* src/cairoint.h: Rename cairo_path_real_t to cairo_path_fixed_t
+	and fix all _cairo_path functions to be named as _cairo_path_fixed
+	functions.
+
+	* src/cairo-gstate-private.h:
+	* src/cairo-path-fixed-private.h:
+	* src/cairo_font.c: (_cairo_font_glyph_path):
+	* src/cairo_ft_font.c: (_move_to), (_line_to), (_conic_to),
+	(_cubic_to), (_cairo_ft_font_glyph_path):
+	* src/cairo_gstate.c: (_cairo_gstate_init),
+	(_cairo_gstate_init_copy), (_cairo_gstate_fini),
+	(_cairo_gstate_new_path), (_cairo_gstate_move_to),
+	(_cairo_gstate_line_to), (_cairo_gstate_curve_to),
+	(_cairo_gstate_rel_move_to), (_cairo_gstate_rel_line_to),
+	(_cairo_gstate_rel_curve_to), (_cairo_gstate_close_path),
+	(_cairo_gstate_get_current_point), (_cairo_gstate_interpret_path),
+	(_cairo_gstate_stroke), (_cairo_gstate_in_stroke),
+	(_cairo_gstate_fill), (_cairo_gstate_in_fill),
+	(_cairo_gstate_stroke_extents), (_cairo_gstate_fill_extents),
+	(_cairo_gstate_clip), (_cairo_gstate_text_to_glyphs): Track name
+	change of cairo_path_real_t and _cairo_path_fixed functions.
+
+2005-03-23  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-path-data-private.h: Remove CAIRO_BEGIN_DECLS and
+	CAIRO_END_DECLS as they are not needed for private headers.
+	
+	* src/cairoint.h: Add ASSERT_NOT_REACHED macro.
+
+	* src/cairo.c: (cairo_get_path), (cairo_get_path_flat): Rewrite in
+	terms of cairo_copt_path and cairo_copy_path_flat in preparation
+	for removing cairo_gstate_interpret_path.
+
+2005-03-23  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-gstate-private.h:
+	* src/cairo-path-fixed-private.h:
+	* src/cairo-private.h:
+	* src/cairoint.h: Begin the process of breaking up cairoint.h,
+	moving structure definitions of cairo_t, cairo_gstate_t, and
+	cairo_path_real_t into their own header files.
+
+	* src/cairo.c:
+	* src/cairo_gstate.c:
+	* src/cairo_path.c:
+	* src/cairo_path_fill.c:
+	* src/cairo_path_stroke.c:
+	* src/cairo_pen.c: Track changes to header files, reaching into
+	the new private headers where necessary.
+
+2005-03-23  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.c: (cairo_set_target_glitz), (cairo_set_target_pdf),
+	(cairo_set_target_pdf_as_file), (cairo_set_target_png),
+	(cairo_set_target_ps), (cairo_set_target_win32),
+	(cairo_set_target_xcb), (cairo_set_target_drawable): Move
+	surface-specific cairo_t functions to cairo.c.
+
+	* src/cairo_glitz_surface.c:
+	* src/cairo_pdf_surface.c:
+	* src/cairo_png_surface.c:
+	* src/cairo_ps_surface.c:
+	* src/cairo_win32_surface.c:
+	* src/cairo_xcb_surface.c:
+	* src/cairo_xlib_surface.c: Remove functions that have now moved
+	to cairo.c.
+
+	* test/.cvsignore: A few new files to ignore now with new
+	compilation mode using a libtool helper library.
+
+2005-03-23  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h: Add backwards-compatibility for recently renamed
+	functions.
+
+2005-03-21  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.c:
+	* src/cairo_gstate.c: (_cairo_gstate_transform),
+	(_cairo_gstate_user_to_device),
+	(_cairo_gstate_user_to_device_distance),
+	(_cairo_gstate_device_to_user),
+	(_cairo_gstate_device_to_user_distance),
+	(_cairo_gstate_reset_clip):
+	* src/cairo_matrix.c:
+	* src/cairoint.h:
+	* src/cairo.h: Rename functions to eliminate abbreviations:
+	cairo_concat_matrix		-> cairo_transform
+	cairo_transform_point		-> cairo_user_to_device
+	cairo_transform_distance	-> cairo_user_to_device_distance
+	cairo_inverse_transform_point	-> cairo_device_to_user
+	cairo_inverse_transform_distance-> cairo_device_to_user_distance
+	cairo_init_clip			-> cairo_reset_clip
+
+2005-03-18  Carl Worth  <cworth@cworth.org>
+
+	* TODO: Update API shakeup chart.
+
+2005-03-18  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-path-data-private.h: * src/cairo.c: (cairo_copy_path),
+	(cairo_copy_path_flat),
+	(cairo_append_path): Rename cairo_copy_path_data,
+	cairop_copy_path_data_flat, and cairo_append_path_data to
+	cairo_copy_path, cairo_copy_path_flat, and cairo_append_path.
+	
+	* src/cairo.h: Add new cairo_path_t, containing a
+	cairo_path_data_t array and an explicit length. Remove
+	CAIRO_PATH_END_PATH terminator from cairo_path_data_t.
+
+	* src/cairo_atsui_font.c: (_cairo_atsui_font_glyph_path):
+	* src/cairo_font.c: (_cairo_font_glyph_path):
+	* src/cairo_ft_font.c: (_move_to), (_line_to), (_conic_to),
+	(_cubic_to), (_cairo_ft_font_glyph_path):
+	* src/cairo_gstate.c: (_cairo_gstate_interpret_path):
+	* src/cairo_path.c: (_cairo_path_init), (_cairo_path_init_copy),
+	(_cairo_path_fini), (_cairo_path_move_to),
+	(_cairo_path_rel_move_to), (_cairo_path_line_to),
+	(_cairo_path_rel_line_to), (_cairo_path_curve_to),
+	(_cairo_path_rel_curve_to), (_cairo_path_close_path),
+	(_cairo_path_get_current_point), (_cairo_path_add),
+	(_cairo_path_add_op_buf), (_cairo_path_new_op_buf),
+	(_cairo_path_add_arg_buf), (_cairo_path_new_arg_buf),
+	(_cairo_path_interpret):
+	* src/cairo_path_bounds.c: (_cairo_path_bounds):
+	* src/cairo_path_data.c: (_cairo_path_data_count),
+	(_cairo_path_data_populate), (_cairo_path_data_create_real),
+	(cairo_path_destroy), (_cairo_path_data_append_to_context):
+	* src/cairo_path_fill.c: (_cairo_path_fill_to_traps):
+	* src/cairo_path_stroke.c: (_cairo_path_stroke_to_traps):
+	* src/cairoint.h:
+	* test/path_data.c: (munge_and_set_path), (draw), (main): Rename
+	the internal path object from cairo_path_t to cairo_path_real_t.
+
+2005-03-18  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo_pdf_surface.c (cairo_set_target_pdf_as_file)
+	(cairo_set_target_pdf): Remove return statements from these
+	functions (bug #2137).
+
+2005-03-18  Carl Worth  <cworth@cworth.org>
+
+	* src/Makefile.am (libcairo_la_SOURCES): Remove unused
+	libcairo_freetype_sources (thanks to Damien Carbery). Closes bug
+	#2673.
+	
+2005-03-17  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo_matrix.c (cairo_matrix_rotate): doc fix - 
+	90 degrees is MI_PI/2 radians.
+
+	* src/cairo.c src/cairo_matrix.c  src/cairo_ft_font.c
+	src/cairo_ps_surface.c src/cairo_quartz_surface.c
+	src/cairo_win32_font.c src/cairo_win32_surface.c
+	src/cairo_xlib_surface.c: Cairo is only capitalized
+	at the beginning of sentences.
+
+2005-03-17  Kristian Høgsberg  <krh@redhat.com>
+
+	From Tor Lillqvist <tml@novell.com>:
+
+	* test/cairo_test.c (cairo_test): Open output PNG files in binary
+	mode.
+
+2005-03-17  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo.h src/cairo_surface.c src/cairo-xlib.h
+	src/cairo_xlib_surface.c: Move cairo_xlib_surface_set_device_offset()
+	to a generic cairo_surface_set_device_offset().
+
+	* src/cairo_gstate.c: Take the surface's device offset into
+	account.
+
+	* doc/public/cairo-sections.txt: Update.
+
+2005-03-17  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo_matrix.c: Fix the docs to to correctly describe
+	the order of transformation for muliply/scale/rotate/translate.
+	(cairo_matrix_translate): Fix translate/rotate typo in the
+	parameter descriptions.
+
+2005-03-17  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo_output_stream.c: Forgot to add this file.
+
+2005-03-16  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo_surface.c (_destroy_user_data)
+	(cairo_surface_set_user_data): Dont call user data destroy
+	function if it's NULL.
+
+	* test/user_data.c: (main): Add test case for user data with NULL
+	destroy function.
+
+2005-03-16  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/Makefile.am: Add cairo_output_stream.c
+
+	* src/cairo.h: Add new errors, CAIRO_STATUS_WRITE_ERROR and
+	CAIRO_STATUS_SURFACE_FINISHED, add cairo_surface_finish()
+	prototype, add cairo_write_func_t.
+
+	* src/cairo.c: Add strings for new errors, documentation fix.
+	
+	* src/cairo_win32_surface.c:
+	* src/cairo_xcb_surface.c:
+	* src/cairo_xlib_surface.c:
+	* src/cairo_glitz_surface.c:
+	* src/cairo_image_surface.c:
+	* src/cairo_png_surface.c:
+	* src/cairo_ps_surface.c: Rename surface destroy functions to
+	finish and change them to not free the surface.
+	
+	* src/cairo-pdf.h:
+	* src/cairo_pdf_surface.c: Change PDF surface constructors to take
+	a write function in the general case and add stdio convenience
+	constructors.  Change destroy function to finish for
+	cairo_pdf_surface.  Change implementation to use
+	cairo_output_stream_t functions for output.
+	
+	* src/cairo_font.c: (_cairo_font_show_glyphs): Use
+	_cairo_surface_show_glyphs instead of calling function pointer
+	directly.
+	
+	* src/cairoint.h: Add prototypes for cairo output stream
+	functions, rename destroy to finish in cairo_surface_backend_t and
+	add finished flag to cairo_surface_t.
+	
+	* src/cairo_surface.c: Add cairo_surface_finish() and call it from
+	cairo_surface_destroy().  Check the finished flag in
+	cairo_surface_t in functions that change the surface.
+
+2005-03-15  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-xlib.h src/cairo_xlib_surface.c: Rework set
+	of contructors for XLib surfaces. Add 
+	cairo_xlib_surface_set_size().
+
+	* src/cairo-xlib.h src/cairo_xlib_surface.c: Add
+	cairo_xlib_surface_set_device_offset().
+
+	* src/cairo_xlib_surface.c (cairo_xlib_surface_set_clip_region):
+	Rewrite for clarity and efficiency.
+
+	* src/cairo_xlib_surface.c (_get_image_surface): Use a 
+	temporary pixmap to avoid possible BadMatch when fetch
+	from windows.
+	
+	* src/cairo.[ch] src/cairo-xlib.h: Fix some parameter names
+	for the docs.
+
+	* doc/public/cairo-sections.txt: Update
+
+2005-03-14  Carl Worth  <cworth@cworth.org>
+
+	* test/path_data-ref.png: Add reference image.
+
+2005-03-14  Carl Worth  <cworth@cworth.org>
+
+	* test/Makefile.am: Fixes to force tests to run against locally
+	compiled version (thanks to Manish Singh).
+
+2005-03-11  Carl Worth  <cworth@cworth.org>
+
+	* doc/public/cairo-sections.txt:
+	* doc/public/tmpl/cairo-surface.sgml:
+	* doc/public/tmpl/cairo.sgml: Added some documentation, so we get
+	some churn here.
+	
+	* src/cairo.c:
+	* src/cairo.h: New functions: cairo_copy_path_data,
+	cairo_copy_path_data_flat, and cairo_append_path_data.
+
+	* src/Makefile.am:
+	* src/cairo-path-data-private.h:
+	* src/cairo_path_data.c: Add new implementation for
+	cairo_copy_path_data and cairo_append_path_data.
+
+	* test/Makefile.am:
+	* test/path_data.c: New test for new path_data functions.
+
+2005-03-10  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo_surface.c (_destroy_user_data): Add this function and
+	call it on surface destruction.
+
+2005-03-10  Kristian Høgsberg  <krh@redhat.com>
+
+	* test/user_data.c (main): Fix assert()'s using = instead of ==.
+
+	* test/cairo_test.c (cairo_test): Move xunlink call below the
+	xasprintf that builds the filename to unlink.
+
+2005-03-10  Carl Worth  <cworth@cworth.org>
+
+	* TODO: API Shakeup status update.
+
+2005-03-10  Carl Worth  <cworth@cworth.org>
+
+	Originally: 2005-02-24  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo_surface.c (cairo_surface_set_user_data) 
+	(cairo_surface_get_user_data): 
+	* src/cairo.h: Add const qualifier to cairo_user_data_key_t
+	arguments.
+
+	Originally: 2005-02-15  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo_surface.c (cairo_surface_get_data, cairo_surface_set_data):
+	Add these two functions to set and get user data on an surface.
+	
+	* src/cairo.h: Function prototypes for new functions.
+	
+	* test/user_data.c: Test case for user data functions.
+
+2005-03-09  Carl Worth  <cworth@cworth.org>
+
+	* test/cairo_test.c (cairo_test): Move filename initialization up
+	to before first use.
+
+	* test/get_and_set.c: 
+	* test/Makefile.am: Add test for the most trivial cairo_get and
+	cairo_set functions.
+
+2005-03-09  Carl Worth  <cworth@cworth.org>
+
+	* test/cairo_test.c: (cairo_test):
+	* test/cairo_test.h:
+	* test/clip_twice.c: (draw):
+	* test/coverage.c: (draw):
+	* test/fill_rule.c: (draw):
+	* test/leaky_polygon.c: (draw):
+	* test/line_width.c: (draw):
+	* test/linear_gradient.c: (draw):
+	* test/move_to_show_surface.c: (draw):
+	* test/pixman_rotate.c: (draw):
+	* test/text_cache_crash.c: (draw):
+	* test/text_rotate.c: (draw): Change the draw function under test
+	to return a cairo_test_status_t so that it can indicate test
+	failure even if there is no result image.
+
+2005-03-09  Carl Worth  <cworth@cworth.org>
+
+	* TODO: Update API Shakeup planning chart.
+	fix typos.
+
+2005-03-09  Carl Worth  <cworth@cworth.org>
+
+	* doc/public/cairo-sections.txt:
+	* src/cairo.c: (cairo_get_pattern), (cairo_get_font),
+	(cairo_get_font_extents), (cairo_get_operator),
+	(cairo_get_rgb_color), (cairo_get_alpha), (cairo_get_tolerance),
+	(cairo_get_current_point), (cairo_get_fill_rule),
+	(cairo_get_line_width), (cairo_get_line_cap),
+	(cairo_get_line_join), (cairo_get_miter_limit), (cairo_get_matrix),
+	(cairo_get_target_surface), (cairo_get_path),
+	(cairo_get_path_flat):
+	* src/cairo.h:
+	* src/cairo_ft_font.c: (_conic_to):
+	* src/cairo_gstate.c: (_cairo_gstate_get_target_surface),
+	(_cairo_gstate_get_pattern), (_cairo_gstate_get_operator),
+	(_cairo_gstate_get_rgb_color), (_cairo_gstate_get_tolerance),
+	(_cairo_gstate_get_alpha), (_cairo_gstate_get_fill_rule),
+	(_cairo_gstate_get_line_width), (_cairo_gstate_get_line_cap),
+	(_cairo_gstate_get_line_join), (_cairo_gstate_get_miter_limit),
+	(_cairo_gstate_get_matrix), (_cairo_gstate_get_current_point),
+	(_cairo_gstate_show_surface), (_cairo_gstate_get_font),
+	(_cairo_gstate_get_font_transform), (_cairo_gstate_get_font_scale),
+	(_cairo_gstate_ensure_font), (_cairo_gstate_get_font_extents),
+	(_cairo_gstate_text_to_glyphs):
+	* src/cairo_path.c: (_cairo_path_get_current_point):
+	* src/cairoint.h:
+	* test/pixman_rotate.c: (draw):Rename all the cairo_current
+	functions to cairo_get functions instead. Add documentation for
+	all of these functions (and a few others as well).
+
+	Add support so that old binarys should still run and old source
+	should still compile, (though we'll rip that out again on the API
+	Shakeup flag day).
+
+2005-03-08  Carl Worth  <cworth@cworth.org>
+
+	* configure.in: Add -head to CAIRO_VERSION after tagging with
+	SNAPSHOT_0_4_0.
+
 2005-03-08  Carl Worth  <cworth@cworth.org>
 
 	* gtk-doc.make (dist-check-gtkdoc): Commit workaround to prevent

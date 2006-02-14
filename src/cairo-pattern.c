@@ -1,6 +1,7 @@
 /* cairo - a vector graphics library with display and print output
  *
  * Copyright © 2004 David Reveman
+ * Copyright © 2005 Red Hat, Inc.
  *
  * Permission to use, copy, modify, distribute, and sell this software
  * and its documentation for any purpose is hereby granted without
@@ -56,9 +57,8 @@ _cairo_pattern_init (cairo_pattern_t *pattern, cairo_pattern_type_t type)
     pattern->ref_count = 1;
     pattern->extend    = CAIRO_EXTEND_DEFAULT;
     pattern->filter    = CAIRO_FILTER_DEFAULT;
-    pattern->alpha     = 1.0;
 
-    _cairo_matrix_init (&pattern->matrix);
+    cairo_matrix_init_identity (&pattern->matrix);
 }
 
 static cairo_status_t
@@ -150,15 +150,10 @@ _cairo_pattern_fini (cairo_pattern_t *pattern)
 
 void
 _cairo_pattern_init_solid (cairo_solid_pattern_t *pattern,
-			   double		 red,
-			   double		 green,
-			   double		 blue)
+			   const cairo_color_t	 *color)
 {
     _cairo_pattern_init (&pattern->base, CAIRO_PATTERN_SOLID);
-    
-    pattern->red   = red;
-    pattern->green = green;
-    pattern->blue  = blue;
+    pattern->color = *color;
 }
 
 void
@@ -209,7 +204,7 @@ _cairo_pattern_init_radial (cairo_radial_pattern_t *pattern,
 }
 
 cairo_pattern_t *
-_cairo_pattern_create_solid (double red, double green, double blue)
+_cairo_pattern_create_solid (const cairo_color_t *color)
 {
     cairo_solid_pattern_t *pattern;
 
@@ -217,7 +212,7 @@ _cairo_pattern_create_solid (double red, double green, double blue)
     if (pattern == NULL)
 	return NULL;
 
-    _cairo_pattern_init_solid (pattern, red, green, blue);
+    _cairo_pattern_init_solid (pattern, color);
 
     return &pattern->base;
 }
@@ -296,11 +291,8 @@ cairo_pattern_destroy (cairo_pattern_t *pattern)
 
 static cairo_status_t
 _cairo_pattern_add_color_stop (cairo_gradient_pattern_t *pattern,
-			       double			offset,
-			       double			red,
-			       double			green,
-			       double			blue,
-			       double			alpha)
+			       double			 offset,
+			       cairo_color_t		*color)
 {
     cairo_color_stop_t *stop;
 
@@ -316,22 +308,48 @@ _cairo_pattern_add_color_stop (cairo_gradient_pattern_t *pattern,
     stop = &pattern->stops[pattern->n_stops - 1];
 
     stop->offset = _cairo_fixed_from_double (offset);
-
-    _cairo_color_init (&stop->color);
-    _cairo_color_set_rgb (&stop->color, red, green, blue);
-    _cairo_color_set_alpha (&stop->color, alpha);
+    stop->color = *color;
 
     return CAIRO_STATUS_SUCCESS;
 }
 
 cairo_status_t
-cairo_pattern_add_color_stop (cairo_pattern_t *pattern,
-			      double	      offset,
-			      double	      red,
-			      double	      green,
-			      double	      blue,
-			      double	      alpha)
+cairo_pattern_add_color_stop_rgb (cairo_pattern_t *pattern,
+				  double	   offset,
+				  double	   red,
+				  double	   green,
+				  double	   blue)
 {
+    cairo_color_t color;
+
+    if (pattern->type != CAIRO_PATTERN_LINEAR &&
+	pattern->type != CAIRO_PATTERN_RADIAL)
+    {
+	/* XXX: CAIRO_STATUS_INVALID_PATTERN? */
+	return CAIRO_STATUS_SUCCESS;
+    }
+
+    _cairo_restrict_value (&offset, 0.0, 1.0);
+    _cairo_restrict_value (&red,    0.0, 1.0);
+    _cairo_restrict_value (&green,  0.0, 1.0);
+    _cairo_restrict_value (&blue,   0.0, 1.0);
+
+    _cairo_color_init_rgb (&color, red, green, blue);
+    return _cairo_pattern_add_color_stop ((cairo_gradient_pattern_t *) pattern,
+					  offset,
+					  &color);
+}
+
+cairo_status_t
+cairo_pattern_add_color_stop_rgba (cairo_pattern_t *pattern,
+				   double	   offset,
+				   double	   red,
+				   double	   green,
+				   double	   blue,
+				   double	   alpha)
+{
+    cairo_color_t color;
+
     if (pattern->type != CAIRO_PATTERN_LINEAR &&
 	pattern->type != CAIRO_PATTERN_RADIAL)
     {
@@ -345,22 +363,27 @@ cairo_pattern_add_color_stop (cairo_pattern_t *pattern,
     _cairo_restrict_value (&blue,   0.0, 1.0);
     _cairo_restrict_value (&alpha,  0.0, 1.0);
 
+    _cairo_color_init_rgba (&color, red, green, blue, alpha);
     return _cairo_pattern_add_color_stop ((cairo_gradient_pattern_t *) pattern,
 					  offset,
-					  red, green, blue,
-					  alpha);
+					  &color);
 }
 
 cairo_status_t
-cairo_pattern_set_matrix (cairo_pattern_t *pattern, cairo_matrix_t *matrix)
+cairo_pattern_set_matrix (cairo_pattern_t      *pattern,
+			  const cairo_matrix_t *matrix)
 {
-    return cairo_matrix_copy (&pattern->matrix, matrix);
+    pattern->matrix = *matrix;
+
+    return CAIRO_STATUS_SUCCESS;
 }
 
 cairo_status_t
 cairo_pattern_get_matrix (cairo_pattern_t *pattern, cairo_matrix_t *matrix)
 {
-    return cairo_matrix_copy (matrix, &pattern->matrix);
+    *matrix = pattern->matrix;
+
+    return CAIRO_STATUS_SUCCESS;
 }
 
 cairo_status_t
@@ -391,35 +414,9 @@ cairo_pattern_get_extend (cairo_pattern_t *pattern)
     return pattern->extend;
 }
 
-cairo_status_t
-_cairo_pattern_get_rgb (cairo_pattern_t *pattern,
-			double		*red,
-			double		*green,
-			double		*blue)
-{
-
-    if (pattern->type == CAIRO_PATTERN_SOLID)
-    {
-	cairo_solid_pattern_t *solid = (cairo_solid_pattern_t *) pattern;
-	
-	*red   = solid->red;
-	*green = solid->green;
-	*blue  = solid->blue;
-    } else
-	*red = *green = *blue = 1.0;
-
-    return CAIRO_STATUS_SUCCESS;
-}
-
 void
-_cairo_pattern_set_alpha (cairo_pattern_t *pattern, double alpha)
-{
-    pattern->alpha = alpha;
-}
-
-void
-_cairo_pattern_transform (cairo_pattern_t *pattern,
-			  cairo_matrix_t  *ctm_inverse)
+_cairo_pattern_transform (cairo_pattern_t	*pattern,
+			  const cairo_matrix_t  *ctm_inverse)
 {
     cairo_matrix_multiply (&pattern->matrix, ctm_inverse, &pattern->matrix);
 }
@@ -506,8 +503,7 @@ _cairo_pattern_shader_init (cairo_gradient_pattern_t *pattern,
 	op->stops[i].color_char[0] = pattern->stops[i].color.red * 0xff;
 	op->stops[i].color_char[1] = pattern->stops[i].color.green * 0xff;
 	op->stops[i].color_char[2] = pattern->stops[i].color.blue * 0xff;
-	op->stops[i].color_char[3] = pattern->stops[i].color.alpha *
-	    pattern->base.alpha * 0xff;
+	op->stops[i].color_char[3] = pattern->stops[i].color.alpha * 0xff;
 	op->stops[i].offset = pattern->stops[i].offset;
 	op->stops[i].id = i;
     }
@@ -516,6 +512,13 @@ _cairo_pattern_shader_init (cairo_gradient_pattern_t *pattern,
     qsort (op->stops, pattern->n_stops, sizeof (cairo_shader_color_stop_t),
 	   _cairo_shader_color_stop_compare);
 
+    /* this scale value is used only when computing gradient values
+     * before the defined range, in which case stop 0 is used for both
+     * ends of the interpolation, making the value of 'scale' not
+     * actually matter, except that valgrind notices we're using
+     * an undefined value.
+     */
+    op->stops[0].scale = 0;
     for (i = 0; i < pattern->n_stops - 1; i++)
     {
 	op->stops[i + 1].scale = op->stops[i + 1].offset - op->stops[i].offset;
@@ -666,8 +669,8 @@ _cairo_image_data_set_linear (cairo_linear_pattern_t *pattern,
     point1.x = pattern->point1.x;
     point1.y = pattern->point1.y;
 
-    cairo_matrix_get_affine (&pattern->base.base.matrix,
-			     &a, &b, &c, &d, &tx, &ty);
+    _cairo_matrix_get_affine (&pattern->base.base.matrix,
+			      &a, &b, &c, &d, &tx, &ty);
 
     dx = point1.x - point0.x;
     dy = point1.y - point0.y;
@@ -721,8 +724,8 @@ _cairo_linear_pattern_classify (cairo_linear_pattern_t *pattern,
     point1.x = pattern->point1.x;
     point1.y = pattern->point1.y;
 
-    cairo_matrix_get_affine (&pattern->base.base.matrix,
-			     &a, &b, &c, &d, &tx, &ty);
+    _cairo_matrix_get_affine (&pattern->base.base.matrix,
+			      &a, &b, &c, &d, &tx, &ty);
 
     dx = point1.x - point0.x;
     dy = point1.y - point0.y;
@@ -795,8 +798,8 @@ _cairo_image_data_set_radial (cairo_radial_pattern_t *pattern,
 	r1_2 = c0_c1 = 0.0; /* shut up compiler */
     }
 
-    cairo_matrix_get_affine (&pattern->base.base.matrix,
-			     &a, &b, &c, &d, &tx, &ty);
+    _cairo_matrix_get_affine (&pattern->base.base.matrix,
+			      &a, &b, &c, &d, &tx, &ty);
 
     for (y = 0; y < height; y++) {
 	for (x = 0; x < width; x++) {
@@ -889,9 +892,9 @@ _cairo_pattern_acquire_surface_for_gradient (cairo_gradient_pattern_t *pattern,
 					     cairo_surface_attributes_t *attr)
 {
     cairo_image_surface_t *image;
-    cairo_status_t	  status;
-    uint32_t		  *data;
-    cairo_bool_t          repeat = FALSE;
+    cairo_status_t status;
+    uint32_t *data;
+    cairo_bool_t repeat = FALSE;
 
     if (pattern->base.type == CAIRO_PATTERN_LINEAR) {
 	cairo_bool_t is_horizontal;
@@ -935,7 +938,7 @@ _cairo_pattern_acquire_surface_for_gradient (cairo_gradient_pattern_t *pattern,
     }
 
     image = (cairo_image_surface_t *)
-	cairo_image_surface_create_for_data ((char *) data,
+	cairo_image_surface_create_for_data ((unsigned char *) data,
 					     CAIRO_FORMAT_ARGB32,
 					     width, height,
 					     width * 4);
@@ -953,10 +956,11 @@ _cairo_pattern_acquire_surface_for_gradient (cairo_gradient_pattern_t *pattern,
 
     attr->x_offset = -x;
     attr->y_offset = -y;
-    cairo_matrix_set_identity (&attr->matrix);
+    cairo_matrix_init_identity (&attr->matrix);
     attr->extend = repeat ? CAIRO_EXTEND_REPEAT : CAIRO_EXTEND_NONE;
     attr->filter = CAIRO_FILTER_NEAREST;
     attr->acquired = FALSE;
+    attr->clip_saved = FALSE;
     
     return status;
 }
@@ -971,53 +975,47 @@ _cairo_pattern_acquire_surface_for_solid (cairo_solid_pattern_t	     *pattern,
 					  cairo_surface_t	     **out,
 					  cairo_surface_attributes_t *attribs)
 {
-    cairo_color_t color;
-
-    _cairo_color_init (&color);
-    _cairo_color_set_rgb (&color, pattern->red, pattern->green, pattern->blue);
-    _cairo_color_set_alpha (&color, pattern->base.alpha);
-    
     *out = _cairo_surface_create_similar_solid (dst,
 						CAIRO_FORMAT_ARGB32,
 						1, 1,
-						&color);
+						&pattern->color);
     
     if (*out == NULL)
 	return CAIRO_STATUS_NO_MEMORY;
 
     attribs->x_offset = attribs->y_offset = 0;
-    cairo_matrix_set_identity (&attribs->matrix);
+    cairo_matrix_init_identity (&attribs->matrix);
     attribs->extend = CAIRO_EXTEND_REPEAT;
     attribs->filter = CAIRO_FILTER_NEAREST;
     attribs->acquired = FALSE;
+    attribs->clip_saved = FALSE;
     
     return CAIRO_STATUS_SUCCESS;
 }
 
 
 /**
- * _cairo_pattern_is_opaque
+ * _cairo_pattern_is_opaque_solid
  *
- * Convenience function to determine whether a pattern has an opaque
- * alpha value. This is done by testing whether the pattern's alpha
- * value when converted to a byte is 255, so if a backend actually
- * supported deep alpha channels this function might not do the right
- * thing.
+ * Convenience function to determine whether a pattern is an opaque
+ * (alpha==1.0) solid color pattern. This is done by testing whether
+ * the pattern's alpha value when converted to a byte is 255, so if a
+ * backend actually supported deep alpha channels this function might
+ * not do the right thing.
  *
- * Note that for a gradient or surface pattern, the overall resulting
- * alpha for the pattern can be non-opaque even this function returns
- * %TRUE, since the resulting alpha is the multiplication of the
- * alpha of the gradient or surface with the pattern's alpha. In
- * the future, alpha will be moved from the base pattern to the
- * solid pattern subtype, at which point this function should
- * probably be renamed to _cairo_pattern_is_opaque_solid()
- *
- * Return value: %TRUE if the pattern is opaque
+ * Return value: %TRUE if the pattern is an opaque, solid color.
  **/
 cairo_bool_t 
-_cairo_pattern_is_opaque (cairo_pattern_t *pattern)
+_cairo_pattern_is_opaque_solid (cairo_pattern_t *pattern)
 {
-  return (pattern->alpha >= ((double)0xff00 / (double)0xffff));
+    cairo_solid_pattern_t *solid;
+
+    if (pattern->type != CAIRO_PATTERN_SOLID)
+	return FALSE;
+
+    solid = (cairo_solid_pattern_t *) pattern;
+
+    return (solid->color.alpha >= ((double)0xff00 / (double)0xffff));
 }
 
 static cairo_int_status_t
@@ -1031,84 +1029,54 @@ _cairo_pattern_acquire_surface_for_surface (cairo_surface_pattern_t   *pattern,
 					    cairo_surface_attributes_t *attr)
 {
     cairo_int_status_t status;
+    int tx, ty;
 
     attr->acquired = FALSE;
-    
-    /* handle pattern opacity */
-    if (!_cairo_pattern_is_opaque (&pattern->base))
+    attr->clip_saved = FALSE;
+	    
+    if (_cairo_surface_is_image (dst))
     {
-	cairo_surface_pattern_t tmp;
-	cairo_color_t		color;
-
-	_cairo_color_init (&color);
-	_cairo_color_set_alpha (&color, pattern->base.alpha);
-
-	*out = _cairo_surface_create_similar_solid (dst,
-						    CAIRO_FORMAT_ARGB32,
-						    width, height,
-						    &color);
-	if (*out == NULL)
-	    return CAIRO_STATUS_NO_MEMORY;
-
-	status = _cairo_pattern_init_copy (&tmp.base, &pattern->base);
-	if (CAIRO_OK (status))
-	{
-	    tmp.base.alpha = 1.0;
-	    status = _cairo_surface_composite (CAIRO_OPERATOR_IN,
-					       &tmp.base,
-					       NULL,
-					       *out,
-					       x, y, 0, 0, 0, 0,
-					       width, height);
-
-	    _cairo_pattern_fini (&tmp.base);
-	}
-
-	if (status) {
-	    cairo_surface_destroy (*out);
+	cairo_image_surface_t *image;
+	
+	status = _cairo_surface_begin_reset_clip (pattern->surface);
+	if (!CAIRO_OK (status))
 	    return status;
-	}
-	
-	attr->x_offset = -x;
-	attr->y_offset = -y;
-	attr->extend   = CAIRO_EXTEND_NONE;
-	attr->filter   = CAIRO_FILTER_NEAREST;
-	
-	cairo_matrix_set_identity (&attr->matrix);
+
+	status = _cairo_surface_acquire_source_image (pattern->surface,
+						      &image,
+						      &attr->extra);
+	if (!CAIRO_OK (status))
+	    return status;
+
+	_cairo_surface_end (pattern->surface);
+
+	*out = &image->base;
+	attr->acquired = TRUE;
     }
     else
     {
-	int tx, ty;
-	    
-	if (_cairo_surface_is_image (dst))
-	{
-	    cairo_image_surface_t *image;
-	    
-	    status = _cairo_surface_acquire_source_image (pattern->surface,
-							  &image,
-							  &attr->extra);
-	    if (CAIRO_OK (status))
-		*out = &image->base;
+	status = _cairo_surface_begin_reset_clip (pattern->surface);
+	if (!CAIRO_OK (status))
+	    return status;
 
-	    attr->acquired = TRUE;
-	}
-	else
-	    status = _cairo_surface_clone_similar (dst, pattern->surface, out);
-	
-	attr->extend = pattern->base.extend;
-	attr->filter = pattern->base.filter;
-	if (_cairo_matrix_is_integer_translation (&pattern->base.matrix,
-						  &tx, &ty))
-	{
-	    cairo_matrix_set_identity (&attr->matrix);
-	    attr->x_offset = tx;
-	    attr->y_offset = ty;
-	}
-	else
-	{
-	    attr->matrix = pattern->base.matrix;
-	    attr->x_offset = attr->y_offset = 0;
-	}
+	status = _cairo_surface_clone_similar (dst, pattern->surface, out);
+	_cairo_surface_end (pattern->surface);
+    }
+    
+    attr->extend = pattern->base.extend;
+    attr->filter = pattern->base.filter;
+    if (_cairo_matrix_is_integer_translation (&pattern->base.matrix,
+					      &tx, &ty))
+    {
+	cairo_matrix_init_identity (&attr->matrix);
+	attr->x_offset = tx;
+	attr->y_offset = ty;
+	attr->filter = CAIRO_FILTER_NEAREST;
+    }
+    else
+    {
+	attr->matrix = pattern->base.matrix;
+	attr->x_offset = attr->y_offset = 0;
     }
     
     return status;
@@ -1141,14 +1109,16 @@ _cairo_pattern_acquire_surface (cairo_pattern_t		   *pattern,
 				cairo_surface_t		   **surface_out,
 				cairo_surface_attributes_t *attributes)
 {
+    cairo_status_t status;
+    
     switch (pattern->type) {
     case CAIRO_PATTERN_SOLID: {
 	cairo_solid_pattern_t *src = (cairo_solid_pattern_t *) pattern;
 	
-	return _cairo_pattern_acquire_surface_for_solid (src, dst,
-							 x, y, width, height,
-							 surface_out,
-							 attributes);
+	status = _cairo_pattern_acquire_surface_for_solid (src, dst,
+							   x, y, width, height,
+							   surface_out,
+							   attributes);
 	} break;
     case CAIRO_PATTERN_LINEAR:
     case CAIRO_PATTERN_RADIAL: {
@@ -1157,47 +1127,53 @@ _cairo_pattern_acquire_surface (cairo_pattern_t		   *pattern,
 	/* fast path for gradients with less than 2 color stops */
 	if (src->n_stops < 2)
 	{
+	    const cairo_color_t *color;
 	    cairo_solid_pattern_t solid;
 
 	    if (src->n_stops)
-	    {
-		_cairo_pattern_init_solid (&solid,
-					   src->stops->color.red,
-					   src->stops->color.green,
-					   src->stops->color.blue);
-		_cairo_pattern_set_alpha (&solid.base,
-					  src->stops->color.alpha);
-	    }
+		color = &src->stops->color;
 	    else
-	    {
-		_cairo_pattern_init_solid (&solid, 0.0, 0.0, 0.0);
-		_cairo_pattern_set_alpha (&solid.base, 0.0);
-	    }
+		color = CAIRO_COLOR_TRANSPARENT;
 
-	    return _cairo_pattern_acquire_surface_for_solid (&solid, dst,
-							     x, y,
-							     width, height,
-							     surface_out,
-							     attributes);
+	    _cairo_pattern_init_solid (&solid, color);
+
+	    status = _cairo_pattern_acquire_surface_for_solid (&solid, dst,
+							       x, y,
+							       width, height,
+							       surface_out,
+							       attributes);
 	}
 	else
-	    return _cairo_pattern_acquire_surface_for_gradient (src, dst,
-								x, y,
-								width, height,
-								surface_out,
-								attributes);
+	    status = _cairo_pattern_acquire_surface_for_gradient (src, dst,
+								  x, y,
+								  width, height,
+								  surface_out,
+								  attributes);
     } break;
     case CAIRO_PATTERN_SURFACE: {
 	cairo_surface_pattern_t *src = (cairo_surface_pattern_t *) pattern;
 	
-	return _cairo_pattern_acquire_surface_for_surface (src, dst,
-							   x, y, width, height,
-							   surface_out,
-							   attributes);
+	status = _cairo_pattern_acquire_surface_for_surface (src, dst,
+							     x, y, width, height,
+							     surface_out,
+							     attributes);
     } break;
+    default:
+	status = CAIRO_INT_STATUS_UNSUPPORTED;
     }
 
-    return CAIRO_INT_STATUS_UNSUPPORTED;
+    
+    if (CAIRO_OK (status) && (*surface_out)->clip_region) {
+	status = _cairo_surface_begin_reset_clip (*surface_out);
+	if (!CAIRO_OK (status)) {
+	    _cairo_pattern_release_surface (dst, *surface_out, attributes);
+	    return status;
+	}
+	
+	attributes->clip_saved = TRUE;
+    }
+
+    return status;
 }
 
 /**
@@ -1213,11 +1189,15 @@ _cairo_pattern_release_surface (cairo_surface_t		   *dst,
 				cairo_surface_t		   *surface,
 				cairo_surface_attributes_t *attributes)
 {
+    if (attributes->clip_saved)
+	_cairo_surface_end (surface);
+    
     if (attributes->acquired)
+    {
 	_cairo_surface_release_source_image (dst,
 					     (cairo_image_surface_t *) surface,
 					     attributes->extra);
-    else
+    } else
 	cairo_surface_destroy (surface);
 }
 
@@ -1237,71 +1217,44 @@ _cairo_pattern_acquire_surfaces (cairo_pattern_t	    *src,
 				 cairo_surface_attributes_t *mask_attributes)
 {
     cairo_int_status_t	  status;
-
     cairo_pattern_union_t tmp;
-    cairo_bool_t          src_opaque, mask_opaque;
-    double		  src_alpha, mask_alpha;
 
-    src_opaque = _cairo_pattern_is_opaque (src);
-    mask_opaque = !mask || _cairo_pattern_is_opaque (mask);
-    
-    /* For surface patterns, we move any translucency from src->alpha
-     * to mask->alpha so we can use the source unchanged. Otherwise we
-     * move the translucency from mask->alpha to src->alpha so that
-     * we can drop the mask if possible.
-     */
-    if (src->type == CAIRO_PATTERN_SURFACE)
-    {
-	if (mask) {
-	    mask_opaque = mask_opaque && src_opaque;
-	    mask_alpha = mask->alpha * src->alpha;
-	} else {
-	    mask_opaque = src_opaque;
-	    mask_alpha = src->alpha;
-	}
-	
-	src_alpha = 1.0;
-	src_opaque = TRUE;
-    }
-    else
-    {
-	if (mask)
-	{
-	    src_opaque = mask_opaque && src_opaque;
-	    src_alpha = mask->alpha * src->alpha;
-	    /* FIXME: This needs changing when we support RENDER
-	     * style 4-channel masks.
-	     */
-	    if (mask->type == CAIRO_PATTERN_SOLID)
-		mask = NULL;
-	} else
-	    src_alpha = src->alpha;
+    /* If src and mask are both solid, then the mask alpha can be
+     * combined into src and mask can be ignored. */
 
-	mask_alpha = 1.0;
-	mask_opaque = TRUE;
+    /* XXX: This optimization assumes that there is no color
+     * information in mask, so this will need to change when we
+     * support RENDER-style 4-channel masks. */
+    if (src->type == CAIRO_PATTERN_SOLID &&
+	mask && mask->type == CAIRO_PATTERN_SOLID)
+      {
+	cairo_color_t combined;
+	cairo_solid_pattern_t *src_solid = (cairo_solid_pattern_t *) src;
+	cairo_solid_pattern_t *mask_solid = (cairo_solid_pattern_t *) mask;
+
+	combined = src_solid->color;
+	_cairo_color_multiply_alpha (&combined, mask_solid->color.alpha);
+
+	_cairo_pattern_init_solid (&tmp.solid, &combined);
+
+	mask = NULL;
+    } else {
+	_cairo_pattern_init_copy (&tmp.base, src);
     }
 
-    _cairo_pattern_init_copy (&tmp.base, src);
-    _cairo_pattern_set_alpha (&tmp.base, src_alpha);
-	
     status = _cairo_pattern_acquire_surface (&tmp.base, dst,
 					     src_x, src_y,
 					     width, height,
 					     src_out, src_attributes);
-    
+
     _cairo_pattern_fini (&tmp.base);
 
     if (status)
 	return status;
 
-    if (mask || !mask_opaque)
+    if (mask)
     {
-	if (mask)
-	    _cairo_pattern_init_copy (&tmp.base, mask);
-	else
-	    _cairo_pattern_init_solid (&tmp.solid, 0.0, 0.0, 0.0);
-	
-	_cairo_pattern_set_alpha (&tmp.base, mask_alpha);
+	_cairo_pattern_init_copy (&tmp.base, mask);
 	
 	status = _cairo_pattern_acquire_surface (&tmp.base, dst,
 						 mask_x, mask_y,

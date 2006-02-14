@@ -14,23 +14,27 @@ cairo_surface_t
 
 </para>
 
+<!-- ##### SECTION Stability_Level ##### -->
+
+
 <!-- ##### TYPEDEF cairo_surface_t ##### -->
 <para>
 
 </para>
 
 
-<!-- ##### FUNCTION cairo_surface_create_for_image ##### -->
+<!-- ##### MACRO cairo_surface_create_for_image ##### -->
 <para>
 
 </para>
 
+@Returns: 
+<!-- # Unused Parameters # -->
 @data: 
 @format: 
 @width: 
 @height: 
 @stride: 
-@Returns: 
 
 
 <!-- ##### FUNCTION cairo_surface_create_similar ##### -->
@@ -61,52 +65,100 @@ cairo_surface_t
 @surface: 
 
 
-<!-- ##### FUNCTION cairo_surface_set_repeat ##### -->
+<!-- ##### FUNCTION cairo_surface_finish ##### -->
 <para>
 
 </para>
 
+@surface: 
+@Returns: 
+
+
+<!-- ##### MACRO cairo_surface_set_repeat ##### -->
+<para>
+
+</para>
+
+@Returns: 
+<!-- # Unused Parameters # -->
 @surface: 
 @repeat: 
-@Returns: 
 
 
-<!-- ##### FUNCTION cairo_surface_set_matrix ##### -->
+<!-- ##### MACRO cairo_surface_set_matrix ##### -->
 <para>
 
 </para>
 
+@Returns: 
+<!-- # Unused Parameters # -->
 @surface: 
 @matrix: 
-@Returns: 
 
 
-<!-- ##### FUNCTION cairo_surface_get_matrix ##### -->
+<!-- ##### MACRO cairo_surface_get_matrix ##### -->
 <para>
 
 </para>
 
+@Returns: 
+<!-- # Unused Parameters # -->
 @surface: 
 @matrix: 
-@Returns: 
 
 
-<!-- ##### FUNCTION cairo_surface_set_filter ##### -->
+<!-- ##### MACRO cairo_surface_set_filter ##### -->
 <para>
 
 </para>
 
+@Returns: 
+<!-- # Unused Parameters # -->
 @surface: 
 @filter: 
+
+
+<!-- ##### MACRO cairo_surface_get_filter ##### -->
+<para>
+
+</para>
+
 @Returns: 
+<!-- # Unused Parameters # -->
+@surface: 
 
 
-<!-- ##### FUNCTION cairo_surface_get_filter ##### -->
+<!-- ##### FUNCTION cairo_surface_set_user_data ##### -->
 <para>
 
 </para>
 
 @surface: 
+@key: 
+@user_data: 
+@destroy: 
 @Returns: 
+<!-- # Unused Parameters # -->
+@data: 
+
+
+<!-- ##### FUNCTION cairo_surface_get_user_data ##### -->
+<para>
+
+</para>
+
+@surface: 
+@key: 
+@Returns: 
+
+
+<!-- ##### FUNCTION cairo_surface_set_device_offset ##### -->
+<para>
+
+</para>
+
+@surface: 
+@x_offset: 
+@y_offset: 
 
 

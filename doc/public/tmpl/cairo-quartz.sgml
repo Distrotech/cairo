@@ -14,15 +14,7 @@ Quartz Backend
 
 </para>
 
-<!-- ##### FUNCTION cairo_set_target_quartz_context ##### -->
-<para>
-
-</para>
-
-@cr: 
-@context: 
-@width: 
-@height: 
+<!-- ##### SECTION Stability_Level ##### -->
 
 
 <!-- ##### FUNCTION cairo_quartz_surface_create ##### -->

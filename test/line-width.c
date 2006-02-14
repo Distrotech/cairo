@@ -23,7 +23,7 @@
  * Author: Carl D. Worth <cworth@cworth.org>
  */
 
-#include "cairo_test.h"
+#include "cairo-test.h"
 
 #define LINES 5
 #define LINE_LENGTH 10
@@ -31,17 +31,17 @@
 #define IMAGE_HEIGHT ((LINES+4)*LINES)/2 + 2
 
 cairo_test_t test = {
-    "line_width",
+    "line-width",
     "Tests cairo_set_line_width",
     IMAGE_WIDTH, IMAGE_HEIGHT
 };
 
-static void
+static cairo_test_status_t
 draw (cairo_t *cr, int width, int height)
 {
     int i;
 
-    cairo_set_rgb_color (cr, 0, 0, 0);
+    cairo_set_source_rgb (cr, 0, 0, 0);
     cairo_translate (cr, 2, 2);
 
     for (i=0; i < LINES; i++) {
@@ -54,6 +54,8 @@ draw (cairo_t *cr, int width, int height)
 	cairo_stroke (cr);
 	cairo_translate (cr, 0, i+3);
     }
+
+    return CAIRO_TEST_SUCCESS;
 }
 
 int

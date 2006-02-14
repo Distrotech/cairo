@@ -61,13 +61,13 @@
  *
  */
 
-#include "cairo_test.h"
+#include "cairo-test.h"
 
 #define LITTLE_STAR_SIZE 20
 #define BIG_STAR_SIZE    80
 
 cairo_test_t test = {
-    "fill_rule",
+    "fill-rule",
     "Tests cairo_set_full_rule with some star shapes",
     BIG_STAR_SIZE * 2 + 3, BIG_STAR_SIZE + LITTLE_STAR_SIZE + 3
 };
@@ -97,10 +97,10 @@ big_star_path (cairo_t *cr)
 }
 
 /* Fill the same path twice, once with each fill rule */
-static void
+static cairo_test_status_t
 draw (cairo_t *cr, int width, int height)
 {
-    cairo_set_rgb_color (cr, 1, 0, 0);
+    cairo_set_source_rgb (cr, 1, 0, 0);
 
     cairo_translate (cr, 1, 1);
     little_star_path (cr);
@@ -121,6 +121,8 @@ draw (cairo_t *cr, int width, int height)
     big_star_path (cr);
     cairo_set_fill_rule (cr, CAIRO_FILL_RULE_EVEN_ODD);
     cairo_fill (cr);
+
+    return CAIRO_TEST_SUCCESS;
 }
 
 int

@@ -42,74 +42,34 @@
 
 static const cairo_surface_backend_t cairo_ps_surface_backend;
 
-/**
- * cairo_set_target_ps:
- * @cr: a #cairo_t
- * @file: an open, writeable file
- * @width_inches: width of the output page, in inches
- * @height_inches: height of the output page, in inches
- * @x_pixels_per_inch: X resolution to use for image fallbacks;
- *   not all Cairo drawing can be represented in a postscript
- *   file, so Cairo will write out images for some portions
- *   of the output.
- * @y_pixels_per_inch: Y resolution to use for image fallbacks.
- * 
- * Directs output for a #cairo_t to a postscript file. The file must
- * be kept open until the #cairo_t is destroyed or set to have a
- * different target, and then must be closed by the application.
- **/
-void
-cairo_set_target_ps (cairo_t	*cr,
-		     FILE	*file,
-		     double	width_inches,
-		     double	height_inches,
-		     double	x_pixels_per_inch,
-		     double	y_pixels_per_inch)
-{
-    cairo_surface_t *surface;
-
-    surface = cairo_ps_surface_create (file,
-				       width_inches, height_inches,
-				       x_pixels_per_inch, y_pixels_per_inch);
-    if (surface == NULL) {
-	cr->status = CAIRO_STATUS_NO_MEMORY;
-	return;
-    }
-
-    cairo_set_target_surface (cr, surface);
-
-    /* cairo_set_target_surface takes a reference, so we must destroy ours */
-    cairo_surface_destroy (surface);
-}
-
 typedef struct cairo_ps_surface {
     cairo_surface_t base;
 
     /* PS-specific fields */
-    FILE *file;
+    cairo_output_stream_t *stream;
 
-    double width_inches;
-    double height_inches;
-    double x_ppi;
-    double y_ppi;
+    double width_in_points;
+    double height_in_points;
+    double x_dpi;
+    double y_dpi;
 
     int pages;
 
     cairo_image_surface_t *image;
 } cairo_ps_surface_t;
 
+#define PS_SURFACE_DPI_DEFAULT 300.0
+
 static void
 _cairo_ps_surface_erase (cairo_ps_surface_t *surface);
 
-cairo_surface_t *
-cairo_ps_surface_create (FILE	*file,
-			 double	width_inches,
-			 double height_inches,
-			 double	x_pixels_per_inch,
-			 double	y_pixels_per_inch)
+static cairo_surface_t *
+_cairo_ps_surface_create_for_stream_internal (cairo_output_stream_t *stream,
+					      double	    width_in_points,
+					      double	   height_in_points)
 {
     cairo_ps_surface_t *surface;
-    int width, height;
+    int width_in_pixels, height_in_pixels;
     time_t now = time (0);
 
     surface = malloc (sizeof (cairo_ps_surface_t));
@@ -118,20 +78,21 @@ cairo_ps_surface_create (FILE	*file,
 
     _cairo_surface_init (&surface->base, &cairo_ps_surface_backend);
 
-    surface->file = file;
+    surface->stream = stream;
 
-    surface->width_inches = width_inches;
-    surface->height_inches = height_inches;
-    surface->x_ppi = x_pixels_per_inch;
-    surface->y_ppi = x_pixels_per_inch;
+    surface->width_in_points  = width_in_points;
+    surface->height_in_points = height_in_points;
+    surface->x_dpi = PS_SURFACE_DPI_DEFAULT;
+    surface->y_dpi = PS_SURFACE_DPI_DEFAULT;
 
     surface->pages = 0;
 
-    width = (int) (x_pixels_per_inch * width_inches + 1.0);
-    height = (int) (y_pixels_per_inch * height_inches + 1.0);
+    width_in_pixels = (int) (surface->x_dpi * width_in_points / 72.0 + 1.0);
+    height_in_pixels = (int) (surface->y_dpi * height_in_points / 72.0 + 1.0);
 
     surface->image = (cairo_image_surface_t *)
-	cairo_image_surface_create (CAIRO_FORMAT_ARGB32, width, height);
+	cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
+				    width_in_pixels, height_in_pixels);
     if (surface->image == NULL) {
 	free (surface);
 	return NULL;
@@ -140,24 +101,59 @@ cairo_ps_surface_create (FILE	*file,
     _cairo_ps_surface_erase (surface);
 
     /* Document header */
-    fprintf (file,
-	     "%%!PS-Adobe-3.0\n"
-	     "%%%%Creator: Cairo (http://cairographics.org)\n");
-    fprintf (file,
-	     "%%%%CreationDate: %s",
-	     ctime (&now));
-    fprintf (file,
-	     "%%%%BoundingBox: %d %d %d %d\n",
-	     0, 0, (int) (surface->width_inches * 72.0), (int) (surface->height_inches * 72.0));
+    _cairo_output_stream_printf (surface->stream,
+				 "%%!PS-Adobe-3.0\n"
+				 "%%%%Creator: Cairo (http://cairographics.org)\n");
+    _cairo_output_stream_printf (surface->stream,
+				 "%%%%CreationDate: %s",
+				 ctime (&now));
+    _cairo_output_stream_printf (surface->stream,
+				 "%%%%BoundingBox: %f %f %f %f\n",
+				 0.0, 0.0,
+				 surface->width_in_points,
+				 surface->height_in_points);
     /* The "/FlateDecode filter" currently used is a feature of LanguageLevel 3 */
-    fprintf (file,
-	     "%%%%DocumentData: Clean7Bit\n"
-	     "%%%%LanguageLevel: 3\n");
-    fprintf (file,
-	     "%%%%Orientation: Portrait\n"
-	     "%%%%EndComments\n");
+    _cairo_output_stream_printf (surface->stream,
+				 "%%%%DocumentData: Clean7Bit\n"
+				 "%%%%LanguageLevel: 3\n");
+    _cairo_output_stream_printf (surface->stream,
+				 "%%%%Orientation: Portrait\n"
+				 "%%%%EndComments\n");
 
     return &surface->base;
+}
+
+cairo_surface_t *
+cairo_ps_surface_create (const char    *filename,
+			 double		width_in_points,
+			 double		height_in_points)
+{
+    cairo_output_stream_t *stream;
+
+    stream = _cairo_output_stream_create_for_file (filename);
+    if (stream == NULL)
+	return NULL;
+
+    return _cairo_ps_surface_create_for_stream_internal (stream,
+							 width_in_points,
+							 height_in_points);
+}
+
+cairo_surface_t *
+cairo_ps_surface_create_for_stream (cairo_write_func_t	write_func,
+				    void	       *closure,
+				    double		width_in_points,
+				    double		height_in_points)
+{
+    cairo_output_stream_t *stream;
+
+    stream = _cairo_output_stream_create (write_func, closure);
+    if (stream == NULL)
+	return NULL;
+
+    return _cairo_ps_surface_create_for_stream_internal (stream,
+							 width_in_points,
+							 height_in_points);
 }
 
 static cairo_surface_t *
@@ -170,42 +166,29 @@ _cairo_ps_surface_create_similar (void		*abstract_src,
     return NULL;
 }
 
-static void
-_cairo_ps_surface_destroy (void *abstract_surface)
+static cairo_status_t
+_cairo_ps_surface_finish (void *abstract_surface)
 {
     cairo_ps_surface_t *surface = abstract_surface;
 
     /* Document footer */
-    fprintf (surface->file, "%%%%EOF\n");
+    _cairo_output_stream_printf (surface->stream,
+				 "%%%%EOF\n");
 
     cairo_surface_destroy (&surface->image->base);
 
-    free (surface);
+    return CAIRO_STATUS_SUCCESS;
 }
 
 static void
 _cairo_ps_surface_erase (cairo_ps_surface_t *surface)
 {
-    cairo_color_t transparent;
-
-    _cairo_color_init (&transparent);
-    _cairo_color_set_rgb (&transparent, 0., 0., 0.);
-    _cairo_color_set_alpha (&transparent, 0.);
     _cairo_surface_fill_rectangle (&surface->image->base,
-				   CAIRO_OPERATOR_SRC,
-				   &transparent,
+				   CAIRO_OPERATOR_SOURCE,
+				   CAIRO_COLOR_TRANSPARENT,
 				   0, 0,
 				   surface->image->width,
 				   surface->image->height);
-}
-
-/* XXX: We should re-work this interface to return both X/Y ppi values. */
-static double
-_cairo_ps_surface_pixels_per_inch (void *abstract_surface)
-{
-    cairo_ps_surface_t *surface = abstract_surface;
-
-    return surface->y_ppi;
 }
 
 static cairo_status_t
@@ -218,13 +201,6 @@ _cairo_ps_surface_acquire_source_image (void                    *abstract_surfac
     *image_out = surface->image;
 
     return CAIRO_STATUS_SUCCESS;
-}
-
-static void
-_cairo_ps_surface_release_source_image (void                   *abstract_surface,
-					cairo_image_surface_t  *image,
-					void                   *image_extra)
-{
 }
 
 static cairo_status_t
@@ -246,66 +222,6 @@ _cairo_ps_surface_acquire_dest_image (void                    *abstract_surface,
     return CAIRO_STATUS_SUCCESS;
 }
 
-static void
-_cairo_ps_surface_release_dest_image (void                   *abstract_surface,
-				      cairo_rectangle_t      *interest_rect,
-				      cairo_image_surface_t  *image,
-				      cairo_rectangle_t      *image_rect,
-				      void                   *image_extra)
-{
-}
-
-static cairo_status_t
-_cairo_ps_surface_clone_similar (void			*abstract_surface,
-				 cairo_surface_t	*src,
-				 cairo_surface_t     **clone_out)
-{
-    return CAIRO_INT_STATUS_UNSUPPORTED;
-}
-
-static cairo_int_status_t
-_cairo_ps_surface_composite (cairo_operator_t	operator,
-			     cairo_pattern_t	*src,
-			     cairo_pattern_t	*mask,
-			     void		*abstract_dst,
-			     int		src_x,
-			     int		src_y,
-			     int		mask_x,
-			     int		mask_y,
-			     int		dst_x,
-			     int		dst_y,
-			     unsigned int	width,
-			     unsigned int	height)
-{
-    return CAIRO_INT_STATUS_UNSUPPORTED;
-}
-
-static cairo_int_status_t
-_cairo_ps_surface_fill_rectangles (void			*abstract_surface,
-				   cairo_operator_t	operator,
-				   const cairo_color_t	*color,
-				   cairo_rectangle_t	*rects,
-				   int			num_rects)
-{
-    return CAIRO_INT_STATUS_UNSUPPORTED;
-}
-
-static cairo_int_status_t
-_cairo_ps_surface_composite_trapezoids (cairo_operator_t	operator,
-					cairo_pattern_t		*generic_src,
-					void			*abstract_dst,
-					int			x_src,
-					int			y_src,
-					int			x_dst,
-					int			y_dst,
-					unsigned int		width,
-					unsigned int		height,
-					cairo_trapezoid_t	*traps,
-					int			num_traps)
-{
-    return CAIRO_INT_STATUS_UNSUPPORTED;
-}
-
 static cairo_int_status_t
 _cairo_ps_surface_copy_page (void *abstract_surface)
 {
@@ -313,13 +229,13 @@ _cairo_ps_surface_copy_page (void *abstract_surface)
     cairo_ps_surface_t *surface = abstract_surface;
     int width = surface->image->width;
     int height = surface->image->height;
-    FILE *file = surface->file;
+    cairo_output_stream_t *stream = surface->stream;
 
     int i, x, y;
 
     cairo_solid_pattern_t white_pattern;
-    char *rgb, *compressed;
-    long rgb_size, compressed_size;
+    unsigned char *rgb, *compressed;
+    unsigned long rgb_size, compressed_size;
 
     rgb_size = 3 * width * height;
     rgb = malloc (rgb_size);
@@ -338,9 +254,9 @@ _cairo_ps_surface_copy_page (void *abstract_surface)
     /* PostScript can not represent the alpha channel, so we blend the
        current image over a white RGB surface to eliminate it. */
 
-    _cairo_pattern_init_solid (&white_pattern, 1.0, 1.0, 1.0);
+    _cairo_pattern_init_solid (&white_pattern, CAIRO_COLOR_WHITE);
 
-    _cairo_surface_composite (CAIRO_OPERATOR_OVER_REVERSE,
+    _cairo_surface_composite (CAIRO_OPERATOR_DEST_OVER,
 			      &white_pattern.base,
 			      NULL,
 			      &surface->image->base,
@@ -364,34 +280,34 @@ _cairo_ps_surface_copy_page (void *abstract_surface)
     compress (compressed, &compressed_size, rgb, rgb_size);
 
     /* Page header */
-    fprintf (file, "%%%%Page: %d\n", ++surface->pages);
+    _cairo_output_stream_printf (stream, "%%%%Page: %d\n", ++surface->pages);
 
-    fprintf (file, "gsave\n");
+    _cairo_output_stream_printf (stream, "gsave\n");
 
     /* Image header goop */
-    fprintf (file, "%g %g translate\n", 0.0, surface->height_inches * 72.0);
-    fprintf (file, "%g %g scale\n", 72.0 / surface->x_ppi, 72.0 / surface->y_ppi);
-    fprintf (file, "/DeviceRGB setcolorspace\n");
-    fprintf (file, "<<\n");
-    fprintf (file, "	/ImageType 1\n");
-    fprintf (file, "	/Width %d\n", width);
-    fprintf (file, "	/Height %d\n", height);
-    fprintf (file, "	/BitsPerComponent 8\n");
-    fprintf (file, "	/Decode [ 0 1 0 1 0 1 ]\n");
-    fprintf (file, "	/DataSource currentfile /FlateDecode filter\n");
-    fprintf (file, "	/ImageMatrix [ 1 0 0 -1 0 1 ]\n");
-    fprintf (file, ">>\n");
-    fprintf (file, "image\n");
+    _cairo_output_stream_printf (stream, "%f %f translate\n",
+				 0.0, surface->height_in_points);
+    _cairo_output_stream_printf (stream, "/DeviceRGB setcolorspace\n");
+    _cairo_output_stream_printf (stream, "<<\n");
+    _cairo_output_stream_printf (stream, "	/ImageType 1\n");
+    _cairo_output_stream_printf (stream, "	/Width %d\n", width);
+    _cairo_output_stream_printf (stream, "	/Height %d\n", height);
+    _cairo_output_stream_printf (stream, "	/BitsPerComponent 8\n");
+    _cairo_output_stream_printf (stream, "	/Decode [ 0 1 0 1 0 1 ]\n");
+    _cairo_output_stream_printf (stream, "	/DataSource currentfile /FlateDecode filter\n");
+    _cairo_output_stream_printf (stream, "	/ImageMatrix [ 1 0 0 -1 0 1 ]\n");
+    _cairo_output_stream_printf (stream, ">>\n");
+    _cairo_output_stream_printf (stream, "image\n");
 
     /* Compressed image data */
-    fwrite (compressed, 1, compressed_size, file);
+    _cairo_output_stream_write (stream, compressed, compressed_size);
 
-    fprintf (file, "showpage\n");
+    _cairo_output_stream_printf (stream, "showpage\n");
 
-    fprintf (file, "grestore\n");
+    _cairo_output_stream_printf (stream, "grestore\n");
 
     /* Page footer */
-    fprintf (file, "%%%%EndPage\n");
+    _cairo_output_stream_printf (stream, "%%%%EndPage\n");
 
     free (compressed);
     BAIL1:
@@ -424,20 +340,39 @@ _cairo_ps_surface_set_clip_region (void *abstract_surface,
     return _cairo_image_surface_set_clip_region (surface->image, region);
 }
 
+static cairo_int_status_t
+_cairo_ps_surface_get_extents (void		 *abstract_surface,
+			       cairo_rectangle_t *rectangle)
+{
+    cairo_ps_surface_t *surface = abstract_surface;
+
+    rectangle->x = 0;
+    rectangle->y = 0;
+
+    /* XXX: The conversion to integers here is pretty bogus, (not to
+     * mention the aribitray limitation of width to a short(!). We
+     * may need to come up with a better interface for get_size.
+     */
+    rectangle->width  = (surface->width_in_points + 0.5);
+    rectangle->height = (surface->height_in_points + 0.5);
+
+    return CAIRO_STATUS_SUCCESS;
+}
+
 static const cairo_surface_backend_t cairo_ps_surface_backend = {
     _cairo_ps_surface_create_similar,
-    _cairo_ps_surface_destroy,
-    _cairo_ps_surface_pixels_per_inch,
+    _cairo_ps_surface_finish,
     _cairo_ps_surface_acquire_source_image,
-    _cairo_ps_surface_release_source_image,
+    NULL, /* release_source_image */
     _cairo_ps_surface_acquire_dest_image,
-    _cairo_ps_surface_release_dest_image,
-    _cairo_ps_surface_clone_similar,
-    _cairo_ps_surface_composite,
-    _cairo_ps_surface_fill_rectangles,
-    _cairo_ps_surface_composite_trapezoids,
+    NULL, /* release_dest_image */
+    NULL, /* clone_similar */
+    NULL, /* composite */
+    NULL, /* fill_rectangles */
+    NULL, /* composite_trapezoids */
     _cairo_ps_surface_copy_page,
     _cairo_ps_surface_show_page,
     _cairo_ps_surface_set_clip_region,
+    _cairo_ps_surface_get_extents,
     NULL /* show_glyphs */
 };

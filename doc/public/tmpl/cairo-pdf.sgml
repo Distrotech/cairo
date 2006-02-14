@@ -14,17 +14,7 @@ PDF Backend
 
 </para>
 
-<!-- ##### FUNCTION cairo_set_target_pdf ##### -->
-<para>
-
-</para>
-
-@cr: 
-@file: 
-@width_inches: 
-@height_inches: 
-@x_pixels_per_inch: 
-@y_pixels_per_inch: 
+<!-- ##### SECTION Stability_Level ##### -->
 
 
 <!-- ##### FUNCTION cairo_pdf_surface_create ##### -->
@@ -32,7 +22,27 @@ PDF Backend
 
 </para>
 
+@fp: 
+@width_inches: 
+@height_inches: 
+@x_pixels_per_inch: 
+@y_pixels_per_inch: 
+@Returns: 
+<!-- # Unused Parameters # -->
+@write_func: 
+@destroy_closure_func: 
+@closure: 
 @file: 
+
+
+<!-- ##### FUNCTION cairo_pdf_surface_create_for_callback ##### -->
+<para>
+
+</para>
+
+@write_func: 
+@destroy_closure_func: 
+@closure: 
 @width_inches: 
 @height_inches: 
 @x_pixels_per_inch: 

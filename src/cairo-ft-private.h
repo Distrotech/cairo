@@ -40,7 +40,7 @@
 #include <cairo-ft.h>
 #include <cairoint.h>
 
-#ifdef CAIRO_HAS_FT_FONT
+#if CAIRO_HAS_FT_FONT
 
 CAIRO_BEGIN_DECLS
 
@@ -48,7 +48,7 @@ CAIRO_BEGIN_DECLS
  * the different fonts-on-disk used by a document, so it can embed them
  */
 cairo_private cairo_unscaled_font_t *
-_cairo_ft_font_get_unscaled_font (cairo_font_t          *font);
+_cairo_ft_scaled_font_get_unscaled_font (cairo_scaled_font_t *scaled_font);
 
 cairo_private FT_Face
 _cairo_ft_unscaled_font_lock_face (cairo_unscaled_font_t *unscaled_font);

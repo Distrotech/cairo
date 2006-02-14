@@ -113,7 +113,9 @@ static const cairo_cache_arrangement_t cache_arrangements [] = {
 #define LIVE_ENTRY_P(cache, i) \
  (!((NULL_ENTRY_P((cache),(i))) || (DEAD_ENTRY_P((cache),(i)))))
 
-#ifdef CAIRO_DO_SANITY_CHECKING
+#ifdef NDEBUG
+#define _cache_sane_state(c) 
+#else
 static void 
 _cache_sane_state (cairo_cache_t *cache)
 {
@@ -125,8 +127,6 @@ _cache_sane_state (cairo_cache_t *cache)
     /* assert (cache->used_memory <= cache->max_memory); */
     assert (cache->live_entries <= cache->arrangement->size);   
 }
-#else
-#define _cache_sane_state(c) 
 #endif
 
 static void
@@ -351,8 +351,9 @@ _cairo_cache_init (cairo_cache_t *cache,
 #endif
 
 	cache->backend = backend;	
-	cache->entries = calloc (sizeof(cairo_cache_entry_base_t *),
-				 cache->arrangement->size);
+	cache->entries = calloc (cache->arrangement->size,
+				 sizeof(cairo_cache_entry_base_t *));
+				 
 	if (cache->entries == NULL)
 	    return CAIRO_STATUS_NO_MEMORY;
     }    

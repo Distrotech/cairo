@@ -25,11 +25,26 @@
  * Author: Carl D. Worth <cworth@isi.edu>
  */
 
+#if HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#if   HAVE_STDINT_H
+# include <stdint.h>
+#elif HAVE_INTTYPES_H
+# include <inttypes.h>
+#elif HAVE_SYS_INT_TYPES_H
+# include <sys/int_types.h>
+#else
+#error Cannot find definitions for fixed-width integral types (uint8_t, uint32_t, etc.)
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <png.h>
 
-#include "read_png.h"
+#include "cairo-test.h"
+#include "read-png.h"
 #include "xmalloc.h"
 
 static void
@@ -40,18 +55,18 @@ premultiply_data (png_structp   png,
     int i;
 
     for (i = 0; i < row_info->rowbytes; i += 4) {
-	unsigned char  *base = &data[i];
-	unsigned char  blue = base[0];
-	unsigned char  green = base[1];
-	unsigned char  red = base[2];
-	unsigned char  alpha = base[3];
-	unsigned long	p;
+	uint8_t *base = &data[i];
+	uint8_t  blue = base[0];
+	uint8_t  green = base[1];
+	uint8_t  red = base[2];
+	uint8_t  alpha = base[3];
+	uint32_t p;
 
 	red = ((unsigned) red * (unsigned) alpha + 127) / 255;
 	green = ((unsigned) green * (unsigned) alpha + 127) / 255;
 	blue = ((unsigned) blue * (unsigned) alpha + 127) / 255;
 	p = (alpha << 24) | (red << 16) | (green << 8) | (blue << 0);
-	memcpy (base, &p, sizeof (unsigned long));
+	memcpy (base, &p, sizeof (uint32_t));
     }
 }
 
@@ -76,12 +91,14 @@ read_png_argb32 (const char         *filename,
 
     file = fopen (filename, "rb");
     if (file == NULL) {
+	cairo_test_log ("Error: File not found: %s\n", filename);
 	return READ_PNG_FILE_NOT_FOUND;
     }
 
     sig_bytes = fread (png_sig, 1, PNG_SIG_SIZE, file);
     if (png_check_sig (png_sig, sig_bytes) == 0) {
         fclose (file);
+	cairo_test_log ("Error: File is not a PNG image: %s\n", filename);
 	return READ_PNG_FILE_NOT_PNG;
     }
 
@@ -92,6 +109,7 @@ read_png_argb32 (const char         *filename,
                                   NULL);
     if (png == NULL) {
         fclose (file);
+	cairo_test_log ("Error: Out of memory while reading %s\n", filename);
 	return READ_PNG_NO_MEMORY;
     }
 
@@ -99,6 +117,7 @@ read_png_argb32 (const char         *filename,
     if (info == NULL) {
         fclose (file);
         png_destroy_read_struct (&png, NULL, NULL);
+	cairo_test_log ("Error: Out of memory while reading %s\n", filename);
 	return READ_PNG_NO_MEMORY;
     }
 

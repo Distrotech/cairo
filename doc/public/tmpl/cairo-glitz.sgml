@@ -14,13 +14,7 @@ Glitz backend
 
 </para>
 
-<!-- ##### FUNCTION cairo_set_target_glitz ##### -->
-<para>
-
-</para>
-
-@cr: 
-@surface: 
+<!-- ##### SECTION Stability_Level ##### -->
 
 
 <!-- ##### FUNCTION cairo_glitz_surface_create ##### -->

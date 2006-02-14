@@ -68,7 +68,7 @@ _cairo_image_surface_create_for_pixman_image (pixman_image_t *pixman_image,
     surface->pixman_image = pixman_image;
 
     surface->format = format;
-    surface->data = (char *) pixman_image_get_data (pixman_image);
+    surface->data = (unsigned char *) pixman_image_get_data (pixman_image);
     surface->owns_data = 0;
 
     surface->width = pixman_image_get_width (pixman_image);
@@ -80,8 +80,8 @@ _cairo_image_surface_create_for_pixman_image (pixman_image_t *pixman_image,
 }
 
 cairo_image_surface_t *
-_cairo_image_surface_create_with_masks (char			*data,
-					cairo_format_masks_t	*format,
+_cairo_image_surface_create_with_masks (unsigned char	       *data,
+					cairo_format_masks_t   *format,
 					int			width,
 					int			height,
 					int			stride)
@@ -195,7 +195,7 @@ cairo_image_surface_create (cairo_format_t	format,
  *   be created because of lack of memory
  **/
 cairo_surface_t *
-cairo_image_surface_create_for_data (char		*data,
+cairo_image_surface_create_for_data (unsigned char     *data,
 				     cairo_format_t	format,
 				     int		width,
 				     int		height,
@@ -224,6 +224,38 @@ cairo_image_surface_create_for_data (char		*data,
     return &surface->base;
 }
 
+/**
+ * cairo_image_surface_get_width:
+ * @surface: a #cairo_image_surface_t
+ * 
+ * Get the width of the image surface in pixels.
+ * 
+ * Return value: the width of the surface in pixels.
+ **/
+int
+cairo_image_surface_get_width (cairo_surface_t *surface)
+{
+    cairo_image_surface_t *image_surface = (cairo_image_surface_t *) surface;
+
+    return image_surface->width;
+}
+
+/**
+ * cairo_image_surface_get_height:
+ * @surface: a #cairo_image_surface_t
+ * 
+ * Get the height of the image surface in pixels.
+ * 
+ * Return value: the height of the surface in pixels.
+ **/
+int
+cairo_image_surface_get_height (cairo_surface_t *surface)
+{
+    cairo_image_surface_t *image_surface = (cairo_image_surface_t *) surface;
+
+    return image_surface->height;
+}
+
 static cairo_surface_t *
 _cairo_image_surface_create_similar (void		*abstract_src,
 				     cairo_format_t	format,
@@ -234,33 +266,28 @@ _cairo_image_surface_create_similar (void		*abstract_src,
     return cairo_image_surface_create (format, width, height);
 }
 
-static void
-_cairo_image_abstract_surface_destroy (void *abstract_surface)
+static cairo_status_t
+_cairo_image_abstract_surface_finish (void *abstract_surface)
 {
     cairo_image_surface_t *surface = abstract_surface;
 
-    if (surface->pixman_image)
+    if (surface->pixman_image) {
 	pixman_image_destroy (surface->pixman_image);
+	surface->pixman_image = NULL;
+    }
 
     if (surface->owns_data) {
 	free (surface->data);
 	surface->data = NULL;
     }
 
-    free (surface);
+    return CAIRO_STATUS_SUCCESS;
 }
 
 void
 _cairo_image_surface_assume_ownership_of_data (cairo_image_surface_t *surface)
 {
     surface->owns_data = 1;
-}
-
-static double
-_cairo_image_surface_pixels_per_inch (void *abstract_surface)
-{
-    /* XXX: We'll want a way to let the user set this. */
-    return 96.0;
 }
 
 static cairo_status_t
@@ -327,17 +354,17 @@ _cairo_image_surface_clone_similar (void		*abstract_surface,
 
 cairo_status_t
 _cairo_image_surface_set_matrix (cairo_image_surface_t	*surface,
-				 cairo_matrix_t		*matrix)
+				 const cairo_matrix_t	*matrix)
 {
     pixman_transform_t pixman_transform;
 
-    pixman_transform.matrix[0][0] = _cairo_fixed_from_double (matrix->m[0][0]);
-    pixman_transform.matrix[0][1] = _cairo_fixed_from_double (matrix->m[1][0]);
-    pixman_transform.matrix[0][2] = _cairo_fixed_from_double (matrix->m[2][0]);
+    pixman_transform.matrix[0][0] = _cairo_fixed_from_double (matrix->xx);
+    pixman_transform.matrix[0][1] = _cairo_fixed_from_double (matrix->xy);
+    pixman_transform.matrix[0][2] = _cairo_fixed_from_double (matrix->x0);
 
-    pixman_transform.matrix[1][0] = _cairo_fixed_from_double (matrix->m[0][1]);
-    pixman_transform.matrix[1][1] = _cairo_fixed_from_double (matrix->m[1][1]);
-    pixman_transform.matrix[1][2] = _cairo_fixed_from_double (matrix->m[2][1]);
+    pixman_transform.matrix[1][0] = _cairo_fixed_from_double (matrix->yx);
+    pixman_transform.matrix[1][1] = _cairo_fixed_from_double (matrix->yy);
+    pixman_transform.matrix[1][2] = _cairo_fixed_from_double (matrix->y0);
 
     pixman_transform.matrix[2][0] = 0;
     pixman_transform.matrix[2][1] = 0;
@@ -414,32 +441,40 @@ _cairo_image_surface_set_attributes (cairo_image_surface_t      *surface,
     return status;
 }
 
+/* XXX: I think we should fix pixman to match the names/order of the
+ * cairo operators, but that will likely be better done at the same
+ * time the X server is ported to pixman, (which will change a lot of
+ * things in pixman I think).
+ */
 static pixman_operator_t
 _pixman_operator (cairo_operator_t operator)
 {
     switch (operator) {
     case CAIRO_OPERATOR_CLEAR:
 	return PIXMAN_OPERATOR_CLEAR;
-    case CAIRO_OPERATOR_SRC:
+
+    case CAIRO_OPERATOR_SOURCE:
 	return PIXMAN_OPERATOR_SRC;
-    case CAIRO_OPERATOR_DST:
-	return PIXMAN_OPERATOR_DST;
     case CAIRO_OPERATOR_OVER:
 	return PIXMAN_OPERATOR_OVER;
-    case CAIRO_OPERATOR_OVER_REVERSE:
-	return PIXMAN_OPERATOR_OVER_REVERSE;
     case CAIRO_OPERATOR_IN:
 	return PIXMAN_OPERATOR_IN;
-    case CAIRO_OPERATOR_IN_REVERSE:
-	return PIXMAN_OPERATOR_IN_REVERSE;
     case CAIRO_OPERATOR_OUT:
 	return PIXMAN_OPERATOR_OUT;
-    case CAIRO_OPERATOR_OUT_REVERSE:
-	return PIXMAN_OPERATOR_OUT_REVERSE;
     case CAIRO_OPERATOR_ATOP:
 	return PIXMAN_OPERATOR_ATOP;
-    case CAIRO_OPERATOR_ATOP_REVERSE:
+
+    case CAIRO_OPERATOR_DEST:
+	return PIXMAN_OPERATOR_DST;
+    case CAIRO_OPERATOR_DEST_OVER:
+	return PIXMAN_OPERATOR_OVER_REVERSE;
+    case CAIRO_OPERATOR_DEST_IN:
+	return PIXMAN_OPERATOR_IN_REVERSE;
+    case CAIRO_OPERATOR_DEST_OUT:
+	return PIXMAN_OPERATOR_OUT_REVERSE;
+    case CAIRO_OPERATOR_DEST_ATOP:
 	return PIXMAN_OPERATOR_ATOP_REVERSE;
+
     case CAIRO_OPERATOR_XOR:
 	return PIXMAN_OPERATOR_XOR;
     case CAIRO_OPERATOR_ADD:
@@ -587,7 +622,7 @@ _cairo_image_surface_composite_trapezoids (cairo_operator_t	operator,
      * somehow. */
     status = _cairo_image_surface_set_attributes (src, &attributes);
     if (CAIRO_OK (status))
-	pixman_composite_trapezoids (operator,
+	pixman_composite_trapezoids (_pixman_operator (operator),
 				     src->pixman_image,
 				     dst->pixman_image,
 				     render_src_x + attributes.x_offset,
@@ -597,18 +632,6 @@ _cairo_image_surface_composite_trapezoids (cairo_operator_t	operator,
     _cairo_pattern_release_surface (&dst->base, &src->base, &attributes);
 
     return status;
-}
-
-static cairo_int_status_t
-_cairo_image_surface_copy_page (void *abstract_surface)
-{
-    return CAIRO_INT_STATUS_UNSUPPORTED;
-}
-
-static cairo_int_status_t
-_cairo_image_surface_show_page (void *abstract_surface)
-{
-    return CAIRO_INT_STATUS_UNSUPPORTED;
 }
 
 static cairo_int_status_t
@@ -642,6 +665,27 @@ _cairo_image_surface_set_clip_region (cairo_image_surface_t *surface,
     return CAIRO_STATUS_SUCCESS;
 }
 
+static cairo_int_status_t
+_cairo_image_surface_get_extents (cairo_image_surface_t *surface,
+				  cairo_rectangle_t	*rectangle)
+{
+    rectangle->x = 0;
+    rectangle->y = 0;
+    rectangle->width  = surface->width;
+    rectangle->height = surface->height;
+
+    return CAIRO_STATUS_SUCCESS;
+}
+
+static cairo_int_status_t
+_cairo_image_abstract_surface_get_extents (void		     *abstract_surface,
+					   cairo_rectangle_t *rectangle)
+{
+    cairo_image_surface_t *surface = abstract_surface;
+
+    return _cairo_image_surface_get_extents (surface, rectangle);
+}
+
 /**
  * _cairo_surface_is_image:
  * @surface: a #cairo_surface_t
@@ -658,8 +702,7 @@ _cairo_surface_is_image (cairo_surface_t *surface)
 
 static const cairo_surface_backend_t cairo_image_surface_backend = {
     _cairo_image_surface_create_similar,
-    _cairo_image_abstract_surface_destroy,
-    _cairo_image_surface_pixels_per_inch,
+    _cairo_image_abstract_surface_finish,
     _cairo_image_surface_acquire_source_image,
     _cairo_image_surface_release_source_image,
     _cairo_image_surface_acquire_dest_image,
@@ -668,8 +711,9 @@ static const cairo_surface_backend_t cairo_image_surface_backend = {
     _cairo_image_surface_composite,
     _cairo_image_surface_fill_rectangles,
     _cairo_image_surface_composite_trapezoids,
-    _cairo_image_surface_copy_page,
-    _cairo_image_surface_show_page,
+    NULL, /* copy_page */
+    NULL, /* show_page */
     _cairo_image_abstract_surface_set_clip_region,
+    _cairo_image_abstract_surface_get_extents,
     NULL /* show_glyphs */
 };

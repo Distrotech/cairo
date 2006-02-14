@@ -14,14 +14,7 @@ XLib Backend
 
 </para>
 
-<!-- ##### FUNCTION cairo_set_target_drawable ##### -->
-<para>
-
-</para>
-
-@cr: 
-@dpy: 
-@drawable: 
+<!-- ##### SECTION Stability_Level ##### -->
 
 
 <!-- ##### FUNCTION cairo_xlib_surface_create ##### -->
@@ -31,9 +24,31 @@ XLib Backend
 
 @dpy: 
 @drawable: 
-@visual: 
 @format: 
-@colormap: 
 @Returns: 
+<!-- # Unused Parameters # -->
+@visual: 
+@colormap: 
+
+
+<!-- ##### FUNCTION cairo_xlib_surface_create_with_visual ##### -->
+<para>
+
+</para>
+
+@dpy: 
+@drawable: 
+@visual: 
+@Returns: 
+
+
+<!-- ##### FUNCTION cairo_xlib_surface_set_size ##### -->
+<para>
+
+</para>
+
+@surface: 
+@width: 
+@height: 
 
 

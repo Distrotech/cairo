@@ -14,27 +14,46 @@ PNG Backend
 
 </para>
 
-<!-- ##### FUNCTION cairo_set_target_png ##### -->
+<!-- ##### SECTION Stability_Level ##### -->
+
+
+<!-- ##### FUNCTION cairo_image_surface_create_from_png ##### -->
 <para>
 
 </para>
 
-@cr: 
-@file: 
-@format: 
-@width: 
-@height: 
+@filename: 
+@Returns: 
 
 
-<!-- ##### FUNCTION cairo_png_surface_create ##### -->
+<!-- ##### FUNCTION cairo_image_surface_create_from_png_stream ##### -->
 <para>
 
 </para>
 
-@file: 
-@format: 
-@width: 
-@height: 
+@read_func: 
+@closure: 
+@Returns: 
+
+
+<!-- ##### FUNCTION cairo_surface_write_to_png ##### -->
+<para>
+
+</para>
+
+@surface: 
+@filename: 
+@Returns: 
+
+
+<!-- ##### FUNCTION cairo_surface_write_to_png_stream ##### -->
+<para>
+
+</para>
+
+@surface: 
+@write_func: 
+@closure: 
 @Returns: 
 
 

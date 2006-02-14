@@ -38,77 +38,78 @@ cairo_matrix_t
     
 </para>
 
-<!-- ##### TYPEDEF cairo_matrix_t ##### -->
+<!-- ##### SECTION Stability_Level ##### -->
+
+
+<!-- ##### STRUCT cairo_matrix_t ##### -->
 <para>
 
 </para>
 
+@xx: 
+@yx: 
+@xy: 
+@yy: 
+@x0: 
+@y0: 
 
-<!-- ##### FUNCTION cairo_matrix_create ##### -->
-<para>
-
-</para>
-
-@Returns: 
-
-
-<!-- ##### FUNCTION cairo_matrix_destroy ##### -->
-<para>
-
-</para>
-
-@matrix: 
-
-
-<!-- ##### FUNCTION cairo_matrix_copy ##### -->
+<!-- ##### FUNCTION cairo_matrix_init ##### -->
 <para>
 
 </para>
 
 @matrix: 
-@other: 
-@Returns: 
-
-
-<!-- ##### FUNCTION cairo_matrix_set_identity ##### -->
-<para>
-
-</para>
-
-@matrix: 
-@Returns: 
-
-
-<!-- ##### FUNCTION cairo_matrix_set_affine ##### -->
-<para>
-
-</para>
-
-@matrix: 
-@a: 
-@b: 
-@c: 
-@d: 
-@tx: 
-@ty: 
-@Returns: 
+@xx: 
+@yx: 
+@xy: 
+@yy: 
+@x0: 
+@y0: 
 <!-- # Unused Parameters # -->
-@cr: 
-
-
-<!-- ##### FUNCTION cairo_matrix_get_affine ##### -->
-<para>
-
-</para>
-
-@matrix: 
+@Param7: 
 @a: 
 @b: 
 @c: 
 @d: 
 @tx: 
 @ty: 
-@Returns: 
+
+
+<!-- ##### FUNCTION cairo_matrix_init_identity ##### -->
+<para>
+
+</para>
+
+@matrix: 
+
+
+<!-- ##### FUNCTION cairo_matrix_init_translate ##### -->
+<para>
+
+</para>
+
+@matrix: 
+@tx: 
+@ty: 
+
+
+<!-- ##### FUNCTION cairo_matrix_init_scale ##### -->
+<para>
+
+</para>
+
+@matrix: 
+@sx: 
+@sy: 
+
+
+<!-- ##### FUNCTION cairo_matrix_init_rotate ##### -->
+<para>
+
+</para>
+
+@matrix: 
+@radians: 
 
 
 <!-- ##### FUNCTION cairo_matrix_translate ##### -->
@@ -119,6 +120,7 @@ cairo_matrix_t
 @matrix: 
 @tx: 
 @ty: 
+<!-- # Unused Parameters # -->
 @Returns: 
 
 
@@ -130,6 +132,7 @@ cairo_matrix_t
 @matrix: 
 @sx: 
 @sy: 
+<!-- # Unused Parameters # -->
 @Returns: 
 
 
@@ -140,6 +143,7 @@ cairo_matrix_t
 
 @matrix: 
 @radians: 
+<!-- # Unused Parameters # -->
 @Returns: 
 
 
@@ -160,6 +164,7 @@ cairo_matrix_t
 @result: 
 @a: 
 @b: 
+<!-- # Unused Parameters # -->
 @Returns: 
 
 
@@ -171,6 +176,7 @@ cairo_matrix_t
 @matrix: 
 @dx: 
 @dy: 
+<!-- # Unused Parameters # -->
 @Returns: 
 
 
@@ -181,6 +187,7 @@ cairo_matrix_t
 @matrix: 
 @x: 
 @y: 
+<!-- # Unused Parameters # -->
 @Returns: 
 
 <!--

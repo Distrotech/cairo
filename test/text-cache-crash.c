@@ -60,26 +60,28 @@
  *   fixed the orginal test case.
  */
 
-#include "cairo_test.h"
+#include "cairo-test.h"
 
 cairo_test_t test = {
-    "text_cache_crash",
+    "text-cache-crash",
     "Test case for bug causing an assertion failure in _cairo_cache_lookup",
     0, 0,
 };
 #include <cairo.h>
 
-static void
+static cairo_test_status_t
 draw (cairo_t *cr, int width, int height)
 {
     /* Once there was a bug that choked when selecting the same font twice. */
-    cairo_select_font(cr, "sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_scale_font(cr, 40.0);
+    cairo_select_font_face (cr, "sans",
+			    CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size (cr, 40.0);
 
-    cairo_select_font(cr, "sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_scale_font(cr, 40.0);
-    cairo_move_to(cr, 10, 50);
-    cairo_show_text(cr, "hello");
+    cairo_select_font_face (cr, "sans",
+			    CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size (cr, 40.0);
+    cairo_move_to (cr, 10, 50);
+    cairo_show_text (cr, "hello");
 
     /* Then there was a bug that choked when selecting a font too big
      * for the cache. */
@@ -102,9 +104,11 @@ Aborted
    But in the meantime, I need "make check" not to destory work, so
    I'm commenting this test out for now.
 
-    cairo_scale_font (cr, 500);
+    cairo_set_font_size (cr, 500);
     cairo_show_text (cr, "hello");
 */
+
+    return CAIRO_TEST_SUCCESS;
 }
 
 int

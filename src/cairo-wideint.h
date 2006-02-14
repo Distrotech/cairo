@@ -1,5 +1,5 @@
 /*
- * $Id: cairo-wideint.h,v 1.6 2005-01-19 15:11:14 cworth Exp $
+ * $Id: cairo-wideint.h,v 1.10 2005-05-10 19:42:32 cworth Exp $
  *
  * Copyright © 2004 Keith Packard
  *
@@ -38,7 +38,15 @@
 #ifndef CAIRO_WIDEINT_H
 #define CAIRO_WIDEINT_H
 
-#include <stdint.h>
+#if   HAVE_STDINT_H
+# include <stdint.h>
+#elif HAVE_INTTYPES_H
+# include <inttypes.h>
+#elif HAVE_SYS_INT_TYPES_H
+# include <sys/int_types.h>
+#else
+#error Cannot find definitions for fixed-width integral types (uint8_t, uint32_t, etc.)
+#endif
 
 /*
  * 64-bit datatypes.  Two separate implementations, one using
