@@ -48,9 +48,9 @@ format_from_visual(XCBConnection *c, XCBVISUALID visual)
     if(!r)
 	return nil;
 
-    for(si = XCBRenderQueryPictFormatsScreens(r); si.rem; XCBRenderPICTSCREENNext(&si))
-	for(di = XCBRenderPICTSCREENDepths(si.data); di.rem; XCBRenderPICTDEPTHNext(&di))
-	    for(vi = XCBRenderPICTDEPTHVisuals(di.data); vi.rem; XCBRenderPICTVISUALNext(&vi))
+    for(si = XCBRenderQueryPictFormatsScreensIter(r); si.rem; XCBRenderPICTSCREENNext(&si))
+	for(di = XCBRenderPICTSCREENDepthsIter(si.data); di.rem; XCBRenderPICTDEPTHNext(&di))
+	    for(vi = XCBRenderPICTDEPTHVisualsIter(di.data); vi.rem; XCBRenderPICTVISUALNext(&vi))
 		if(vi.data->visual.id == visual.id)
 		{
 		    XCBRenderPICTFORMAT ret = vi.data->format;
@@ -123,7 +123,7 @@ format_from_cairo(XCBConnection *c, cairo_format_t fmt)
     if(!r)
 	return ret;
 
-    for(fi = XCBRenderQueryPictFormatsFormats(r); fi.rem; XCBRenderPICTFORMINFONext(&fi))
+    for(fi = XCBRenderQueryPictFormatsFormatsIter(r); fi.rem; XCBRenderPICTFORMINFONext(&fi))
     {
 	const XCBRenderDIRECTFORMAT *t, *f;
 	if(fi.data->type != XCBRenderPictTypeDirect)
@@ -231,6 +231,7 @@ _CAIRO_FORMAT_DEPTH (cairo_format_t format)
 static cairo_surface_t *
 _cairo_xcb_surface_create_similar (void		*abstract_src,
 				    cairo_format_t	format,
+				    int			drawable,
 				    int			width,
 				    int			height)
 {
@@ -314,7 +315,7 @@ static int
 bytes_per_line(XCBConnection *c, int width, int bpp)
 {
     int bitmap_pad = XCBGetSetup(c)->bitmap_format_scanline_pad;
-    return (bpp * width + bitmap_pad - 1) & -bitmap_pad;
+    return ((bpp * width + bitmap_pad - 1) & -bitmap_pad) >> 3;
 }
 
 static cairo_image_surface_t *
@@ -400,7 +401,7 @@ _cairo_xcb_surface_set_image (void			*abstract_surface,
 
     _cairo_xcb_surface_ensure_gc (surface);
     bpp = bits_per_pixel(surface->dpy, image->depth);
-    data_len = bytes_per_line(surface->dpy, surface->width, bpp) * surface->height;
+    data_len = bytes_per_line(surface->dpy, image->width, bpp) * image->height;
     XCBPutImage(surface->dpy, ZPixmap, surface->drawable, surface->gc,
 	      image->width,
 	      image->height,
@@ -508,7 +509,7 @@ _cairo_xcb_surface_clone_similar (cairo_surface_t	*src,
     src_image = _cairo_surface_get_image (src);
 
     clone = (cairo_xcb_surface_t *)
-	_cairo_xcb_surface_create_similar (template, format,
+	_cairo_xcb_surface_create_similar (template, format, 0,
 					    src_image->width,
 					    src_image->height);
     if (clone == NULL)

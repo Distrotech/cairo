@@ -141,7 +141,7 @@ AC_ARG_ENABLE(gl,
   [use_gl=$enableval], [use_gl=yes])
 
 if test "x$use_gl" = "xyes"; then
-  PKG_CHECK_MODULES(GL, glitz >= 0.1.2, [
+  PKG_CHECK_MODULES(GL, glitz >= 0.1.5, [
     GL_REQUIRES=glitz
     use_gl=yes], [use_gl="no (requires glitz http://freedesktop.org/software/glitz)"])
 fi
@@ -158,6 +158,20 @@ AC_SUBST(GL_LIBS)
 AC_SUBST(GL_CFLAGS)
 AC_SUBST(GL_SURFACE_FEATURE)
 AC_SUBST(GL_REQUIRES)
+
+dnl ===========================================================================
+
+AC_ARG_ENABLE(sanity-checking,
+  [  --disable-sanity        Disable cairo's sanity checking routines],
+  [check_sanity=$enableval], [check_sanity=yes])
+
+if test "x$check_sanity" != "xyes"; then
+  SANITY_CHECKING_FEATURE=CAIRO_NO_SANITY_CHECKING
+else
+  SANITY_CHECKING_FEATURE=CAIRO_DO_SANITY_CHECKING
+fi
+
+AC_SUBST(SANITY_CHECKING_FEATURE)
 
 dnl ===========================================================================
 
@@ -210,6 +224,22 @@ CAIRO_LIBS="$CAIRO_LIBS $FREETYPE_LIBS"
 
 AC_SUBST(CAIRO_CFLAGS)
 AC_SUBST(CAIRO_LIBS)
+
+dnl ===========================================================================
+
+dnl Checks for precise integer types
+AC_CHECK_TYPES([uint64_t, uint128_t])
+
+dnl Use lots of warning flags with GCC
+
+WARN_CFLAGS=""
+
+if test "x$GCC" = "xyes"; then
+	WARN_CFLAGS="-Wall -Wpointer-arith -Wstrict-prototypes \
+	-Wmissing-prototypes -Wmissing-declarations \
+	-Wnested-externs -fno-strict-aliasing"
+fi
+AC_SUBST(WARN_CFLAGS)
 
 dnl ===========================================================================
 

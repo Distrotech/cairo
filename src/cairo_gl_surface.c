@@ -1,26 +1,25 @@
-/*
- * Copyright © 2002 University of Southern California
+/* cairo - a vector graphics library with display and print output
+ *
+ * Copyright © 2004 David Reveman
  *
  * Permission to use, copy, modify, distribute, and sell this software
  * and its documentation for any purpose is hereby granted without
  * fee, provided that the above copyright notice appear in all copies
  * and that both that copyright notice and this permission notice
- * appear in supporting documentation, and that the name of the
- * University of Southern California not be used in advertising or
- * publicity pertaining to distribution of the software without
- * specific, written prior permission. The University of Southern
- * California makes no representations about the suitability of this
- * software for any purpose.  It is provided "as is" without express
- * or implied warranty.
+ * appear in supporting documentation, and that the name of David
+ * Reveman not be used in advertising or publicity pertaining to
+ * distribution of the software without specific, written prior
+ * permission. David Reveman makes no representations about the
+ * suitability of this software for any purpose.  It is provided "as
+ * is" without express or implied warranty.
  *
- * THE UNIVERSITY OF SOUTHERN CALIFORNIA DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL THE UNIVERSITY OF
- * SOUTHERN CALIFORNIA BE LIABLE FOR ANY SPECIAL, INDIRECT OR
- * CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
- * NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
- * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * DAVID REVEMAN DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS
+ * SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ * FITNESS, IN NO EVENT SHALL DAVID REVEMAN BE LIABLE FOR ANY SPECIAL,
+ * INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER
+ * RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
+ * IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
  * Author: David Reveman <c99drn@cs.umu.se>
  */
@@ -91,16 +90,19 @@ struct cairo_gl_surface {
     (surface->features & GLITZ_FEATURE_TEXTURE_MIRRORED_REPEAT_MASK)
 
 #define CAIRO_GL_COMPOSITE_TRAPEZOIDS_SUPPORT(surface) \
-    ((surface->format->stencil_size >= \
-        ((surface->hints & GLITZ_HINT_CLIPPING_MASK)? 2: 1)) || \
-    CAIRO_GL_OFFSCREEN_SUPPORT (surface))
+    (surface->format->stencil_size >= \
+        ((surface->hints & GLITZ_HINT_CLIPPING_MASK)? 2: 1))
 
-#define CAIRO_GL_SURFACE_IS_OFFSCREEN(surface) \
-    (surface->hints & GLITZ_HINT_OFFSCREEN_MASK)
+#define CAIRO_GL_SURFACE_IS_DRAWABLE(surface) \
+    ((surface->hints & GLITZ_HINT_OFFSCREEN_MASK)? \
+        surface->format->draw.offscreen: surface->format->draw.onscreen)
 
 #define CAIRO_GL_SURFACE_IS_SOLID(surface) \
     ((surface->hints & GLITZ_HINT_PROGRAMMATIC_MASK) && \
      (surface->pattern.type == CAIRO_PATTERN_SOLID))
+
+#define CAIRO_GL_SURFACE_MULTISAMPLE(surface) \
+    (surface->hints & GLITZ_HINT_MULTISAMPLE_MASK)
 
 static void
 _cairo_gl_surface_destroy (void *abstract_surface)
@@ -130,6 +132,8 @@ _cairo_gl_surface_get_image (void *abstract_surface)
     int width, height;
     int rowstride;
     cairo_format_masks_t format;
+    glitz_pixel_buffer_t *buffer;
+    glitz_pixel_format_t pf;
 
     if (surface->hints & GLITZ_HINT_PROGRAMMATIC_MASK)
 	return _cairo_pattern_get_image (&surface->pattern,
@@ -138,23 +142,57 @@ _cairo_gl_surface_get_image (void *abstract_surface)
     width = glitz_surface_get_width (surface->surface);
     height = glitz_surface_get_height (surface->surface);
 
-    rowstride = (width * (surface->format->bpp / 8) + 3) & -4;
+    if (surface->format->red_size > 0) {
+	format.bpp = 32;
+	
+	if (surface->format->alpha_size > 0)
+	    format.alpha_mask = 0xff000000;
+	else
+	    format.alpha_mask = 0x0;
+	
+	format.red_mask = 0xff0000;
+	format.green_mask = 0xff00;
+	format.blue_mask = 0xff;
+    } else {
+	format.bpp = 8;
+	format.blue_mask = format.green_mask = format.red_mask = 0x0;
+	format.alpha_mask = 0xff;
+    }
 
-    pixels = (char *) malloc (sizeof (char) * height * rowstride);
+    rowstride = (((width * format.bpp) / 8) + 3) & -4;
 
-    glitz_surface_read_pixels (surface->surface, 0, 0, width, height, pixels);
+    pf.masks.bpp = format.bpp;
+    pf.masks.alpha_mask = format.alpha_mask;
+    pf.masks.red_mask = format.red_mask;
+    pf.masks.green_mask = format.green_mask;
+    pf.masks.blue_mask = format.blue_mask;
+    pf.xoffset = 0;
+    pf.skip_lines = 0;
+    pf.bytes_per_line = rowstride;
+    pf.scanline_order = GLITZ_PIXEL_SCANLINE_ORDER_TOP_DOWN;
 
-    format.bpp = surface->format->bpp;
-    format.red_mask = surface->format->red_mask;
-    format.green_mask = surface->format->green_mask;
-    format.blue_mask = surface->format->blue_mask;
-    format.alpha_mask = surface->format->alpha_mask;
+    pixels = (char *) malloc (height * rowstride);
+    if (!pixels)
+	return NULL;
 
+    buffer = glitz_pixel_buffer_create_for_data (pixels, &pf);
+    if (!buffer) {
+	free (pixels);
+	return NULL;
+    }
+    
+    glitz_get_pixels (surface->surface,
+		      0, 0,
+		      width, height,
+		      buffer);
+
+    glitz_pixel_buffer_destroy (buffer);
+    
     image = (cairo_image_surface_t *)
         _cairo_image_surface_create_with_masks (pixels,
 						&format,
 						width, height, rowstride);
-
+    
     _cairo_image_surface_assume_ownership_of_data (image);
 
     _cairo_image_surface_set_repeat (image, surface->base.repeat);
@@ -168,10 +206,42 @@ _cairo_gl_surface_set_image (void *abstract_surface,
 			     cairo_image_surface_t *image)
 {
     cairo_gl_surface_t *surface = abstract_surface;
+    glitz_pixel_buffer_t *buffer;
+    glitz_pixel_format_t pf;
 
-    glitz_surface_draw_pixels (surface->surface, 0, 0,
-			       image->width, image->height, image->data);
+    if (image->depth > 8) {
+	pf.masks.bpp = 32;
+	
+	if (surface->format->alpha_size)
+	    pf.masks.alpha_mask = 0xff000000;
+	else
+	    pf.masks.alpha_mask = 0x0;
+	
+	pf.masks.red_mask = 0xff0000;
+	pf.masks.green_mask = 0xff00;
+	pf.masks.blue_mask = 0xff;
+    } else {
+	pf.masks.bpp = 8;
+	pf.masks.alpha_mask = 0xff;
+	pf.masks.red_mask = pf.masks.green_mask = pf.masks.blue_mask = 0x0;
+    }
 
+    pf.xoffset = 0;
+    pf.skip_lines = 0;
+    pf.bytes_per_line = (((image->width * pf.masks.bpp) / 8) + 3) & -4;
+    pf.scanline_order = GLITZ_PIXEL_SCANLINE_ORDER_TOP_DOWN;
+
+    buffer = glitz_pixel_buffer_create_for_data (image->data, &pf);
+    if (!buffer)
+	return CAIRO_STATUS_NO_MEMORY;
+
+    glitz_put_pixels (surface->surface,
+		      0, 0,
+		      image->width, image->height,
+		      buffer);
+
+    glitz_pixel_buffer_destroy (buffer);
+    
     return CAIRO_STATUS_SUCCESS;
 }
 
@@ -204,16 +274,8 @@ _cairo_gl_surface_set_matrix (void *abstract_surface, cairo_matrix_t *matrix)
 static cairo_status_t
 _cairo_gl_surface_set_filter (void *abstract_surface, cairo_filter_t filter)
 {
-    static glitz_convolution_t gaussian = {
-        {
-            {0, 1 << 16, 0},
-            {1 << 16, 4 << 16, 1 << 16},
-            {0, 1 << 16, 0}
-        }
-    };
     cairo_gl_surface_t *surface = abstract_surface;
     glitz_filter_t gl_filter;
-    glitz_convolution_t *convolution = NULL;
 
     if (!surface->surface)
 	return CAIRO_STATUS_SUCCESS;
@@ -231,10 +293,6 @@ _cairo_gl_surface_set_filter (void *abstract_surface, cairo_filter_t filter)
     case CAIRO_FILTER_NEAREST:
 	gl_filter = GLITZ_FILTER_NEAREST;
 	break;
-    case CAIRO_FILTER_GAUSSIAN:
-	if (CAIRO_GL_CONVOLUTION_SUPPORT (surface))
-	    convolution = &gaussian;
-	/* fall-through */
     case CAIRO_FILTER_BILINEAR:
 	gl_filter = GLITZ_FILTER_BILINEAR;
 	break;
@@ -243,7 +301,6 @@ _cairo_gl_surface_set_filter (void *abstract_surface, cairo_filter_t filter)
     }
 
     glitz_surface_set_filter (surface->surface, gl_filter);
-    glitz_surface_set_convolution (surface->surface, convolution);
 
     return CAIRO_STATUS_SUCCESS;
 }
@@ -321,15 +378,42 @@ _glitz_format (cairo_format_t format)
 static cairo_surface_t *
 _cairo_gl_surface_create_similar (void *abstract_src,
 				  cairo_format_t format,
+				  int drawable,
 				  int width,
 				  int height)
 {
     cairo_gl_surface_t *src = abstract_src;
     glitz_surface_t *surface;
     cairo_surface_t *crsurface;
+    glitz_format_t *glitz_format;
+    unsigned long option_mask;
+    glitz_format_name_t format_name = _glitz_format (format);
+    
+    option_mask = GLITZ_FORMAT_OPTION_OFFSCREEN_MASK;
 
-    surface = glitz_surface_create_similar (src->surface,
-					    _glitz_format (format),
+    if (drawable)
+	option_mask |= GLITZ_FORMAT_OPTION_READDRAW_MASK;
+    else
+	option_mask |= GLITZ_FORMAT_OPTION_READONLY_MASK;
+
+    if (src->format->multisample.samples < 2)
+	option_mask |= GLITZ_FORMAT_OPTION_NO_MULTISAMPLE_MASK;
+    
+    glitz_format =
+	glitz_surface_find_similar_standard_format (src->surface, option_mask,
+						    format_name);
+    if (glitz_format == NULL) {
+	option_mask &= ~GLITZ_FORMAT_OPTION_READDRAW_MASK;
+	glitz_format =
+	    glitz_surface_find_similar_standard_format (src->surface,
+							option_mask,
+							format_name);
+    }
+    
+    if (glitz_format == NULL)
+	return NULL;
+
+    surface = glitz_surface_create_similar (src->surface, glitz_format,
 					    width, height);
     if (surface == NULL)
 	return NULL;
@@ -352,7 +436,7 @@ _cairo_gl_surface_clone_similar (cairo_surface_t *src,
     src_image = _cairo_surface_get_image (src);
 
     clone = (cairo_gl_surface_t *)
-        _cairo_gl_surface_create_similar (template, format,
+        _cairo_gl_surface_create_similar (template, format, 0,
 					  src_image->width,
 					  src_image->height);
     if (clone == NULL)
@@ -393,10 +477,8 @@ _cairo_gl_surface_composite (cairo_operator_t operator,
     if (glitz_surface_get_status (dst->surface))
 	return CAIRO_STATUS_NO_TARGET_SURFACE;
 
-    /* If destination surface is offscreen, then offscreen drawing support is
-       required. */
-    if (CAIRO_GL_SURFACE_IS_OFFSCREEN (dst) &&
-	(!CAIRO_GL_OFFSCREEN_SUPPORT (dst)))
+    /* Make sure target surface is drawable */
+    if (!CAIRO_GL_SURFACE_IS_DRAWABLE (dst))
 	return CAIRO_INT_STATUS_UNSUPPORTED;
 
     /* We need multi-texturing or offscreen drawing when compositing with
@@ -456,10 +538,8 @@ _cairo_gl_surface_fill_rectangles (void *abstract_surface,
     if (glitz_surface_get_status (surface->surface))
 	return CAIRO_STATUS_NO_TARGET_SURFACE;
 
-    /* If destination surface is offscreen, then offscreen drawing support is
-       required. */
-    if (CAIRO_GL_SURFACE_IS_OFFSCREEN (surface) &&
-	(!CAIRO_GL_OFFSCREEN_SUPPORT (surface)))
+    /* Make sure target surface is drawable */
+    if (!CAIRO_GL_SURFACE_IS_DRAWABLE (surface))
 	return CAIRO_INT_STATUS_UNSUPPORTED;
 
     glitz_color.red = color->red_short;
@@ -498,6 +578,34 @@ _cairo_gl_surface_fill_trapezoids (cairo_gl_surface_t *surface,
     return CAIRO_STATUS_SUCCESS;
 }
 
+static int
+_cairo_gl_extract_rectangle (cairo_trapezoid_t *trap,
+			     cairo_rectangle_t *rect)
+{
+    if (trap->left.p1.x == trap->left.p2.x &&
+	trap->right.p1.x == trap->right.p2.x &&
+	trap->left.p1.y == trap->right.p1.y &&
+	trap->left.p2.y == trap->right.p2.y &&
+	_cairo_fixed_is_integer (trap->left.p1.x) &&
+	_cairo_fixed_is_integer (trap->left.p1.y) &&
+	_cairo_fixed_is_integer (trap->left.p2.x) &&
+	_cairo_fixed_is_integer (trap->left.p2.y) &&
+	_cairo_fixed_is_integer (trap->right.p1.x) &&
+	_cairo_fixed_is_integer (trap->right.p1.y) &&
+	_cairo_fixed_is_integer (trap->right.p2.x) &&
+	_cairo_fixed_is_integer (trap->right.p2.y)) {
+	
+	rect->x = _cairo_fixed_integer_part (trap->left.p1.x);
+	rect->y = _cairo_fixed_integer_part (trap->left.p1.y);
+	rect->width = _cairo_fixed_integer_part (trap->right.p1.x) - rect->x;
+	rect->height = _cairo_fixed_integer_part (trap->left.p2.y) - rect->y;
+	
+	return 1;
+    }
+    
+    return 0;
+}
+
 static cairo_int_status_t
 _cairo_gl_surface_composite_trapezoids (cairo_operator_t operator,
 					cairo_surface_t *generic_src,
@@ -515,10 +623,8 @@ _cairo_gl_surface_composite_trapezoids (cairo_operator_t operator,
     if (glitz_surface_get_status (dst->surface))
 	return CAIRO_STATUS_NO_TARGET_SURFACE;
 
-    /* If destination surface is offscreen, then offscreen drawing support is
-       required. */
-    if (CAIRO_GL_SURFACE_IS_OFFSCREEN (dst) &&
-	(!CAIRO_GL_OFFSCREEN_SUPPORT (dst)))
+    /* Make sure target surface is drawable */
+    if (!CAIRO_GL_SURFACE_IS_DRAWABLE (dst))
 	return CAIRO_INT_STATUS_UNSUPPORTED;
 
     /* Need to get current hints as clipping may have changed. */
@@ -527,13 +633,19 @@ _cairo_gl_surface_composite_trapezoids (cairo_operator_t operator,
     /* Solid source? */
     if ((generic_src->backend == dst->base.backend) &&
 	(src->pattern.type == CAIRO_PATTERN_SOLID)) {
+	cairo_rectangle_t rect;
 
-	/* We can use fill trapezoids if only one trapezoid should be drawn or
-	   if solid color alpha is 1.0. If composite trapezoid support
-	   is missing we always use fill trapezoids. */
-	if ((num_traps == 1) ||
-            (src->pattern.color.alpha == 1.0) ||
-            (!CAIRO_GL_COMPOSITE_TRAPEZOIDS_SUPPORT (dst)))
+	/* Check to see if we can represent these traps as a rectangle. */
+	if (num_traps == 1 && _cairo_gl_extract_rectangle (traps, &rect))
+	    return _cairo_gl_surface_fill_rectangles (dst, operator,
+						      &src->pattern.color,
+						      &rect, 1);
+	
+	/* If we're not using software multi-sampling, then we can use
+	   fill trapezoids if only one trapezoid should be drawn or if
+	   solid color alpha is 1.0. */
+	if ((!CAIRO_GL_SURFACE_MULTISAMPLE (dst)) &&
+	    (num_traps == 1 || src->pattern.color.alpha == 1.0))
 	    return _cairo_gl_surface_fill_trapezoids (dst, operator,
 						      &src->pattern.color,
 						      traps, num_traps);
@@ -578,17 +690,6 @@ _cairo_gl_surface_show_page (void *abstract_surface)
 }
 
 static void
-_cario_gl_uint_to_power_of_two (unsigned int *value)
-{
-    unsigned int x = 1;
-
-    while (x < *value)
-	x <<= 1;
-
-    *value = x;
-}
-
-static void
 _cairo_gl_create_color_range (cairo_pattern_t *pattern,
 			      unsigned char *data,
 			      unsigned int size)
@@ -624,10 +725,17 @@ _cairo_gl_surface_create_pattern (void *abstract_surface,
 
 	source = glitz_surface_create_solid (&color);
     } break;
-    case CAIRO_PATTERN_LINEAR:
-    case CAIRO_PATTERN_RADIAL: {
-	unsigned int color_range_size;
+    case CAIRO_PATTERN_RADIAL:
+	/* glitz doesn't support inner circle yet. */
+	if (pattern->u.radial.center0.x != pattern->u.radial.center1.x ||
+	    pattern->u.radial.center0.y != pattern->u.radial.center1.y)
+	    return CAIRO_INT_STATUS_UNSUPPORTED;
+	/* fall-through */
+    case CAIRO_PATTERN_LINEAR: {
+	int color_range_size;
 	glitz_color_range_t *color_range;
+	int width = ((box->p2.x + 65535) >> 16) - (box->p1.x >> 16);
+	int height = ((box->p2.y + 65535) >> 16) - (box->p1.y >> 16);
 
 	if (!CAIRO_GL_FRAGMENT_PROGRAM_SUPPORT (surface))
 	    return CAIRO_INT_STATUS_UNSUPPORTED;
@@ -638,34 +746,28 @@ _cairo_gl_surface_create_pattern (void *abstract_surface,
 	if (pattern->extend == CAIRO_EXTEND_REFLECT &&
             (!CAIRO_GL_TEXTURE_MIRRORED_REPEAT_SUPPORT (surface)))
 	    return CAIRO_INT_STATUS_UNSUPPORTED;
+	
+	/* TODO: how do we figure out the color range resolution? transforming
+	   the gradient vector with the inverse of the pattern matrix should
+	   give us a good hint. */
+	color_range_size = 512;
 
-	if (pattern->type == CAIRO_PATTERN_LINEAR) {
-	    double dx, dy;
-
-	    dx = pattern->u.linear.point1.x - pattern->u.linear.point0.x;
-	    dy = pattern->u.linear.point1.y - pattern->u.linear.point0.y;
-
-	    color_range_size = sqrt (dx * dx + dy * dy);
-	} else {
-	    /* glitz doesn't support inner circle yet. */
-	    if (pattern->u.radial.center0.x != pattern->u.radial.center1.x ||
-		pattern->u.radial.center0.y != pattern->u.radial.center1.y)
-		return CAIRO_INT_STATUS_UNSUPPORTED;
-
-	    color_range_size = pattern->u.radial.radius1;
-	}
-
-	if ((!CAIRO_GL_TEXTURE_NPOT_SUPPORT (surface)))
-	    _cario_gl_uint_to_power_of_two (&color_range_size);
-
-	color_range = glitz_color_range_create (color_range_size);
+	/* destination surface size less than color range size, an image
+	   gradient is probably more efficient. */
+	if ((width * height) <= color_range_size)
+	    return CAIRO_INT_STATUS_UNSUPPORTED;
+	
+	color_range = glitz_color_range_create (surface->surface,
+						color_range_size);
 	if (!color_range)
 	    return CAIRO_STATUS_NO_MEMORY;
 
 	_cairo_gl_create_color_range (pattern,
 				      glitz_color_range_get_data (color_range),
 				      color_range_size);
-
+	
+	glitz_color_range_put_back_data (color_range);
+	
 	switch (pattern->extend) {
 	case CAIRO_EXTEND_REPEAT:
 	    glitz_color_range_set_extend (color_range, GLITZ_EXTEND_REPEAT);

@@ -54,6 +54,20 @@ cairo_surface_create_for_image (char		*data,
 slim_hidden_def(cairo_surface_create_for_image);
 
 cairo_surface_t *
+_cairo_surface_create_similar_scratch (cairo_surface_t	*other,
+				       cairo_format_t	format,
+				       int		drawable,
+				       int		width,
+				       int		height)
+{
+    if (other == NULL)
+	return NULL;
+
+    return other->backend->create_similar (other, format, drawable,
+					   width, height);
+}
+
+cairo_surface_t *
 cairo_surface_create_similar (cairo_surface_t	*other,
 			      cairo_format_t	format,
 			      int		width,
@@ -79,12 +93,14 @@ _cairo_surface_create_similar_solid (cairo_surface_t	*other,
 				     cairo_color_t	*color)
 {
     cairo_status_t status;
-    cairo_surface_t *surface = NULL;
+    cairo_surface_t *surface;
 
-    surface = other->backend->create_similar (other, format, width, height);
+    surface = _cairo_surface_create_similar_scratch (other, format, 1,
+						     width, height);
+    
     if (surface == NULL)
 	surface = cairo_image_surface_create (format, width, height);
-
+    
     status = _cairo_surface_fill_rectangle (surface,
 					    CAIRO_OPERATOR_SRC, color,
 					    0, 0, width, height);
@@ -218,7 +234,7 @@ _cairo_surface_composite (cairo_operator_t	operator,
 			  unsigned int		height)
 {
     cairo_int_status_t status;
-    cairo_image_surface_t *src_image, *mask_image, *dst_image;
+    cairo_image_surface_t *src_image, *mask_image = 0, *dst_image;
 
     status = dst->backend->composite (operator,
 				      src, mask, dst,
@@ -461,11 +477,9 @@ _cairo_surface_create_pattern (cairo_surface_t *surface,
 			cairo_surface_set_repeat (pattern->u.surface.surface,
 						  save_repeat);
             
-			if (status == CAIRO_STATUS_SUCCESS) {
-			    _cairo_pattern_set_source_offset (pattern,
-							      pattern->source_offset.x + x,
-							      pattern->source_offset.y + y);
-			} else
+			if (status == CAIRO_STATUS_SUCCESS)
+			    _cairo_pattern_set_source_offset (pattern, x, y);
+			else
 			    cairo_surface_destroy (pattern->source);
 		    }
           

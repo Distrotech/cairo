@@ -1,31 +1,34 @@
-/*
- * Copyright © 2002 University of Southern California
+/* cairo - a vector graphics library with display and print output
+ *
+ * Copyright © 2004 David Reveman
  *
  * Permission to use, copy, modify, distribute, and sell this software
  * and its documentation for any purpose is hereby granted without
  * fee, provided that the above copyright notice appear in all copies
  * and that both that copyright notice and this permission notice
- * appear in supporting documentation, and that the name of the
- * University of Southern California not be used in advertising or
- * publicity pertaining to distribution of the software without
- * specific, written prior permission. The University of Southern
- * California makes no representations about the suitability of this
- * software for any purpose.  It is provided "as is" without express
- * or implied warranty.
+ * appear in supporting documentation, and that the name of David
+ * Reveman not be used in advertising or publicity pertaining to
+ * distribution of the software without specific, written prior
+ * permission. David Reveman makes no representations about the
+ * suitability of this software for any purpose.  It is provided "as
+ * is" without express or implied warranty.
  *
- * THE UNIVERSITY OF SOUTHERN CALIFORNIA DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL THE UNIVERSITY OF
- * SOUTHERN CALIFORNIA BE LIABLE FOR ANY SPECIAL, INDIRECT OR
- * CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
- * NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
- * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * DAVID REVEMAN DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS
+ * SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ * FITNESS, IN NO EVENT SHALL DAVID REVEMAN BE LIABLE FOR ANY SPECIAL,
+ * INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER
+ * RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
+ * IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
  * Author: David Reveman <c99drn@cs.umu.se>
  */
 
 #include "cairoint.h"
+
+#define MULTIPLY_COLORCOMP(c1, c2) \
+    ((unsigned char) \
+     ((((unsigned char) (c1)) * (int) ((unsigned char) (c2))) / 0xff))
 
 void
 _cairo_pattern_init (cairo_pattern_t *pattern)
@@ -247,13 +250,11 @@ cairo_pattern_add_color_stop (cairo_pattern_t *pattern,
 
     stop->offset = _cairo_fixed_from_double (offset);
     stop->id = pattern->n_stops;
-    _cairo_color_init (&stop->color);
-    _cairo_color_set_rgb (&stop->color, red, green, blue);
-    _cairo_color_set_alpha (&stop->color, alpha);
-    stop->color_char[0] = stop->color.red_short / 256;
-    stop->color_char[1] = stop->color.green_short / 256;
-    stop->color_char[2] = stop->color.blue_short / 256;
-    stop->color_char[3] = stop->color.alpha_short / 256;
+
+    stop->color_char[0] = red * 0xff;
+    stop->color_char[1] = green * 0xff;
+    stop->color_char[2] = blue * 0xff;
+    stop->color_char[3] = alpha * 0xff;
 
     /* sort stops in ascending order */
     qsort (pattern->stops, pattern->n_stops, sizeof (cairo_color_stop_t),
@@ -329,16 +330,9 @@ _cairo_pattern_set_alpha (cairo_pattern_t *pattern, double alpha)
 
     _cairo_color_set_alpha (&pattern->color, alpha);
 
-    for (i = 0; i < pattern->n_stops; i++) {
-	cairo_color_stop_t *stop = &pattern->stops[i];
-    
-	_cairo_color_set_alpha (&stop->color, stop->color.alpha * alpha);
-
-	stop->color_char[0] = stop->color.red_short / 256;
-	stop->color_char[1] = stop->color.green_short / 256;
-	stop->color_char[2] = stop->color.blue_short / 256;
-	stop->color_char[3] = stop->color.alpha_short / 256;
-    }
+    for (i = 0; i < pattern->n_stops; i++)
+	pattern->stops[i].color_char[3] =
+	    MULTIPLY_COLORCOMP (pattern->stops[i].color_char[3], alpha * 0xff);
 }
 
 void
@@ -510,6 +504,14 @@ _cairo_pattern_calc_color_at_pixel (cairo_shader_op_t *op,
 	    op->shader_function (op->stops[i].color_char,
 				 op->stops[i + 1].color_char,
 				 factor, pixel);
+	    
+	    /* multiply alpha */
+	    if (((unsigned char) (*pixel >> 24)) != 0xff) {
+		*pixel = (*pixel & 0xff000000) |
+		    (MULTIPLY_COLORCOMP (*pixel >> 16, *pixel >> 24) << 16) |
+		    (MULTIPLY_COLORCOMP (*pixel >> 8, *pixel >> 24) << 8) |
+		    (MULTIPLY_COLORCOMP (*pixel >> 0, *pixel >> 24) << 0);
+	    }
 	    break;
 	}
     }
@@ -601,6 +603,7 @@ _cairo_image_data_set_radial (cairo_pattern_t *pattern,
     } else {
 	aligned_circles = 1;
 	r1 = 1.0 / (r1 - r0);
+	r1_2 = c0_c1 = 0.0; /* shut up compiler */
     }
 
     cairo_matrix_get_affine (&pattern->matrix, &a, &b, &c, &d, &tx, &ty);
@@ -700,16 +703,10 @@ _cairo_pattern_get_image (cairo_pattern_t *pattern, cairo_box_t *box)
 	    return NULL;
 	
 	if (pattern->type == CAIRO_PATTERN_RADIAL)
-	    _cairo_image_data_set_radial (pattern,
-					  x - pattern->source_offset.x,
-					  y - pattern->source_offset.y,
-					  (int *) data,
+	    _cairo_image_data_set_radial (pattern, x, y, (int *) data,
 					  width, height);
 	else
-	    _cairo_image_data_set_linear (pattern,
-					  x - pattern->source_offset.x,
-					  y - pattern->source_offset.y,
-					  (int *) data,
+	    _cairo_image_data_set_linear (pattern, x, y, (int *) data,
 					  width, height);
 
 	_cairo_pattern_set_source_offset (pattern, x, y);
@@ -743,6 +740,9 @@ _cairo_pattern_get_image (cairo_pattern_t *pattern, cairo_box_t *box)
 	    surface = NULL;
     
     }
+	break;
+    default:
+	surface = NULL;
 	break;
     }
     
