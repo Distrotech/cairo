@@ -43,7 +43,33 @@
 
 #include "cairo.h"
 
-#include <slim_internal.h>
+#if __GNUC__ >= 3 && defined(__ELF__)
+# define slim_hidden_proto(name)	slim_hidden_proto1(name, INT_##name)
+# define slim_hidden_def(name)		slim_hidden_def1(name, INT_##name)
+# define slim_hidden_proto1(name, internal)				\
+  extern __typeof (name) name						\
+	__asm__ (slim_hidden_asmname (internal))			\
+	__internal_linkage;
+# define slim_hidden_def1(name, internal)				\
+  extern __typeof (name) EXT_##name __asm__(slim_hidden_asmname(name))	\
+	__attribute__((__alias__(slim_hidden_asmname(internal))))
+# define slim_hidden_ulp		slim_hidden_ulp1(__USER_LABEL_PREFIX__)
+# define slim_hidden_ulp1(x)		slim_hidden_ulp2(x)
+# define slim_hidden_ulp2(x)		#x
+# define slim_hidden_asmname(name)	slim_hidden_asmname1(name)
+# define slim_hidden_asmname1(name)	slim_hidden_ulp #name
+#else
+# define slim_hidden_proto(name)
+# define slim_hidden_def(name)
+#endif
+
+/* slim_internal.h */
+#if (__GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ >= 3)) && defined(__ELF__)
+#define __internal_linkage	__attribute__((__visibility__("hidden")))
+#else
+#define __internal_linkage
+#endif
+
 
 /* These macros allow us to deprecate a function by providing an alias
    for the old function name to the new function name. With this
@@ -102,17 +128,22 @@ typedef struct cairo_slope
 {
     cairo_fixed_t dx;
     cairo_fixed_t dy;
-} cairo_slope_t;
+} cairo_slope_t, cairo_distance_t;
 
 typedef struct cairo_point_double {
     double x;
     double y;
 } cairo_point_double_t;
 
+typedef struct cairo_distance_double {
+    double dx;
+    double dy;
+} cairo_distance_double_t;
+
 typedef struct cairo_line {
     cairo_point_t p1;
     cairo_point_t p2;
-} cairo_line_t;
+} cairo_line_t, cairo_box_t;
 
 typedef struct cairo_trapezoid {
     cairo_fixed_t top, bottom;
@@ -144,18 +175,6 @@ typedef enum cairo_direction {
     CAIRO_DIRECTION_REVERSE
 } cairo_direction_t;
 
-typedef enum cairo_sub_path_done {
-    CAIRO_SUB_PATH_DONE_CAP,
-    CAIRO_SUB_PATH_DONE_JOIN
-} cairo_sub_path_done_t;
-
-typedef struct cairo_path_callbacks {
-    cairo_status_t (*add_edge) (void *closure, cairo_point_t *p1, cairo_point_t *p2);
-    cairo_status_t (*add_spline) (void *closure, cairo_point_t *a, cairo_point_t *b, cairo_point_t *c, cairo_point_t *d);
-    cairo_status_t (*done_sub_path) (void *closure, cairo_sub_path_done_t done);
-    cairo_status_t (*done_path) (void *closure);
-} cairo_path_callbacks_t;
-
 #define CAIRO_PATH_BUF_SZ 64
 
 typedef struct cairo_path_op_buf {
@@ -178,6 +197,10 @@ typedef struct cairo_path {
 
     cairo_path_arg_buf_t *arg_head;
     cairo_path_arg_buf_t *arg_tail;
+
+    cairo_point_t last_move_point;
+    cairo_point_t current_point;
+    int has_current_point;
 } cairo_path_t;
 
 typedef struct cairo_edge {
@@ -193,9 +216,8 @@ typedef struct cairo_polygon {
     cairo_edge_t *edges;
 
     cairo_point_t first_point;
-    int first_point_defined;
-    cairo_point_t last_point;
-    int last_point_defined;
+    cairo_point_t current_point;
+    int has_current_point;
 
     int closed;
 } cairo_polygon_t;
@@ -229,53 +251,51 @@ typedef struct cairo_pen {
 typedef struct cairo_color cairo_color_t;
 
 typedef struct cairo_font_backend {
-
-    cairo_status_t (*font_extents)   (cairo_font_t         *font,
-				      cairo_font_extents_t *extents);
-
-    cairo_status_t (*text_extents)   (cairo_font_t         *font,
-				      const unsigned char  *utf8,
-				      cairo_text_extents_t *extents);
-  
-    cairo_status_t (*glyph_extents)  (cairo_font_t         *font,
-				      cairo_glyph_t        *glyphs, 
-				      int                  num_glyphs,
-				      cairo_text_extents_t *extents);
-  
-    cairo_status_t (*show_text)      (cairo_font_t        *font,
-				      cairo_operator_t    operator,
-				      cairo_surface_t     *source,
-				      cairo_surface_t     *surface,
-				      double              x,
-				      double              y,
-				      const unsigned char *utf8);
-
-    cairo_status_t (*show_glyphs)    (cairo_font_t        *font,
-				      cairo_operator_t    operator,
-				      cairo_surface_t     *source,
-				      cairo_surface_t     *surface,
-				      double              x,
-				      double              y,
-				      const cairo_glyph_t *glyphs,
-				      int                 num_glyphs);
-  
-    cairo_status_t (*text_path)      (cairo_font_t        *font,
-				      cairo_path_t        *path, 
-				      const unsigned char *utf8);
-
-    cairo_status_t (*glyph_path)     (cairo_font_t        *font,
-				      cairo_path_t        *path, 
-				      cairo_glyph_t       *glyphs, 
-				      int                 num_glyphs);
-
-    cairo_font_t *(*create)          (const char          *family,
-				      cairo_font_slant_t  slant,
-				      cairo_font_weight_t weight);
+    cairo_font_t *(*create)          (const char		*family,
+				      cairo_font_slant_t	slant,
+				      cairo_font_weight_t	weight);
 				    
-    cairo_font_t *(*copy)            (cairo_font_t        *other);
+    cairo_font_t *(*copy)            (void			*font);
 
-    void (*destroy)		     (cairo_font_t        *font);
+    void (*destroy)		     (void			*font);
+
+    cairo_status_t (*font_extents)   (void			*font,
+				      cairo_font_extents_t	*extents);
+
+    cairo_status_t (*text_extents)   (void			*font,
+				      const unsigned char	*utf8,
+				      cairo_text_extents_t	*extents);
   
+    cairo_status_t (*glyph_extents)  (void			*font,
+				      cairo_glyph_t		*glyphs, 
+				      int			num_glyphs,
+				      cairo_text_extents_t	*extents);
+  
+    cairo_status_t (*show_text)      (void			*font,
+				      cairo_operator_t		operator,
+				      cairo_surface_t		*source,
+				      cairo_surface_t		*surface,
+				      double			x,
+				      double			y,
+				      const unsigned char	*utf8);
+
+    cairo_status_t (*show_glyphs)    (void			*font,
+				      cairo_operator_t		operator,
+				      cairo_surface_t		*source,
+				      cairo_surface_t     	*surface,
+				      const cairo_glyph_t	*glyphs,
+				      int			num_glyphs);
+  
+    cairo_status_t (*text_path)      (void			*font,
+				      double			x,
+				      double			y,
+				      const unsigned char	*utf8,
+				      cairo_path_t		*path);
+
+    cairo_status_t (*glyph_path)     (void			*font,
+				      cairo_glyph_t		*glyphs, 
+				      int			num_glyphs,
+				      cairo_path_t		*path);
 } cairo_font_backend_t;
 
 /* concrete font backends */
@@ -357,6 +377,14 @@ typedef struct cairo_surface_backend {
 
     cairo_int_status_t
     (*show_page)		(void			*surface);
+
+    cairo_int_status_t
+    (*set_clip_region)		(void			*surface,
+				 pixman_region16_t	*region);
+    cairo_int_status_t
+    (*create_pattern)		(void			*surface,
+				 cairo_pattern_t	*pattern,
+				 cairo_box_t		*extents);
 } cairo_surface_backend_t;
 
 struct cairo_matrix {
@@ -377,6 +405,7 @@ struct cairo_surface {
     unsigned int ref_count;
 
     cairo_matrix_t matrix;
+    cairo_filter_t filter;
     int repeat;
 };
 
@@ -392,7 +421,7 @@ struct cairo_image_surface {
     int stride;
     int depth;
 
-    IcImage *ic_image;
+    pixman_image_t *pixman_image;
 };
 
 /* XXX: Right now, the cairo_color structure puts unpremultiplied
@@ -411,6 +440,59 @@ struct cairo_color {
     unsigned short green_short;
     unsigned short blue_short;
     unsigned short alpha_short;
+};
+
+#define CAIRO_EXTEND_DEFAULT CAIRO_EXTEND_NONE
+#define CAIRO_FILTER_DEFAULT CAIRO_FILTER_NEAREST
+
+typedef enum {
+    CAIRO_PATTERN_SOLID,
+    CAIRO_PATTERN_SURFACE,
+    CAIRO_PATTERN_LINEAR,
+    CAIRO_PATTERN_RADIAL
+} cairo_pattern_type_t;
+
+typedef struct cairo_color_stop {
+    double offset;
+    int id;
+    cairo_color_t color;
+    unsigned char color_char[4];
+} cairo_color_stop_t;
+
+struct cairo_pattern {
+    unsigned int ref_count;
+  
+    cairo_extend_t extend;
+    cairo_filter_t filter;
+    cairo_matrix_t matrix;
+  
+    cairo_color_stop_t *stops;
+    int n_stops;
+
+    cairo_color_t color;
+  
+    cairo_surface_t *source;
+    cairo_point_double_t source_offset;
+  
+    cairo_pattern_type_t type;
+    union {
+        struct {
+            cairo_surface_t *surface;
+            cairo_matrix_t save_matrix;
+            int save_repeat;
+            cairo_filter_t save_filter;
+        } surface;
+        struct {
+            cairo_point_double_t point0;
+            cairo_point_double_t point1;
+        } linear;
+        struct {
+            cairo_point_double_t center0;
+            cairo_point_double_t center1;
+            cairo_distance_double_t radius0;
+            cairo_distance_double_t radius1;
+        } radial;
+    } u;
 };
 
 typedef struct cairo_traps {
@@ -447,6 +529,7 @@ typedef struct cairo_clip_rec {
     int y;
     int width;
     int height;
+    pixman_region16_t *region;
     cairo_surface_t *surface;
 } cairo_clip_rec_t;
 
@@ -471,24 +554,17 @@ typedef struct cairo_gstate {
 
     cairo_surface_t *surface;
 
-    cairo_surface_t *source;
-    cairo_point_double_t source_offset;
-    int source_is_solid;
+    cairo_pattern_t *pattern;
+    cairo_point_double_t pattern_offset;
+    double alpha;
 
     cairo_clip_rec_t clip;
-
-    double alpha;
-    cairo_color_t color;
 
     double pixels_per_inch;
     cairo_matrix_t ctm;
     cairo_matrix_t ctm_inverse;
 
     cairo_path_t path;
-
-    cairo_point_double_t last_move_point;
-    cairo_point_double_t current_point;
-    int has_current_point;
 
     cairo_pen_t pen_regular;
 
@@ -509,12 +585,19 @@ typedef struct cairo_stroke_face {
     cairo_point_double_t usr_vector;
 } cairo_stroke_face_t;
 
+/* cairo.c */
+extern void __internal_linkage
+_cairo_restrict_value (double *value, double min, double max);
+
 /* cairo_fixed.c */
 extern cairo_fixed_t __internal_linkage
 _cairo_fixed_from_int (int i);
 
 extern cairo_fixed_t
 _cairo_fixed_from_double (double d);
+
+cairo_fixed_t
+_cairo_fixed_from_26_6 (uint32_t i);
 
 extern double
 _cairo_fixed_to_double (cairo_fixed_t f);
@@ -554,7 +637,10 @@ extern cairo_surface_t * __internal_linkage
 _cairo_gstate_current_target_surface (cairo_gstate_t *gstate);
 
 extern cairo_status_t __internal_linkage
-_cairo_gstate_set_pattern (cairo_gstate_t *gstate, cairo_surface_t *pattern);
+_cairo_gstate_set_pattern (cairo_gstate_t *gstate, cairo_pattern_t *pattern);
+
+extern cairo_pattern_t *__internal_linkage
+_cairo_gstate_current_pattern (cairo_gstate_t *gstate);
 
 extern cairo_status_t __internal_linkage
 _cairo_gstate_set_operator (cairo_gstate_t *gstate, cairo_operator_t operator);
@@ -705,6 +791,14 @@ extern cairo_status_t __internal_linkage
 _cairo_gstate_current_point (cairo_gstate_t *gstate, double *x, double *y);
 
 extern cairo_status_t __internal_linkage
+_cairo_gstate_interpret_path (cairo_gstate_t		*gstate,
+			      cairo_move_to_func_t	*move_to,
+			      cairo_line_to_func_t	*line_to,
+			      cairo_curve_to_func_t	*curve_to,
+			      cairo_close_path_func_t	*close_path,
+			      void			*closure);
+
+extern cairo_status_t __internal_linkage
 _cairo_gstate_stroke (cairo_gstate_t *gstate);
 
 extern cairo_status_t __internal_linkage
@@ -715,6 +809,16 @@ _cairo_gstate_copy_page (cairo_gstate_t *gstate);
 
 extern cairo_status_t __internal_linkage
 _cairo_gstate_show_page (cairo_gstate_t *gstate);
+
+extern cairo_status_t __internal_linkage
+_cairo_gstate_stroke_extents (cairo_gstate_t *gstate,
+                              double *x1, double *y1,
+			      double *x2, double *y2);
+
+extern cairo_status_t __internal_linkage
+_cairo_gstate_fill_extents (cairo_gstate_t *gstate,
+                            double *x1, double *y1,
+			    double *x2, double *y2);
 
 extern cairo_status_t __internal_linkage
 _cairo_gstate_in_stroke (cairo_gstate_t	*gstate,
@@ -729,6 +833,9 @@ _cairo_gstate_in_fill (cairo_gstate_t	*gstate,
 		       int		*inside_ret);
 
 extern cairo_status_t __internal_linkage
+_cairo_gstate_init_clip (cairo_gstate_t *gstate);
+
+extern cairo_status_t __internal_linkage
 _cairo_gstate_clip (cairo_gstate_t *gstate);
 
 extern cairo_status_t __internal_linkage
@@ -739,7 +846,7 @@ _cairo_gstate_show_surface (cairo_gstate_t	*gstate,
 
 extern cairo_status_t __internal_linkage
 _cairo_gstate_select_font (cairo_gstate_t *gstate, 
-			   char *family, 
+			   const char *family, 
 			   cairo_font_slant_t slant, 
 			   cairo_font_weight_t weight);
 
@@ -813,7 +920,7 @@ _cairo_color_set_alpha (cairo_color_t *color, double alpha);
 /* cairo_font.c */
 
 extern cairo_font_t * __internal_linkage
-_cairo_font_create (char                 *family, 
+_cairo_font_create (const char           *family, 
 		    cairo_font_slant_t   slant, 
 		    cairo_font_weight_t  weight);
 
@@ -860,23 +967,22 @@ _cairo_font_show_glyphs (cairo_font_t           *font,
                          cairo_operator_t       operator,
                          cairo_surface_t        *source,
                          cairo_surface_t        *surface,
-                         double                 x,
-                         double                 y,
                          cairo_glyph_t          *glyphs,
                          int                    num_glyphs);
 
 
 extern cairo_int_status_t __internal_linkage
 _cairo_font_text_path (cairo_font_t             *font,
-                       cairo_path_t             *path,
-                       const unsigned char      *utf8);
+		       double			x,
+		       double			y,
+                       const unsigned char      *utf8,
+                       cairo_path_t             *path);
 
 extern cairo_int_status_t __internal_linkage
 _cairo_font_glyph_path (cairo_font_t            *font,
-                        cairo_path_t            *path,
                         cairo_glyph_t           *glyphs, 
-                        int                     num_glyphs);
-
+                        int                     num_glyphs,
+                        cairo_path_t            *path);
 
 /* cairo_hull.c */
 extern cairo_status_t
@@ -893,25 +999,56 @@ extern void __internal_linkage
 _cairo_path_fini (cairo_path_t *path);
 
 extern cairo_status_t __internal_linkage
-_cairo_path_move_to (cairo_path_t *path, double x, double y);
+_cairo_path_move_to (cairo_path_t *path, cairo_point_t *point);
 
 extern cairo_status_t __internal_linkage
-_cairo_path_line_to (cairo_path_t *path, double x, double y);
+_cairo_path_rel_move_to (cairo_path_t *path, cairo_slope_t *slope);
+
+extern cairo_status_t __internal_linkage
+_cairo_path_line_to (cairo_path_t *path, cairo_point_t *point);
+
+extern cairo_status_t __internal_linkage
+_cairo_path_rel_line_to (cairo_path_t *path, cairo_slope_t *slope);
 
 extern cairo_status_t __internal_linkage
 _cairo_path_curve_to (cairo_path_t *path,
-		      double x1, double y1,
-		      double x2, double y2,
-		      double x3, double y3);
+		      cairo_point_t *p0,
+		      cairo_point_t *p1,
+		      cairo_point_t *p2);
+
+extern cairo_status_t __internal_linkage
+_cairo_path_rel_curve_to (cairo_path_t *path,
+			  cairo_slope_t *s0,
+			  cairo_slope_t *s1,
+			  cairo_slope_t *s2);
 
 extern cairo_status_t __internal_linkage
 _cairo_path_close_path (cairo_path_t *path);
 
 extern cairo_status_t __internal_linkage
-_cairo_path_interpret (cairo_path_t *path,
-		       cairo_direction_t dir,
-		       const cairo_path_callbacks_t *cb,
-		       void *closure);
+_cairo_path_current_point (cairo_path_t *path, cairo_point_t *point);
+
+typedef cairo_status_t (cairo_path_move_to_func_t) (void *closure,
+						    cairo_point_t *point);
+
+typedef cairo_status_t (cairo_path_line_to_func_t) (void *closure,
+						    cairo_point_t *point);
+
+typedef cairo_status_t (cairo_path_curve_to_func_t) (void *closure,
+						     cairo_point_t *p0,
+						     cairo_point_t *p1,
+						     cairo_point_t *p2);
+
+typedef cairo_status_t (cairo_path_close_path_func_t) (void *closure);
+
+extern cairo_status_t __internal_linkage
+_cairo_path_interpret (cairo_path_t			*path,
+		       cairo_direction_t		dir,
+		       cairo_path_move_to_func_t	*move_to,
+		       cairo_path_line_to_func_t	*line_to,
+		       cairo_path_curve_to_func_t	*curve_to,
+		       cairo_path_close_path_func_t	*close_path,
+		       void				*closure);
 
 extern cairo_status_t __internal_linkage
 _cairo_path_bounds (cairo_path_t *path, double *x1, double *y1, double *x2, double *y2);
@@ -991,6 +1128,14 @@ extern cairo_status_t __internal_linkage
 _cairo_surface_set_image (cairo_surface_t	*surface,
 			  cairo_image_surface_t	*image);
 
+extern cairo_status_t __internal_linkage
+_cairo_surface_set_clip_region (cairo_surface_t *surface, pixman_region16_t *region);
+
+extern cairo_status_t __internal_linkage
+_cairo_surface_create_pattern (cairo_surface_t *surface,
+			       cairo_pattern_t *pattern,
+			       cairo_box_t *extents);
+
 /* cairo_image_surface.c */
 
 extern cairo_image_surface_t * __internal_linkage
@@ -1007,13 +1152,17 @@ extern cairo_status_t __internal_linkage
 _cairo_image_surface_set_matrix (cairo_image_surface_t	*surface,
 				 cairo_matrix_t		*matrix);
 
-cairo_status_t
+extern cairo_status_t __internal_linkage
 _cairo_image_surface_set_filter (cairo_image_surface_t	*surface,
 				 cairo_filter_t		filter);
 
 extern cairo_status_t __internal_linkage
 _cairo_image_surface_set_repeat (cairo_image_surface_t	*surface,
 				 int			repeat);
+
+extern cairo_int_status_t __internal_linkage
+_cairo_image_surface_set_clip_region (cairo_image_surface_t *surface,
+				      pixman_region16_t *region);
 
 /* cairo_pen.c */
 extern cairo_status_t __internal_linkage
@@ -1065,7 +1214,10 @@ extern cairo_status_t __internal_linkage
 _cairo_polygon_add_edge (cairo_polygon_t *polygon, cairo_point_t *p1, cairo_point_t *p2);
 
 extern cairo_status_t __internal_linkage
-_cairo_polygon_add_point (cairo_polygon_t *polygon, cairo_point_t *point);
+_cairo_polygon_move_to (cairo_polygon_t *polygon, cairo_point_t *point);
+
+extern cairo_status_t __internal_linkage
+_cairo_polygon_line_to (cairo_polygon_t *polygon, cairo_point_t *point);
 
 extern cairo_status_t __internal_linkage
 _cairo_polygon_close (cairo_polygon_t *polygon);
@@ -1114,6 +1266,9 @@ _cairo_matrix_compute_determinant (cairo_matrix_t *matrix, double *det);
 extern cairo_status_t __internal_linkage
 _cairo_matrix_compute_eigen_values (cairo_matrix_t *matrix, double *lambda1, double *lambda2);
 
+extern cairo_status_t __internal_linkage
+_cairo_matrix_compute_scale_factors (cairo_matrix_t *matrix, double *sx, double *sy);
+
 /* cairo_traps.c */
 extern void __internal_linkage
 _cairo_traps_init (cairo_traps_t *traps);
@@ -1135,6 +1290,9 @@ _cairo_traps_tessellate_polygon (cairo_traps_t *traps,
 extern int __internal_linkage
 _cairo_traps_contain (cairo_traps_t *traps, double x, double y);
 
+extern void __internal_linkage
+_cairo_traps_extents (cairo_traps_t *traps, cairo_box_t *extents);
+
 /* cairo_slope.c */
 extern void __internal_linkage
 _cairo_slope_init (cairo_slope_t *slope, cairo_point_t *a, cairo_point_t *b);
@@ -1147,6 +1305,50 @@ _cairo_slope_clockwise (cairo_slope_t *a, cairo_slope_t *b);
 
 extern int __internal_linkage
 _cairo_slope_counter_clockwise (cairo_slope_t *a, cairo_slope_t *b);
+
+/* cairo_pattern.c */
+extern void __internal_linkage
+_cairo_pattern_init (cairo_pattern_t *pattern);
+
+extern cairo_status_t __internal_linkage
+_cairo_pattern_init_copy (cairo_pattern_t *pattern, cairo_pattern_t *other);
+
+extern void __internal_linkage
+_cairo_pattern_fini (cairo_pattern_t *pattern);
+
+extern void __internal_linkage
+_cairo_pattern_init_solid (cairo_pattern_t *pattern,
+			   double red, double green, double blue);
+
+extern cairo_pattern_t *__internal_linkage
+_cairo_pattern_create_solid (double red, double green, double blue);
+
+extern cairo_status_t __internal_linkage
+_cairo_pattern_get_rgb (cairo_pattern_t *pattern,
+			double *red, double *green, double *blue);
+
+extern void __internal_linkage
+_cairo_pattern_set_alpha (cairo_pattern_t *pattern, double alpha);
+
+extern void __internal_linkage
+_cairo_pattern_add_source_offset (cairo_pattern_t *pattern,
+				  double x, double y);
+
+extern void __internal_linkage
+_cairo_pattern_transform (cairo_pattern_t *pattern,
+			  cairo_matrix_t *matrix,
+			  cairo_matrix_t *matrix_inverse);
+
+extern void __internal_linkage
+_cairo_pattern_prepare_surface (cairo_pattern_t *pattern);
+
+extern void __internal_linkage
+_cairo_pattern_calc_color_at_pixel (cairo_pattern_t *pattern,
+				    double factor,
+				    int *pixel);
+
+extern cairo_image_surface_t *__internal_linkage
+_cairo_pattern_get_image (cairo_pattern_t *pattern, cairo_box_t *box);
 
 /* Avoid unnecessary PLT entries.  */
 

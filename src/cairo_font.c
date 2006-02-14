@@ -28,11 +28,17 @@
 #include "cairoint.h"
 
 cairo_font_t *
-_cairo_font_create (char                 *family, 
+_cairo_font_create (const char           *family, 
 		    cairo_font_slant_t   slant, 
 		    cairo_font_weight_t  weight)
 {
     const struct cairo_font_backend *backend = CAIRO_FONT_BACKEND_DEFAULT;
+
+    /* XXX: The current freetype backend may return NULL, (for example
+     * if no fonts are installed), but I would like to guarantee that
+     * the toy API always returns at least *some* font, so I would
+     * like to build in some sort fo font here, (even a really lame,
+     * ugly one if necessary). */
 
     return backend->create (family, slant, weight);
 }
@@ -118,31 +124,30 @@ _cairo_font_show_glyphs (cairo_font_t           *font,
                          cairo_operator_t       operator,
                          cairo_surface_t        *source,
                          cairo_surface_t        *surface,
-			 double                 x,
-			 double                 y,
                          cairo_glyph_t          *glyphs,
                          int                    num_glyphs)
 {
     return font->backend->show_glyphs(font, operator, source, 
-				      surface, x, y, glyphs, num_glyphs);
+				      surface, glyphs, num_glyphs);
 }
 
 cairo_status_t
 _cairo_font_text_path (cairo_font_t             *font,
-                       cairo_path_t             *path,
-                       const unsigned char      *utf8)
+		       double			x,
+		       double			y,
+                       const unsigned char      *utf8,
+                       cairo_path_t             *path)
 {
-    return font->backend->text_path(font, path, utf8);
+    return font->backend->text_path(font, x, y, utf8, path);
 }
 
 cairo_status_t
 _cairo_font_glyph_path (cairo_font_t            *font,
-                        cairo_path_t            *path,
                         cairo_glyph_t           *glyphs, 
-                        int                     num_glyphs)
+                        int                     num_glyphs,
+                        cairo_path_t            *path)
 {
-    return font->backend->glyph_path(font, path, 
-				     glyphs, num_glyphs);
+    return font->backend->glyph_path(font, glyphs, num_glyphs, path);
 }
 
 cairo_status_t

@@ -46,18 +46,19 @@ static cairo_status_t
 _cairo_path_bounder_add_point (cairo_path_bounder_t *bounder, cairo_point_t *point);
 
 static cairo_status_t
-_cairo_path_bounder_add_edge (void *closure, cairo_point_t *p1, cairo_point_t *p2);
+_cairo_path_bounder_move_to (void *closure, cairo_point_t *point);
 
 static cairo_status_t
-_cairo_path_bounder_add_spline (void *closure,
-				cairo_point_t *a, cairo_point_t *b,
-				cairo_point_t *c, cairo_point_t *d);
+_cairo_path_bounder_line_to (void *closure, cairo_point_t *point);
 
 static cairo_status_t
-_cairo_path_bounder_done_sub_path (void *closure, cairo_sub_path_done_t done);
+_cairo_path_bounder_curve_to (void *closure,
+			      cairo_point_t *b,
+			      cairo_point_t *c,
+			      cairo_point_t *d);
 
 static cairo_status_t
-_cairo_path_bounder_done_path (void *closure);
+_cairo_path_bounder_close_path (void *closure);
 
 static void
 _cairo_path_bounder_init (cairo_path_bounder_t *bounder)
@@ -99,24 +100,33 @@ _cairo_path_bounder_add_point (cairo_path_bounder_t *bounder, cairo_point_t *poi
 }
 
 static cairo_status_t
-_cairo_path_bounder_add_edge (void *closure, cairo_point_t *p1, cairo_point_t *p2)
+_cairo_path_bounder_move_to (void *closure, cairo_point_t *point)
 {
     cairo_path_bounder_t *bounder = closure;
 
-    _cairo_path_bounder_add_point (bounder, p1);
-    _cairo_path_bounder_add_point (bounder, p2);
+    _cairo_path_bounder_add_point (bounder, point);
 
     return CAIRO_STATUS_SUCCESS;
 }
 
 static cairo_status_t
-_cairo_path_bounder_add_spline (void *closure,
-				cairo_point_t *a, cairo_point_t *b,
-				cairo_point_t *c, cairo_point_t *d)
+_cairo_path_bounder_line_to (void *closure, cairo_point_t *point)
 {
     cairo_path_bounder_t *bounder = closure;
 
-    _cairo_path_bounder_add_point (bounder, a);
+    _cairo_path_bounder_add_point (bounder, point);
+
+    return CAIRO_STATUS_SUCCESS;
+}
+
+static cairo_status_t
+_cairo_path_bounder_curve_to (void *closure,
+			      cairo_point_t *b,
+			      cairo_point_t *c,
+			      cairo_point_t *d)
+{
+    cairo_path_bounder_t *bounder = closure;
+
     _cairo_path_bounder_add_point (bounder, b);
     _cairo_path_bounder_add_point (bounder, c);
     _cairo_path_bounder_add_point (bounder, d);
@@ -125,13 +135,7 @@ _cairo_path_bounder_add_spline (void *closure,
 }
 
 static cairo_status_t
-_cairo_path_bounder_done_sub_path (void *closure, cairo_sub_path_done_t done)
-{
-    return CAIRO_STATUS_SUCCESS;
-}
-
-static cairo_status_t
-_cairo_path_bounder_done_path (void *closure)
+_cairo_path_bounder_close_path (void *closure)
 {
     return CAIRO_STATUS_SUCCESS;
 }
@@ -141,18 +145,17 @@ cairo_status_t
 _cairo_path_bounds (cairo_path_t *path, double *x1, double *y1, double *x2, double *y2)
 {
     cairo_status_t status;
-    static cairo_path_callbacks_t const cb = {
-	_cairo_path_bounder_add_edge,
-	_cairo_path_bounder_add_spline,
-	_cairo_path_bounder_done_sub_path,
-	_cairo_path_bounder_done_path
-    };
 
     cairo_path_bounder_t bounder;
 
     _cairo_path_bounder_init (&bounder);
 
-    status = _cairo_path_interpret (path, CAIRO_DIRECTION_FORWARD, &cb, &bounder);
+    status = _cairo_path_interpret (path, CAIRO_DIRECTION_FORWARD,
+				    _cairo_path_bounder_move_to,
+				    _cairo_path_bounder_line_to,
+				    _cairo_path_bounder_curve_to,
+				    _cairo_path_bounder_close_path,
+				    &bounder);
     if (status) {
 	*x1 = *y1 = *x2 = *y2 = 0.0;
 	_cairo_path_bounder_fini (&bounder);

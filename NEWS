@@ -1,0 +1,151 @@
+Snapshot 0.1.20 (2004-04-06 Carl Worth <cworth@isi.edu>)
+========================================================
+New pattern API
+---------------
+David Reveman has contributed a new pattern API which enable linear
+and radial gradient patterns in addition to the original surface-based
+patterns. The significant new top-level functions are:
+
+	cairo_pattern_create_linear
+	cairo_pattern_create_radial
+	cairo_pattern_create_for_surface
+	cairo_pattern_add_color_stop
+	cairo_set_pattern
+
+Any code using the old cairo_set_pattern, (which accepted a
+cairo_surface_t rather than a cairo_pattern_t), will need to be
+updated.
+
+Update to XCB backend
+---------------------
+The XCB backend is now enabled by default, (use ./configure
+--disable-xcb to turn it off).
+
+Faster clipping
+---------------
+Graydon Hoare has added optimizations that make cairo_clip much faster
+when the path is a pixel-aligned, rectangular region.
+
+Bug fixes.
+
+Snapshot 0.1.19 (2004-02-24 Carl Worth <cworth@isi.edu>)
+========================================================
+New PNG backend
+---------------
+Olivier Andrieu contributed a new PNG backend. It builds on the
+existing image backend to make it easy to render "directly" to a
+.png file. The user never needs to deal with the actual image
+buffer. The significant new functions are:
+
+	cairo_set_target_png
+	cairo_png_surface_create
+
+The PNG backend is not enabled by default so that by default there is
+not a new dependency on libpng. Use ./configure --enable-png to enable
+this backend.
+
+Snapshot 0.1.18 (2004-02-17 Carl Worth <cworth@isi.edu>)
+========================================================
+Path query functionality
+------------------------
+It's now possible to query the current path. The two new functions
+are:
+
+	cairo_current_path
+	cairo_current_path_flat
+
+Each function accepts a number of callback functions that will be
+called for each element in the path (move_to, line_to, curve_to,
+close_path). The cairo_current_path_flat function does not accept a
+curve_to callback. Instead, all curved portions of the path will be
+converted to line segments, (within the current tolerance value). This
+can be handy for doing things like text-on-path without having to
+manually interpolate bezier splines.
+
+New XCB backend
+---------------
+Jamey Sharp has contributed a second X backend that uses the new, lean
+XCB library rather than Xlib. It cannot currently be compiled at the
+same time as the Xlib backend. See ./configure --enable-xcb.
+
+Build fixes for cygwin.
+
+Bug fixes.
+
+Snapshot 0.1.17 (2003-12-16 Carl Worth <cworth@isi.edu>)
+========================================================
+
+Better text support
+-------------------
+This snapshot provides much better text support by implementing the
+following four functions:
+
+        cairo_text_extents
+        cairo_glyph_extents
+        cairo_text_path
+        cairo_glyph_path
+
+The text/glyph_extents functions can be used to determine the bounding
+box (and advance) for text as if drawn by show_text/glyphs.
+
+The text/glyph_path objects functions place text shapes on the current
+path, where they can be subsequently manipulated. For example,
+following these functions with cairo_stroke allows outline text to be
+drawn. Calling cairo_clip allows clipping to a text-shaped region.
+
+Combined dependencies
+---------------------
+The cairo core now depends only on the libpixman library. This single
+library replaces the three previous libraries libic, libpixregion, and
+slim. Thanks to Dave Beckett <dave.beckett@bristol.ac.uk> for all of
+the heavy lifting with this renaming effort.
+
+Conditional compilation of backends
+-----------------------------------
+Cairo now allows optional beckends to be disabled at compile time. The
+following options may now be passed to the configure script:
+
+	--disable-xlib
+	--disable-ps
+
+Note that the first option is a change from the old --without-x option
+which will no longer have any effect.
+
+OS X supported - several byte-order issues resolved
+---------------------------------------------------
+Cairo has now been successfully compiled under OS X. Testing revealed
+that there were some byte-order problems in the PostScript backend and
+the PNG generation in the demos. These have now been resolved.
+
+2003-10
+=======
+Graydon Hoare <graydon@redhat.com> implemented the first real text
+support using Freetype/fontconfig, (previous versions of cairo used
+Xft and could only draw text when using an X backend).
+
+2003-09
+=======
+Graydon Hoare <graydon@redhat.com> added the first real support for
+running cairo with a non-render-aware X server.
+
+Jamey Sharp <jamey@minilop.net> virtualized the backend font and
+surface interfaces in September, 2003.
+
+2003-06
+=======
+Xr is renamed cairo to avoid confusion since it no longer had a strict
+dependence on X.
+
+2003-05
+=======
+A new image surface backend is added to Xr. Keith Packard
+<keithp@keithp.com> wrote the image compositing code in libic that is
+used for the image_surface backend. This code was originally written
+as the software fallback for the render extension within the X
+server.
+
+2002-06
+=======
+Carl Worth <cworth@isi.edu> wrote the first lines of Xr, after Keith
+Packard <keithp@keithp.com> proposed the plan for a stateful drawing
+library in C providing a PostScript-like rendering model.

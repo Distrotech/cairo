@@ -70,6 +70,11 @@ _cairo_path_init (cairo_path_t *path)
 
     path->arg_head = NULL;
     path->arg_tail = NULL;
+
+    path->current_point.x = 0;
+    path->current_point.y = 0;
+    path->has_current_point = 0;
+    path->last_move_point = path->current_point;
 }
 
 cairo_status_t
@@ -79,6 +84,9 @@ _cairo_path_init_copy (cairo_path_t *path, cairo_path_t *other)
     cairo_path_arg_buf_t *arg, *other_arg;
 
     _cairo_path_init (path);
+    path->current_point = other->current_point;
+    path->has_current_point = other->has_current_point;
+    path->last_move_point = other->last_move_point;
 
     for (other_op = other->op_head; other_op; other_op = other_op->next) {
 	op = _cairo_path_op_buf_create ();
@@ -120,54 +128,131 @@ _cairo_path_fini (cairo_path_t *path)
 	_cairo_path_arg_buf_destroy (arg);
     }
     path->arg_tail = NULL;
+
+    path->has_current_point = 0;
 }
 
 cairo_status_t
-_cairo_path_move_to (cairo_path_t *path, double x, double y)
+_cairo_path_move_to (cairo_path_t *path, cairo_point_t *point)
 {
-    cairo_point_t point;
+    cairo_status_t status;
 
-    point.x = _cairo_fixed_from_double (x);
-    point.y = _cairo_fixed_from_double (y);
+    status = _cairo_path_add (path, CAIRO_PATH_OP_MOVE_TO, point, 1);
+    if (status)
+	return status;
 
-    return _cairo_path_add (path, CAIRO_PATH_OP_MOVE_TO, &point, 1);
+    path->current_point = *point;
+    path->has_current_point = 1;
+    path->last_move_point = path->current_point;
+
+    return CAIRO_STATUS_SUCCESS;
 }
 
 cairo_status_t
-_cairo_path_line_to (cairo_path_t *path, double x, double y)
+_cairo_path_rel_move_to (cairo_path_t *path, cairo_distance_t *distance)
 {
     cairo_point_t point;
 
-    point.x = _cairo_fixed_from_double (x);
-    point.y = _cairo_fixed_from_double (y);
+    point.x = path->current_point.x + distance->dx;
+    point.y = path->current_point.y + distance->dy;
 
-    return _cairo_path_add (path, CAIRO_PATH_OP_LINE_TO, &point, 1);
+    return _cairo_path_move_to (path, &point);
+}
+
+cairo_status_t
+_cairo_path_line_to (cairo_path_t *path, cairo_point_t *point)
+{
+    cairo_status_t status;
+
+    status = _cairo_path_add (path, CAIRO_PATH_OP_LINE_TO, point, 1);
+    if (status)
+	return status;
+
+    path->current_point = *point;
+    path->has_current_point = 1;
+
+    return CAIRO_STATUS_SUCCESS;
+}
+
+cairo_status_t
+_cairo_path_rel_line_to (cairo_path_t *path, cairo_distance_t *distance)
+{
+    cairo_point_t point;
+
+    point.x = path->current_point.x + distance->dx;
+    point.y = path->current_point.y + distance->dy;
+
+    return _cairo_path_line_to (path, &point);
 }
 
 cairo_status_t
 _cairo_path_curve_to (cairo_path_t *path,
-		      double x1, double y1,
-		      double x2, double y2,
-		      double x3, double y3)
+		      cairo_point_t *p0,
+		      cairo_point_t *p1,
+		      cairo_point_t *p2)
 {
+    cairo_status_t status;
     cairo_point_t point[3];
 
-    point[0].x = _cairo_fixed_from_double (x1);
-    point[0].y = _cairo_fixed_from_double (y1);
+    point[0] = *p0;
+    point[1] = *p1;
+    point[2] = *p2;
 
-    point[1].x = _cairo_fixed_from_double (x2);
-    point[1].y = _cairo_fixed_from_double (y2);
+    status = _cairo_path_add (path, CAIRO_PATH_OP_CURVE_TO, point, 3);
+    if (status)
+	return status;
 
-    point[2].x = _cairo_fixed_from_double (x3);
-    point[2].y = _cairo_fixed_from_double (y3);
+    path->current_point = *p2;
+    path->has_current_point = 1;
 
-    return _cairo_path_add (path, CAIRO_PATH_OP_CURVE_TO, point, 3);
+    return CAIRO_STATUS_SUCCESS;
+}
+
+cairo_status_t
+_cairo_path_rel_curve_to (cairo_path_t *path,
+			  cairo_distance_t *d0,
+			  cairo_distance_t *d1,
+			  cairo_distance_t *d2)
+{
+    cairo_point_t p0, p1, p2;
+
+    p0.x = path->current_point.x + d0->dx;
+    p0.y = path->current_point.y + d0->dy;
+
+    p1.x = path->current_point.x + d1->dx;
+    p1.y = path->current_point.y + d1->dy;
+
+    p2.x = path->current_point.x + d2->dx;
+    p2.y = path->current_point.y + d2->dy;
+
+    return _cairo_path_curve_to (path, &p0, &p1, &p2);
 }
 
 cairo_status_t
 _cairo_path_close_path (cairo_path_t *path)
 {
-    return _cairo_path_add (path, CAIRO_PATH_OP_CLOSE_PATH, NULL, 0);
+    cairo_status_t status;
+
+    status = _cairo_path_add (path, CAIRO_PATH_OP_CLOSE_PATH, NULL, 0);
+    if (status)
+	return status;
+
+    path->current_point.x = path->last_move_point.x;
+    path->current_point.y = path->last_move_point.y;
+    path->has_current_point = 1;
+
+    return CAIRO_STATUS_SUCCESS;
+}
+
+cairo_status_t
+_cairo_path_current_point (cairo_path_t *path, cairo_point_t *point)
+{
+    if (! path->has_current_point)
+	return CAIRO_STATUS_NO_CURRENT_POINT;
+
+    *point = path->current_point;
+
+    return CAIRO_STATUS_SUCCESS;
 }
 
 static cairo_status_t
@@ -320,7 +405,13 @@ static int const num_args[] =
 };
 
 cairo_status_t
-_cairo_path_interpret (cairo_path_t *path, cairo_direction_t dir, const cairo_path_callbacks_t *cb, void *closure)
+_cairo_path_interpret (cairo_path_t			*path,
+		       cairo_direction_t		dir,
+		       cairo_path_move_to_func_t	*move_to,
+		       cairo_path_line_to_func_t	*line_to,
+		       cairo_path_curve_to_func_t	*curve_to,
+		       cairo_path_close_path_func_t	*close_path,
+		       void				*closure)
 {
     cairo_status_t status;
     int i, arg;
@@ -329,10 +420,6 @@ _cairo_path_interpret (cairo_path_t *path, cairo_direction_t dir, const cairo_pa
     cairo_path_arg_buf_t *arg_buf = path->arg_head;
     int buf_i = 0;
     cairo_point_t point[CAIRO_PATH_OP_MAX_ARGS];
-    cairo_point_t current = {0, 0};
-    cairo_point_t first = {0, 0};
-    int has_current = 0;
-    int has_edge = 0;
     int step = (dir == CAIRO_DIRECTION_FORWARD) ? 1 : -1;
 
     for (op_buf = (dir == CAIRO_DIRECTION_FORWARD) ? path->op_head : path->op_tail;
@@ -374,62 +461,24 @@ _cairo_path_interpret (cairo_path_t *path, cairo_direction_t dir, const cairo_pa
 
 	    switch (op) {
 	    case CAIRO_PATH_OP_MOVE_TO:
-		if (has_edge) {
-		    status = (*cb->done_sub_path) (closure, CAIRO_SUB_PATH_DONE_CAP);
-		    if (status)
-			return status;
-		}
-		first = point[0];
-		current = point[0];
-		has_current = 1;
-		has_edge = 0;
+		status = (*move_to) (closure, &point[0]);
 		break;
 	    case CAIRO_PATH_OP_LINE_TO:
-		if (has_current) {
-		    status = (*cb->add_edge) (closure, &current, &point[0]);
-		    if (status)
-			return status;
-		    current = point[0];
-		    has_edge = 1;
-		} else {
-		    first = point[0];
-		    current = point[0];
-		    has_current = 1;
-		    has_edge = 0;
-		}
+		status = (*line_to) (closure, &point[0]);
 		break;
 	    case CAIRO_PATH_OP_CURVE_TO:
-		if (has_current) {
-		    status = (*cb->add_spline) (closure, &current, &point[0], &point[1], &point[2]);
-		    if (status)
-			return status;
-		    current = point[2];
-		    has_edge = 1;
-		} else {
-		    first = point[2];
-		    current = point[2];
-		    has_current = 1;
-		    has_edge = 0;
-		}
+		status = (*curve_to) (closure, &point[0], &point[1], &point[2]);
 		break;
 	    case CAIRO_PATH_OP_CLOSE_PATH:
-		if (has_edge) {
-		    (*cb->add_edge) (closure, &current, &first);
-		    (*cb->done_sub_path) (closure, CAIRO_SUB_PATH_DONE_JOIN);
-		}
-		current.x = 0;
-		current.y = 0;
-		first.x = 0;
-		first.y = 0;
-		has_current = 0;
-		has_edge = 0;
+	    default:
+		status = (*close_path) (closure);
 		break;
 	    }
+	    if (status)
+		return status;
 	}
     }
-    if (has_edge)
-        (*cb->done_sub_path) (closure, CAIRO_SUB_PATH_DONE_CAP);
 
-    return (*cb->done_path) (closure);
+    return CAIRO_STATUS_SUCCESS;
 }
 

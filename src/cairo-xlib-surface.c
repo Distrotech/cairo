@@ -90,6 +90,7 @@ typedef struct cairo_xlib_surface {
 #define CAIRO_SURFACE_RENDER_HAS_TRIFAN(surface)			CAIRO_SURFACE_RENDER_AT_LEAST((surface), 0, 4)
 
 #define CAIRO_SURFACE_RENDER_HAS_PICTURE_TRANSFORM(surface)	CAIRO_SURFACE_RENDER_AT_LEAST((surface), 0, 6)
+#define CAIRO_SURFACE_RENDER_HAS_FILTERS(surface)	CAIRO_SURFACE_RENDER_AT_LEAST((surface), 0, 6)
 
 static int
 _CAIRO_FORMAT_DEPTH (cairo_format_t format)
@@ -257,7 +258,7 @@ _cairo_xlib_surface_set_image (void			*abstract_surface,
 
     ximage = XCreateImage (surface->dpy,
 			   DefaultVisual(surface->dpy, DefaultScreen(surface->dpy)),
-			   image->depth == 32 ? 24 : image->depth,
+			   image->depth,
 			   ZPixmap,
 			   0,
 			   image->data,
@@ -320,26 +321,29 @@ _cairo_xlib_surface_set_filter (void *abstract_surface, cairo_filter_t filter)
     cairo_xlib_surface_t *surface = abstract_surface;
     char *render_filter;
 
-    if (!surface->picture)
+    if (!(surface->picture 
+	  && CAIRO_SURFACE_RENDER_HAS_FILTERS(surface)))
 	return CAIRO_STATUS_SUCCESS;
-
-   /* XXX: The Render specification has capitalized versions of these
-           strings. However, the current implementation is
-           case-sensitive and expects lowercase versions.
-   */
+    
     switch (filter) {
     case CAIRO_FILTER_FAST:
-	render_filter = "fast";
+	render_filter = FilterFast;
+	break;
     case CAIRO_FILTER_GOOD:
-	render_filter = "good";
+	render_filter = FilterGood;
+	break;
     case CAIRO_FILTER_BEST:
-	render_filter = "best";
+	render_filter = FilterBest;
+	break;
     case CAIRO_FILTER_NEAREST:
-	render_filter = "nearest";
+	render_filter = FilterNearest;
+	break;
     case CAIRO_FILTER_BILINEAR:
-	render_filter = "bilinear";
+	render_filter = FilterBilinear;
+	break;
     default:
-	render_filter = "best";
+	render_filter = FilterBest;
+	break;
     }
 
     XRenderSetPictureFilter (surface->dpy, surface->picture,
@@ -383,6 +387,8 @@ _cairo_xlib_surface_clone_similar (cairo_surface_t	*src,
 					    src_image->height);
     if (clone == NULL)
 	return NULL;
+
+    _cairo_xlib_surface_set_filter (clone, cairo_surface_get_filter(src));
 
     _cairo_xlib_surface_set_image (clone, src_image);
 
@@ -567,6 +573,60 @@ _cairo_xlib_surface_show_page (void *abstract_surface)
     return CAIRO_INT_STATUS_UNSUPPORTED;
 }
 
+static cairo_int_status_t
+_cairo_xlib_surface_set_clip_region (void *abstract_surface,
+				     pixman_region16_t *region)
+{
+    Region xregion;
+    XRectangle xr;
+    pixman_box16_t *box;
+    cairo_xlib_surface_t *surf;
+    int n, m;
+
+    surf = (cairo_xlib_surface_t *) abstract_surface;
+
+    if (region == NULL) {
+	/* NULL region == reset the clip */
+	xregion = XCreateRegion();
+	xr.x = 0;
+	xr.y = 0;
+	xr.width = surf->width;
+	xr.height = surf->height;
+	XUnionRectWithRegion (&xr, xregion, xregion);
+    } else {
+	n = pixman_region_num_rects (region);
+	/* XXX: Are we sure these are the semantics we want for an
+	 * empty, (not null) region? */
+	if (n == 0)
+	    return CAIRO_STATUS_SUCCESS;
+
+	box = pixman_region_rects (region);
+	xregion = XCreateRegion();
+	
+	m = n;
+	for (; n > 0; --n, ++box) {
+	    xr.x = (short) box->x1;
+	    xr.y = (short) box->y1;
+	    xr.width = (unsigned short) (box->x2 - box->x1);
+	    xr.height = (unsigned short) (box->y2 - box->y1);
+	    XUnionRectWithRegion (&xr, xregion, xregion);
+	}    
+    }
+    
+    XRenderSetPictureClipRegion (surf->dpy, surf->picture, xregion);
+    XDestroyRegion(xregion);
+
+    return CAIRO_STATUS_SUCCESS;
+}
+
+static cairo_int_status_t
+_cairo_xlib_surface_create_pattern (void *abstract_surface,
+				    cairo_pattern_t *pattern,
+				    cairo_box_t *extents)
+{
+    return CAIRO_INT_STATUS_UNSUPPORTED;
+}
+
 static const struct cairo_surface_backend cairo_xlib_surface_backend = {
     _cairo_xlib_surface_create_similar,
     _cairo_xlib_surface_destroy,
@@ -580,7 +640,9 @@ static const struct cairo_surface_backend cairo_xlib_surface_backend = {
     _cairo_xlib_surface_fill_rectangles,
     _cairo_xlib_surface_composite_trapezoids,
     _cairo_xlib_surface_copy_page,
-    _cairo_xlib_surface_show_page
+    _cairo_xlib_surface_show_page,
+    _cairo_xlib_surface_set_clip_region,
+    _cairo_xlib_surface_create_pattern
 };
 
 cairo_surface_t *

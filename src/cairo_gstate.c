@@ -30,15 +30,9 @@
 
 #include "cairoint.h"
 
-static void
-_cairo_gstate_set_current_point (cairo_gstate_t *gstate, double x, double y);
-
-static cairo_status_t
-_cairo_gstate_ensure_source (cairo_gstate_t *gstate);
-
 static cairo_status_t
 _cairo_gstate_clip_and_composite_trapezoids (cairo_gstate_t *gstate,
-					     cairo_surface_t *src,
+					     cairo_pattern_t *src,
 					     cairo_operator_t operator,
 					     cairo_surface_t *dst,
 					     cairo_traps_t *traps);
@@ -79,24 +73,19 @@ _cairo_gstate_init (cairo_gstate_t *gstate)
 				       CAIRO_FONT_WEIGHT_DEFAULT);
 
     gstate->surface = NULL;
-    gstate->source = NULL;
-    gstate->source_offset.x = 0.0;
-    gstate->source_offset.y = 0.0;
-    gstate->source_is_solid = 1;
 
+    gstate->clip.region = NULL;
     gstate->clip.surface = NULL;
-
+    
+    gstate->pattern = _cairo_pattern_create_solid (1.0, 1.0, 1.0);
+    gstate->pattern_offset.x = 0.0;
+    gstate->pattern_offset.y = 0.0;
     gstate->alpha = 1.0;
-    _cairo_color_init (&gstate->color);
 
     gstate->pixels_per_inch = CAIRO_GSTATE_PIXELS_PER_INCH_DEFAULT;
     _cairo_gstate_default_matrix (gstate);
 
     _cairo_path_init (&gstate->path);
-
-    gstate->current_point.x = 0.0;
-    gstate->current_point.y = 0.0;
-    gstate->has_current_point = 0;
 
     _cairo_pen_init_empty (&gstate->pen_regular);
 
@@ -130,9 +119,16 @@ _cairo_gstate_init_copy (cairo_gstate_t *gstate, cairo_gstate_t *other)
 	}
     }
 
+    if (other->clip.region)
+    {	
+	gstate->clip.region = pixman_region_create ();
+	pixman_region_copy (gstate->clip.region, other->clip.region);
+    }
+
     cairo_surface_reference (gstate->surface);
-    cairo_surface_reference (gstate->source);
     cairo_surface_reference (gstate->clip.surface);
+
+    cairo_pattern_reference (gstate->pattern);
     
     status = _cairo_path_init_copy (&gstate->path, &other->path);
     if (status)
@@ -164,16 +160,15 @@ _cairo_gstate_fini (cairo_gstate_t *gstate)
 	cairo_surface_destroy (gstate->surface);
     gstate->surface = NULL;
 
-    if (gstate->source)
-	cairo_surface_destroy (gstate->source);
-    gstate->source = NULL;
-    gstate->source_is_solid = 1;
-
     if (gstate->clip.surface)
 	cairo_surface_destroy (gstate->clip.surface);
     gstate->clip.surface = NULL;
 
-    _cairo_color_fini (&gstate->color);
+    if (gstate->clip.region)
+	pixman_region_destroy (gstate->clip.region);
+    gstate->clip.region = NULL;
+
+    cairo_pattern_destroy (gstate->pattern);
 
     _cairo_matrix_fini (&gstate->ctm);
     _cairo_matrix_fini (&gstate->ctm_inverse);
@@ -358,20 +353,35 @@ _cairo_gstate_current_target_surface (cairo_gstate_t *gstate)
 }
 
 cairo_status_t
-_cairo_gstate_set_pattern (cairo_gstate_t *gstate, cairo_surface_t *pattern)
+_cairo_gstate_set_pattern (cairo_gstate_t *gstate, cairo_pattern_t *pattern)
 {
-    cairo_surface_destroy (gstate->source);
+    if (pattern == NULL)
+	return CAIRO_STATUS_NULL_POINTER;
 
-    gstate->source = pattern;
-    gstate->source_is_solid = 0;
-
-    cairo_surface_reference (gstate->source);
+    if (gstate->pattern)
+	cairo_pattern_destroy (gstate->pattern);
+    
+    gstate->pattern = pattern;
+    cairo_pattern_reference (pattern);
 
     _cairo_gstate_current_point (gstate,
-				 &gstate->source_offset.x,
-				 &gstate->source_offset.y);
-
+                                 &gstate->pattern_offset.x,
+                                 &gstate->pattern_offset.y);
+    
     return CAIRO_STATUS_SUCCESS;
+}
+
+cairo_pattern_t *
+_cairo_gstate_current_pattern (cairo_gstate_t *gstate)
+{
+    if (gstate == NULL)
+	return NULL;
+
+/* XXX: Do we want this?    
+   cairo_pattern_reference (gstate->pattern);
+*/
+
+    return gstate->pattern;
 }
 
 cairo_status_t
@@ -391,25 +401,19 @@ _cairo_gstate_current_operator (cairo_gstate_t *gstate)
 cairo_status_t
 _cairo_gstate_set_rgb_color (cairo_gstate_t *gstate, double red, double green, double blue)
 {
-    _cairo_color_set_rgb (&gstate->color, red, green, blue);
-
-    if (gstate->source)
-	cairo_surface_destroy (gstate->source);
-
-    gstate->source = NULL;
-    gstate->source_offset.x = 0;
-    gstate->source_offset.y = 0;
-    gstate->source_is_solid = 1;
-
+    cairo_pattern_destroy (gstate->pattern);
+    
+    gstate->pattern = _cairo_pattern_create_solid (red, green, blue);
+    gstate->pattern_offset.x = 0.0;
+    gstate->pattern_offset.y = 0.0;
+    
     return CAIRO_STATUS_SUCCESS;
 }
 
 cairo_status_t
 _cairo_gstate_current_rgb_color (cairo_gstate_t *gstate, double *red, double *green, double *blue)
 {
-    _cairo_color_get_rgb (&gstate->color, red, green, blue);
-
-    return CAIRO_STATUS_SUCCESS;
+    return _cairo_pattern_get_rgb (gstate->pattern, red, green, blue);
 }
 
 cairo_status_t
@@ -426,19 +430,10 @@ _cairo_gstate_current_tolerance (cairo_gstate_t *gstate)
     return gstate->tolerance;
 }
 
-/* XXX: Need to fix this so it does the right thing after set_pattern. */
 cairo_status_t
 _cairo_gstate_set_alpha (cairo_gstate_t *gstate, double alpha)
 {
     gstate->alpha = alpha;
-
-    _cairo_color_set_alpha (&gstate->color, alpha);
-
-    cairo_surface_destroy (gstate->source);
-
-    gstate->source = NULL;
-    gstate->source_offset.x = 0;
-    gstate->source_offset.y = 0;
 
     return CAIRO_STATUS_SUCCESS;
 }
@@ -680,20 +675,10 @@ _cairo_gstate_inverse_transform_distance (cairo_gstate_t *gstate, double *dx, do
     return CAIRO_STATUS_SUCCESS;
 }
 
-static void
-_cairo_gstate_set_current_point (cairo_gstate_t *gstate, double x, double y)
-{
-    gstate->current_point.x = x;
-    gstate->current_point.y = y;
-
-    gstate->has_current_point = 1;
-}
-
 cairo_status_t
 _cairo_gstate_new_path (cairo_gstate_t *gstate)
 {
     _cairo_path_fini (&gstate->path);
-    gstate->has_current_point = 0;
 
     return CAIRO_STATUS_SUCCESS;
 }
@@ -701,53 +686,51 @@ _cairo_gstate_new_path (cairo_gstate_t *gstate)
 cairo_status_t
 _cairo_gstate_move_to (cairo_gstate_t *gstate, double x, double y)
 {
-    cairo_status_t status;
+    cairo_point_t point;
 
     cairo_matrix_transform_point (&gstate->ctm, &x, &y);
 
-    status = _cairo_path_move_to (&gstate->path, x, y);
+    point.x = _cairo_fixed_from_double (x);
+    point.y = _cairo_fixed_from_double (y);
 
-    _cairo_gstate_set_current_point (gstate, x, y);
-
-    gstate->last_move_point = gstate->current_point;
-
-    return status;
+    return _cairo_path_move_to (&gstate->path, &point);
 }
 
 cairo_status_t
 _cairo_gstate_line_to (cairo_gstate_t *gstate, double x, double y)
 {
-    cairo_status_t status;
+    cairo_point_t point;
 
     cairo_matrix_transform_point (&gstate->ctm, &x, &y);
 
-    status = _cairo_path_line_to (&gstate->path, x, y);
+    point.x = _cairo_fixed_from_double (x);
+    point.y = _cairo_fixed_from_double (y);
 
-    _cairo_gstate_set_current_point (gstate, x, y);
-
-    return status;
+    return _cairo_path_line_to (&gstate->path, &point);
 }
 
 cairo_status_t
 _cairo_gstate_curve_to (cairo_gstate_t *gstate,
+			double x0, double y0,
 			double x1, double y1,
-			double x2, double y2,
-			double x3, double y3)
+			double x2, double y2)
 {
-    cairo_status_t status;
+    cairo_point_t p0, p1, p2;
 
+    cairo_matrix_transform_point (&gstate->ctm, &x0, &y0);
     cairo_matrix_transform_point (&gstate->ctm, &x1, &y1);
     cairo_matrix_transform_point (&gstate->ctm, &x2, &y2);
-    cairo_matrix_transform_point (&gstate->ctm, &x3, &y3);
 
-    status = _cairo_path_curve_to (&gstate->path,
-				   x1, y1,
-				   x2, y2,
-				   x3, y3);
+    p0.x = _cairo_fixed_from_double (x0);
+    p0.y = _cairo_fixed_from_double (y0);
 
-    _cairo_gstate_set_current_point (gstate, x3, y3);
+    p1.x = _cairo_fixed_from_double (x1);
+    p1.y = _cairo_fixed_from_double (y1);
 
-    return status;
+    p2.x = _cairo_fixed_from_double (x2);
+    p2.y = _cairo_fixed_from_double (y2);
+
+    return _cairo_path_curve_to (&gstate->path, &p0, &p1, &p2);
 }
 
 /* Spline deviation from the circle in radius would be given by:
@@ -1025,63 +1008,54 @@ _cairo_gstate_arc_to (cairo_gstate_t *gstate,
 cairo_status_t
 _cairo_gstate_rel_move_to (cairo_gstate_t *gstate, double dx, double dy)
 {
-    cairo_status_t status;
-    double x, y;
+    cairo_distance_t distance;
 
     cairo_matrix_transform_distance (&gstate->ctm, &dx, &dy);
 
-    x = gstate->current_point.x + dx;
-    y = gstate->current_point.y + dy;
+    distance.dx = _cairo_fixed_from_double (dx);
+    distance.dy = _cairo_fixed_from_double (dy);
 
-    status = _cairo_path_move_to (&gstate->path, x, y);
-
-    _cairo_gstate_set_current_point (gstate, x, y);
-
-    gstate->last_move_point = gstate->current_point;
-
-    return status;
+    return _cairo_path_rel_move_to (&gstate->path, &distance);
 }
 
 cairo_status_t
 _cairo_gstate_rel_line_to (cairo_gstate_t *gstate, double dx, double dy)
 {
-    cairo_status_t status;
-    double x, y;
+    cairo_distance_t distance;
 
     cairo_matrix_transform_distance (&gstate->ctm, &dx, &dy);
 
-    x = gstate->current_point.x + dx;
-    y = gstate->current_point.y + dy;
+    distance.dx = _cairo_fixed_from_double (dx);
+    distance.dy = _cairo_fixed_from_double (dy);
 
-    status = _cairo_path_line_to (&gstate->path, x, y);
-
-    _cairo_gstate_set_current_point (gstate, x, y);
-
-    return status;
+    return _cairo_path_rel_line_to (&gstate->path, &distance);
 }
 
 cairo_status_t
 _cairo_gstate_rel_curve_to (cairo_gstate_t *gstate,
+			    double dx0, double dy0,
 			    double dx1, double dy1,
-			    double dx2, double dy2,
-			    double dx3, double dy3)
+			    double dx2, double dy2)
 {
-    cairo_status_t status;
+    cairo_distance_t distance[3];
 
+    cairo_matrix_transform_distance (&gstate->ctm, &dx0, &dy0);
     cairo_matrix_transform_distance (&gstate->ctm, &dx1, &dy1);
     cairo_matrix_transform_distance (&gstate->ctm, &dx2, &dy2);
-    cairo_matrix_transform_distance (&gstate->ctm, &dx3, &dy3);
 
-    status = _cairo_path_curve_to (&gstate->path,
-				   gstate->current_point.x + dx1, gstate->current_point.y + dy1,
-				   gstate->current_point.x + dx2, gstate->current_point.y + dy2,
-				   gstate->current_point.x + dx3, gstate->current_point.y + dy3);
+    distance[0].dx = _cairo_fixed_from_double (dx0);
+    distance[0].dy = _cairo_fixed_from_double (dy0);
 
-    _cairo_gstate_set_current_point (gstate,
-			  gstate->current_point.x + dx3,
-			  gstate->current_point.y + dy3);
+    distance[1].dx = _cairo_fixed_from_double (dx1);
+    distance[1].dy = _cairo_fixed_from_double (dy1);
 
-    return status;
+    distance[2].dx = _cairo_fixed_from_double (dx2);
+    distance[2].dy = _cairo_fixed_from_double (dy2);
+
+    return _cairo_path_rel_curve_to (&gstate->path,
+				     &distance[0],
+				     &distance[1],
+				     &distance[2]);
 }
 
 /* XXX: NYI 
@@ -1098,29 +1072,24 @@ _cairo_gstate_stroke_path (cairo_gstate_t *gstate)
 cairo_status_t
 _cairo_gstate_close_path (cairo_gstate_t *gstate)
 {
-    cairo_status_t status;
-
-    status = _cairo_path_close_path (&gstate->path);
-
-    _cairo_gstate_set_current_point (gstate,
-				     gstate->last_move_point.x, 
-				     gstate->last_move_point.y);
-
-    return status;
+    return _cairo_path_close_path (&gstate->path);
 }
 
 cairo_status_t
 _cairo_gstate_current_point (cairo_gstate_t *gstate, double *x_ret, double *y_ret)
 {
+    cairo_status_t status;
+    cairo_point_t point;
     double x, y;
 
-    if (gstate->has_current_point) {
-	x = gstate->current_point.x;
-	y = gstate->current_point.y;
-	cairo_matrix_transform_point (&gstate->ctm_inverse, &x, &y);
-    } else {
+    status = _cairo_path_current_point (&gstate->path, &point);
+    if (status == CAIRO_STATUS_NO_CURRENT_POINT) {
 	x = 0.0;
 	y = 0.0;
+    } else {
+	x = _cairo_fixed_to_double (point.x);
+	y = _cairo_fixed_to_double (point.y);
+	cairo_matrix_transform_point (&gstate->ctm_inverse, &x, &y);
     }
 
     *x_ret = x;
@@ -1129,24 +1098,201 @@ _cairo_gstate_current_point (cairo_gstate_t *gstate, double *x_ret, double *y_re
     return CAIRO_STATUS_SUCCESS;
 }
 
+typedef struct gstate_path_interpreter {
+    cairo_matrix_t		ctm_inverse;
+    double			tolerance;
+    cairo_point_t		current_point;
+
+    cairo_move_to_func_t	*move_to;
+    cairo_line_to_func_t	*line_to;
+    cairo_curve_to_func_t	*curve_to;
+    cairo_close_path_func_t	*close_path;
+
+    void			*closure;
+} gpi_t;
+
 static cairo_status_t
-_cairo_gstate_ensure_source (cairo_gstate_t *gstate)
+_gpi_move_to (void *closure, cairo_point_t *point)
 {
-    if (gstate->source)
-	return CAIRO_STATUS_SUCCESS;
+    gpi_t *gpi = closure;
+    double x, y;
 
-    if (gstate->surface == NULL)
+    x = _cairo_fixed_to_double (point->x);
+    y = _cairo_fixed_to_double (point->y);
+
+    cairo_matrix_transform_point (&gpi->ctm_inverse, &x, &y);
+
+    gpi->move_to (gpi->closure, x, y);
+    gpi->current_point = *point;
+
+    return CAIRO_STATUS_SUCCESS;
+}
+
+static cairo_status_t
+_gpi_line_to (void *closure, cairo_point_t *point)
+{
+    gpi_t *gpi = closure;
+    double x, y;
+
+    x = _cairo_fixed_to_double (point->x);
+    y = _cairo_fixed_to_double (point->y);
+
+    cairo_matrix_transform_point (&gpi->ctm_inverse, &x, &y);
+
+    gpi->line_to (gpi->closure, x, y);
+    gpi->current_point = *point;
+
+    return CAIRO_STATUS_SUCCESS;
+}
+
+static cairo_status_t
+_gpi_curve_to (void *closure,
+	       cairo_point_t *p1,
+	       cairo_point_t *p2,
+	       cairo_point_t *p3)
+{
+    gpi_t *gpi = closure;
+    cairo_status_t status;
+    cairo_spline_t spline;
+    double x1, y1, x2, y2, x3, y3;
+
+    if (gpi->curve_to) {
+	x1 = _cairo_fixed_to_double (p1->x);
+	y1 = _cairo_fixed_to_double (p1->y);
+	cairo_matrix_transform_point (&gpi->ctm_inverse, &x1, &y1);
+
+	x2 = _cairo_fixed_to_double (p2->x);
+	y2 = _cairo_fixed_to_double (p2->y);
+	cairo_matrix_transform_point (&gpi->ctm_inverse, &x2, &y2);
+
+	x3 = _cairo_fixed_to_double (p3->x);
+	y3 = _cairo_fixed_to_double (p3->y);
+	cairo_matrix_transform_point (&gpi->ctm_inverse, &x3, &y3);
+
+	gpi->curve_to (gpi->closure, x1, y1, x2, y2, x3, y3);
+    } else {
+	cairo_point_t *p0 = &gpi->current_point;
+	int i;
+	double x, y;
+
+	status = _cairo_spline_init (&spline, p0, p1, p2, p3);
+	if (status == CAIRO_INT_STATUS_DEGENERATE)
+	    return CAIRO_STATUS_SUCCESS;
+
+	status = _cairo_spline_decompose (&spline, gpi->tolerance);
+	if (status)
+	    return status;
+
+	for (i=1; i < spline.num_points; i++) {
+	    x = _cairo_fixed_to_double (spline.points[i].x);
+	    y = _cairo_fixed_to_double (spline.points[i].y);
+
+	    cairo_matrix_transform_point (&gpi->ctm_inverse, &x, &y);
+
+	    gpi->line_to (gpi->closure, x, y);
+	}
+    }
+
+    gpi->current_point = *p3;
+
+    return CAIRO_STATUS_SUCCESS;
+}
+
+static cairo_status_t
+_gpi_close_path (void *closure)
+{
+    gpi_t *gpi = closure;
+
+    gpi->close_path (gpi->closure);
+
+    gpi->current_point.x = 0;
+    gpi->current_point.y = 0;
+
+    return CAIRO_STATUS_SUCCESS;
+}
+
+/* It's OK for curve_path to be NULL. In that case, all curves in the
+   path will be decomposed into one or more calls to the line_to
+   function, (according to the current tolerance). */
+cairo_status_t
+_cairo_gstate_interpret_path (cairo_gstate_t		*gstate,
+			      cairo_move_to_func_t	*move_to,
+			      cairo_line_to_func_t	*line_to,
+			      cairo_curve_to_func_t	*curve_to,
+			      cairo_close_path_func_t	*close_path,
+			      void			*closure)
+{
+    cairo_path_t path;
+    gpi_t gpi;
+
+    /* Anything we want from gstate must be copied. We must not retain
+       pointers into gstate. */
+    _cairo_path_init_copy (&path, &gstate->path);
+
+    cairo_matrix_copy (&gpi.ctm_inverse, &gstate->ctm_inverse);
+    gpi.tolerance = gstate->tolerance;
+
+    gpi.move_to = move_to;
+    gpi.line_to = line_to;
+    gpi.curve_to = curve_to;
+    gpi.close_path = close_path;
+    gpi.closure = closure;
+
+    gpi.current_point.x = 0;
+    gpi.current_point.y = 0;
+
+    return _cairo_path_interpret (&path,
+				  CAIRO_DIRECTION_FORWARD,
+				  _gpi_move_to,
+				  _gpi_line_to,
+				  _gpi_curve_to,
+				  _gpi_close_path,
+				  &gpi);
+}
+
+/* This function modifies the pattern and the state of the pattern surface it
+   may contain. The pattern surface will be restored to its orignal state
+   when the pattern is destroyed. The appropriate way is to pass a copy of
+   the original pattern to this function just before the pattern should be
+   used and destroy the copy when done. */
+static cairo_status_t
+_cairo_gstate_create_pattern (cairo_gstate_t *gstate,
+			      cairo_pattern_t *pattern,
+			      cairo_box_t *extents)
+{
+    cairo_int_status_t status;
+  
+    if (gstate->surface == NULL) {
+	_cairo_pattern_fini (pattern);
 	return CAIRO_STATUS_NO_TARGET_SURFACE;
+    }
 
-    gstate->source = _cairo_surface_create_similar_solid (gstate->surface,
-							  CAIRO_FORMAT_ARGB32,
-							  1, 1,
-							  &gstate->color);
-    if (gstate->source == NULL)
-	return CAIRO_STATUS_NO_MEMORY;
+    if (pattern->type == CAIRO_PATTERN_LINEAR ||
+	pattern->type == CAIRO_PATTERN_RADIAL) {
+	if (pattern->n_stops < 2) {
+	    pattern->type = CAIRO_PATTERN_SOLID;
+      
+	    if (pattern->n_stops)
+		pattern->color = pattern->stops->color;
+	}
+    }
+  
+    _cairo_pattern_set_alpha (pattern, gstate->alpha);
+    _cairo_pattern_transform (pattern, &gstate->ctm, &gstate->ctm_inverse);
 
-    cairo_surface_set_repeat (gstate->source, 1);
+    status = _cairo_surface_create_pattern (gstate->surface, pattern, extents);
+    if (status) {
+	_cairo_pattern_fini (pattern);
+	return status;
+    }
 
+    if (pattern->type == CAIRO_PATTERN_SURFACE)
+	_cairo_pattern_prepare_surface (pattern);
+
+    _cairo_pattern_add_source_offset (pattern,
+				      gstate->pattern_offset.x,
+				      gstate->pattern_offset.y);
+    
     return CAIRO_STATUS_SUCCESS;
 }
 
@@ -1155,14 +1301,9 @@ _cairo_gstate_stroke (cairo_gstate_t *gstate)
 {
     cairo_status_t status;
     cairo_traps_t traps;
-    cairo_matrix_t user_to_source, device_to_source;
 
     if (gstate->line_width <= 0.0)
 	return CAIRO_STATUS_SUCCESS;
-
-    status = _cairo_gstate_ensure_source (gstate);
-    if (status)
-	return status;
 
     _cairo_pen_init (&gstate->pen_regular, gstate->line_width / 2.0, gstate);
 
@@ -1174,21 +1315,11 @@ _cairo_gstate_stroke (cairo_gstate_t *gstate)
 	return status;
     }
 
-    if (! gstate->source_is_solid) {
-	cairo_surface_get_matrix (gstate->source, &user_to_source);
-	cairo_matrix_multiply (&device_to_source, &gstate->ctm_inverse, &user_to_source);
-	cairo_surface_set_matrix (gstate->source, &device_to_source);
-    }
-
     _cairo_gstate_clip_and_composite_trapezoids (gstate,
-						 gstate->source,
-						 gstate->operator,
-						 gstate->surface,
-						 &traps);
-    
-    /* restore the matrix originally in the source surface */
-    if (! gstate->source_is_solid)
-	cairo_surface_set_matrix (gstate->source, &user_to_source);
+                                                 gstate->pattern,
+                                                 gstate->operator,
+                                                 gstate->surface,
+                                                 &traps);
 
     _cairo_traps_fini (&traps);
 
@@ -1227,12 +1358,14 @@ BAIL:
 /* Warning: This call modifies the coordinates of traps */
 static cairo_status_t
 _cairo_gstate_clip_and_composite_trapezoids (cairo_gstate_t *gstate,
-					     cairo_surface_t *src,
+					     cairo_pattern_t *src,
 					     cairo_operator_t operator,
 					     cairo_surface_t *dst,
 					     cairo_traps_t *traps)
 {
     cairo_status_t status;
+    cairo_pattern_t pattern;
+    cairo_box_t extents;
 
     if (traps->num_traps == 0)
 	return CAIRO_STATUS_SUCCESS;
@@ -1241,19 +1374,8 @@ _cairo_gstate_clip_and_composite_trapezoids (cairo_gstate_t *gstate,
 	cairo_fixed_t xoff, yoff;
 	cairo_trapezoid_t *t;
 	int i;
-
-	cairo_surface_t *white, *intermediate;
-	cairo_color_t white_color, empty_color;
-
-	_cairo_color_init (&white_color);
-	white = _cairo_surface_create_similar_solid (gstate->surface, CAIRO_FORMAT_A8,
-						     1, 1,
-						     &white_color);
-	if (white == NULL) {
-	    status = CAIRO_STATUS_NO_MEMORY;
-	    goto BAIL0;
-	}
-	cairo_surface_set_repeat (white, 1);
+	cairo_surface_t *intermediate;
+	cairo_color_t empty_color;
 
 	_cairo_color_init (&empty_color);
 	_cairo_color_set_alpha (&empty_color, 0.);
@@ -1261,10 +1383,10 @@ _cairo_gstate_clip_and_composite_trapezoids (cairo_gstate_t *gstate,
 							    CAIRO_FORMAT_A8,
 							    gstate->clip.width,
 							    gstate->clip.height,
-							    &empty_color);
+                                &empty_color);    
 	if (intermediate == NULL) {
 	    status = CAIRO_STATUS_NO_MEMORY;
-	    goto BAIL1;
+	    goto BAIL0;
 	}
 
 	/* Ugh. The cairo_composite/(Render) interface doesn't allow
@@ -1286,8 +1408,16 @@ _cairo_gstate_clip_and_composite_trapezoids (cairo_gstate_t *gstate,
 	    t->right.p2.y -= yoff;
 	}
 
+	_cairo_pattern_init_solid (&pattern, 1.0, 1.0, 1.0);
+	_cairo_pattern_set_alpha (&pattern, 1.0);
+
+	_cairo_traps_extents (traps, &extents);
+	status = _cairo_gstate_create_pattern (gstate, &pattern, &extents);
+	if (status)
+	    goto BAIL1;
+
 	status = _cairo_surface_composite_trapezoids (CAIRO_OPERATOR_ADD,
-						      white, intermediate,
+						      pattern.source, intermediate,
 						      0, 0,
 						      traps->traps,
 						      traps->num_traps);
@@ -1302,9 +1432,23 @@ _cairo_gstate_clip_and_composite_trapezoids (cairo_gstate_t *gstate,
 					   gstate->clip.width, gstate->clip.height);
 	if (status)
 	    goto BAIL2;
+    
+	_cairo_pattern_fini (&pattern);
+    
+	_cairo_pattern_init_copy (&pattern, src);
+    
+	extents.p1.x = _cairo_fixed_from_int (gstate->clip.x);
+	extents.p1.y = _cairo_fixed_from_int (gstate->clip.y);
+	extents.p2.x =
+	    _cairo_fixed_from_int (gstate->clip.x + gstate->clip.width);
+	extents.p2.y =
+	    _cairo_fixed_from_int (gstate->clip.y + gstate->clip.height);
+	status = _cairo_gstate_create_pattern (gstate, &pattern, &extents);
+	if (status)
+	    goto BAIL2;
 
 	status = _cairo_surface_composite (operator,
-					   src, intermediate, dst,
+					   pattern.source, intermediate, dst,
 					   0, 0,
 					   0, 0,
 					   gstate->clip.x,
@@ -1315,11 +1459,12 @@ _cairo_gstate_clip_and_composite_trapezoids (cairo_gstate_t *gstate,
     BAIL2:
 	cairo_surface_destroy (intermediate);
     BAIL1:
-	cairo_surface_destroy (white);
+	_cairo_pattern_fini (&pattern);
     BAIL0:
+
 	if (status)
 	    return status;
-
+	
     } else {
 	int xoff, yoff;
 
@@ -1331,16 +1476,26 @@ _cairo_gstate_clip_and_composite_trapezoids (cairo_gstate_t *gstate,
 	    yoff = _cairo_fixed_to_double (traps->traps[0].left.p2.y);
 	}
 
+	_cairo_pattern_init_copy (&pattern, src);
+	
+	_cairo_traps_extents (traps, &extents);
+	status = _cairo_gstate_create_pattern (gstate, &pattern, &extents);
+	if (status)
+	    return status;
+
 	status = _cairo_surface_composite_trapezoids (gstate->operator,
-						      src, dst,
-						      xoff - gstate->source_offset.x,
-						      yoff - gstate->source_offset.y,
+						      pattern.source, dst,
+						      xoff - pattern.source_offset.x,
+						      yoff - pattern.source_offset.y,
 						      traps->traps,
 						      traps->num_traps);
+
+	_cairo_pattern_fini (&pattern);
+    
 	if (status)
 	    return status;
     }
-
+    
     return CAIRO_STATUS_SUCCESS;
 }
 
@@ -1349,11 +1504,6 @@ _cairo_gstate_fill (cairo_gstate_t *gstate)
 {
     cairo_status_t status;
     cairo_traps_t traps;
-    cairo_matrix_t user_to_source, device_to_source;
-
-    status = _cairo_gstate_ensure_source (gstate);
-    if (status)
-	return status;
 
     _cairo_traps_init (&traps);
 
@@ -1363,21 +1513,11 @@ _cairo_gstate_fill (cairo_gstate_t *gstate)
 	return status;
     }
 
-    if (! gstate->source_is_solid) {
-	cairo_surface_get_matrix (gstate->source, &user_to_source);
-	cairo_matrix_multiply (&device_to_source, &gstate->ctm_inverse, &user_to_source);
-	cairo_surface_set_matrix (gstate->source, &device_to_source);
-    }
-
     _cairo_gstate_clip_and_composite_trapezoids (gstate,
-						 gstate->source,
-						 gstate->operator,
-						 gstate->surface,
-						 &traps);
-
-    /* restore the matrix originally in the source surface */
-    if (! gstate->source_is_solid)
-	cairo_surface_set_matrix (gstate->source, &user_to_source);
+                                                 gstate->pattern,
+                                                 gstate->operator,
+                                                 gstate->surface,
+                                                 &traps);
 
     _cairo_traps_fini (&traps);
 
@@ -1404,7 +1544,7 @@ _cairo_gstate_in_fill (cairo_gstate_t	*gstate,
 	goto BAIL;
 
     *inside_ret = _cairo_traps_contain (&traps, x, y);
-
+    
 BAIL:
     _cairo_traps_fini (&traps);
 
@@ -1430,39 +1570,137 @@ _cairo_gstate_show_page (cairo_gstate_t *gstate)
 }
 
 cairo_status_t
+_cairo_gstate_stroke_extents (cairo_gstate_t *gstate,
+                              double *x1, double *y1,
+			      double *x2, double *y2)
+{
+    cairo_status_t status;
+    cairo_traps_t traps;
+    cairo_box_t extents;
+  
+    _cairo_traps_init (&traps);
+  
+    status = _cairo_path_stroke_to_traps (&gstate->path, gstate, &traps);
+    if (status)
+	goto BAIL;
+
+    _cairo_traps_extents (&traps, &extents);
+
+    *x1 = _cairo_fixed_to_double (extents.p1.x);
+    *y1 = _cairo_fixed_to_double (extents.p1.y);
+    *x2 = _cairo_fixed_to_double (extents.p2.x);
+    *y2 = _cairo_fixed_to_double (extents.p2.y);
+
+    cairo_matrix_transform_point (&gstate->ctm_inverse, x1, y1);
+    cairo_matrix_transform_point (&gstate->ctm_inverse, x2, y2);
+  
+BAIL:
+    _cairo_traps_fini (&traps);
+  
+    return status;
+}
+
+cairo_status_t
+_cairo_gstate_fill_extents (cairo_gstate_t *gstate,
+                            double *x1, double *y1,
+			    double *x2, double *y2)
+{
+    cairo_status_t status;
+    cairo_traps_t traps;
+    cairo_box_t extents;
+  
+    _cairo_traps_init (&traps);
+  
+    status = _cairo_path_fill_to_traps (&gstate->path, gstate, &traps);
+    if (status)
+	goto BAIL;
+  
+    _cairo_traps_extents (&traps, &extents);
+
+    *x1 = _cairo_fixed_to_double (extents.p1.x);
+    *y1 = _cairo_fixed_to_double (extents.p1.y);
+    *x2 = _cairo_fixed_to_double (extents.p2.x);
+    *y2 = _cairo_fixed_to_double (extents.p2.y);
+
+    cairo_matrix_transform_point (&gstate->ctm_inverse, x1, y1);
+    cairo_matrix_transform_point (&gstate->ctm_inverse, x2, y2);
+  
+BAIL:
+    _cairo_traps_fini (&traps);
+  
+    return status;
+}
+
+cairo_status_t
+_cairo_gstate_init_clip (cairo_gstate_t *gstate)
+{
+    /* destroy any existing clip-region artifacts */
+    if (gstate->clip.surface)
+	cairo_surface_destroy (gstate->clip.surface);
+    gstate->clip.surface = NULL;
+
+    if (gstate->clip.region)
+	pixman_region_destroy (gstate->clip.region);
+    gstate->clip.region = NULL;
+
+    /* reset the surface's clip to the whole surface */
+    _cairo_surface_set_clip_region (gstate->surface, 
+				    gstate->clip.region);
+
+    return CAIRO_STATUS_SUCCESS;
+}
+
+static int
+extract_transformed_rectangle(cairo_matrix_t *mat,
+			      cairo_traps_t *tr,
+			      pixman_box16_t *box)
+{
+#define CAIRO_FIXED_IS_INTEGER(x) (((x) & 0xFFFF) == 0)
+#define CAIRO_FIXED_INTEGER_PART(x) ((x) >> 16)
+
+    double a, b, c, d, tx, ty;
+    cairo_status_t st;
+
+    st = cairo_matrix_get_affine (mat, &a, &b, &c, &d, &tx, &ty);    
+    if (!(st == CAIRO_STATUS_SUCCESS && b == 0. && c == 0.))
+	return 0;
+
+    if (tr->num_traps == 1 
+	&& tr->traps[0].left.p1.x == tr->traps[0].left.p2.x
+	&& tr->traps[0].right.p1.x == tr->traps[0].right.p2.x
+	&& tr->traps[0].left.p1.y == tr->traps[0].right.p1.y
+	&& tr->traps[0].left.p2.y == tr->traps[0].right.p2.y
+	&& CAIRO_FIXED_IS_INTEGER(tr->traps[0].left.p1.x)
+	&& CAIRO_FIXED_IS_INTEGER(tr->traps[0].left.p1.y)
+	&& CAIRO_FIXED_IS_INTEGER(tr->traps[0].left.p2.x)
+	&& CAIRO_FIXED_IS_INTEGER(tr->traps[0].left.p2.y)
+	&& CAIRO_FIXED_IS_INTEGER(tr->traps[0].right.p1.x)
+	&& CAIRO_FIXED_IS_INTEGER(tr->traps[0].right.p1.y)
+	&& CAIRO_FIXED_IS_INTEGER(tr->traps[0].right.p2.x)
+	&& CAIRO_FIXED_IS_INTEGER(tr->traps[0].right.p2.y)) {
+
+	box->x1 = (short) CAIRO_FIXED_INTEGER_PART(tr->traps[0].left.p1.x);
+	box->x2 = (short) CAIRO_FIXED_INTEGER_PART(tr->traps[0].right.p1.x);
+	box->y1 = (short) CAIRO_FIXED_INTEGER_PART(tr->traps[0].left.p1.y);
+	box->y2 = (short) CAIRO_FIXED_INTEGER_PART(tr->traps[0].left.p2.y);
+	return 1;
+    }
+    return 0;
+
+#undef CAIRO_FIXED_IS_INTEGER
+#undef CAIRO_FIXED_INTEGER_PART
+}
+
+cairo_status_t
 _cairo_gstate_clip (cairo_gstate_t *gstate)
 {
     cairo_status_t status;
-    cairo_surface_t *alpha_one;
+    cairo_pattern_t pattern;
     cairo_traps_t traps;
     cairo_color_t white_color;
+    pixman_box16_t box;
 
-    _cairo_color_init (&white_color);
-
-    if (gstate->clip.surface == NULL) {
-	double x1, y1, x2, y2;
-	_cairo_path_bounds (&gstate->path,
-			    &x1, &y1, &x2, &y2);
-	gstate->clip.x = floor (x1);
-	gstate->clip.y = floor (y1);
-	gstate->clip.width = ceil (x2 - gstate->clip.x);
-	gstate->clip.height = ceil (y2 - gstate->clip.y);
-	gstate->clip.surface = _cairo_surface_create_similar_solid (gstate->surface,
-								    CAIRO_FORMAT_A8,
-								    gstate->clip.width,
-								    gstate->clip.height,
-								    &white_color);
-	if (gstate->clip.surface == NULL)
-	    return CAIRO_STATUS_NO_MEMORY;
-    }
-
-    alpha_one = _cairo_surface_create_similar_solid (gstate->surface, CAIRO_FORMAT_A8,
-						     1, 1,
-						     &white_color);
-    if (alpha_one == NULL)
-	return CAIRO_STATUS_NO_MEMORY;
-
-    cairo_surface_set_repeat (alpha_one, 1);
+    /* Fill the clip region as traps. */
 
     _cairo_traps_init (&traps);
     status = _cairo_path_fill_to_traps (&gstate->path, gstate, &traps);
@@ -1471,15 +1709,81 @@ _cairo_gstate_clip (cairo_gstate_t *gstate)
 	return status;
     }
 
+    /* Check to see if we can represent these traps as a PixRegion. */
+
+    if (extract_transformed_rectangle (&gstate->ctm, &traps, &box)) {
+
+	pixman_region16_t *rect = NULL;
+	pixman_region16_t *intersection = NULL;
+
+	status = CAIRO_STATUS_SUCCESS;
+	rect = pixman_region_create_simple (&box);
+	
+	if (rect == NULL) {
+	    status = CAIRO_STATUS_NO_MEMORY;
+
+	} else {
+	    
+	    if (gstate->clip.region == NULL) {
+		gstate->clip.region = rect;		
+	    } else {
+		intersection = pixman_region_create();
+		if (pixman_region_intersect (intersection, 
+					     gstate->clip.region, rect)
+		    == PIXMAN_REGION_STATUS_SUCCESS) {
+		    pixman_region_destroy (gstate->clip.region);
+		    gstate->clip.region = intersection;
+		} else {		
+		    status = CAIRO_STATUS_NO_MEMORY;
+		}
+		pixman_region_destroy (rect);
+	    }
+	    
+	    if (!status)
+		status = _cairo_surface_set_clip_region (gstate->surface, 
+							 gstate->clip.region);
+	}
+	
+	if (status != CAIRO_INT_STATUS_UNSUPPORTED) {
+	    _cairo_traps_fini (&traps);
+	    return status;
+	}
+    }
+
+    /* Otherwise represent the clip as a mask surface. */
+
+    _cairo_color_init (&white_color);
+
+    if (gstate->clip.surface == NULL) {
+	double x1, y1, x2, y2;
+      _cairo_path_bounds (&gstate->path,
+                          &x1, &y1, &x2, &y2);
+      gstate->clip.x = floor (x1);
+      gstate->clip.y = floor (y1);
+      gstate->clip.width = ceil (x2 - gstate->clip.x);
+      gstate->clip.height = ceil (y2 - gstate->clip.y);
+      gstate->clip.surface =
+        _cairo_surface_create_similar_solid (gstate->surface,
+                                             CAIRO_FORMAT_A8,
+                                             gstate->clip.width,
+                                             gstate->clip.height,
+                                             &white_color);
+      if (gstate->clip.surface == NULL)
+	    return CAIRO_STATUS_NO_MEMORY;
+    }
+
+    _cairo_pattern_init_solid (&pattern, 1.0, 1.0, 1.0);
+    _cairo_pattern_set_alpha (&pattern, 1.0);
+    
     _cairo_gstate_clip_and_composite_trapezoids (gstate,
-						 alpha_one,
+						 &pattern,
 						 CAIRO_OPERATOR_IN,
 						 gstate->clip.surface,
 						 &traps);
-
+    
+    _cairo_pattern_fini (&pattern);
+    
     _cairo_traps_fini (&traps);
-
-    cairo_surface_destroy (alpha_one);
 
     return status;
 }
@@ -1491,27 +1795,12 @@ _cairo_gstate_show_surface (cairo_gstate_t	*gstate,
 			    int			height)
 {
     cairo_status_t status;
-    cairo_surface_t *mask;
     cairo_matrix_t user_to_image, image_to_user;
     cairo_matrix_t image_to_device, device_to_image;
     double device_x, device_y;
     double device_width, device_height;
-    cairo_color_t alpha_color;
-
-    if (gstate->alpha != 1.0) {
-	_cairo_color_init (&alpha_color);
-	_cairo_color_set_alpha (&alpha_color, gstate->alpha);
-	mask = _cairo_surface_create_similar_solid (gstate->surface,
-						    CAIRO_FORMAT_A8,
-						    1, 1,
-						    &alpha_color);
-	if (mask == NULL)
-	    return CAIRO_STATUS_NO_MEMORY;
-
-	cairo_surface_set_repeat (mask, 1);
-    } else {
-	mask = NULL;
-    }
+    cairo_pattern_t pattern;
+    cairo_box_t extents;
 
     cairo_surface_get_matrix (surface, &user_to_image);
     cairo_matrix_multiply (&device_to_image, &gstate->ctm_inverse, &user_to_image);
@@ -1527,32 +1816,47 @@ _cairo_gstate_show_surface (cairo_gstate_t	*gstate,
     _cairo_matrix_transform_bounding_box (&image_to_device,
 					  &device_x, &device_y,
 					  &device_width, &device_height);
+
+    _cairo_pattern_init (&pattern);
+
+    if ((gstate->pattern->type != CAIRO_PATTERN_SOLID) ||
+        (gstate->alpha != 1.0)) {
+	/* I'm allowing any type of pattern for the mask right now.
+	   Maybe this is bad. Will allow for some cool effects though. */
+	_cairo_pattern_init_copy (&pattern, gstate->pattern);
+	extents.p1.x = _cairo_fixed_from_double (device_x);
+	extents.p1.y = _cairo_fixed_from_double (device_y);
+	extents.p2.x = _cairo_fixed_from_double (device_x + device_width);
+	extents.p2.y = _cairo_fixed_from_double (device_y + device_height);
+	status = _cairo_gstate_create_pattern (gstate, &pattern, &extents);
+	if (status)
+	    return status;
+    }
     
     /* XXX: The rendered size is sometimes 1 or 2 pixels short from
        what I expect. Need to fix this. */
     status = _cairo_surface_composite (gstate->operator,
-				       surface, mask, gstate->surface,
+				       surface, pattern.source, gstate->surface,
 				       device_x, device_y,
 				       0, 0,
 				       device_x, device_y,
 				       device_width,
 				       device_height);
-    
-    if (mask)
-	cairo_surface_destroy (mask);
 
-    if (status)
-	return status;
+    _cairo_pattern_fini (&pattern);
 
     /* restore the matrix originally in the surface */
     cairo_surface_set_matrix (surface, &user_to_image);
+    
+    if (status)
+	return status;    
 
     return CAIRO_STATUS_SUCCESS;
 }
 
 cairo_status_t
 _cairo_gstate_select_font (cairo_gstate_t       *gstate, 
-			   char                 *family, 
+			   const char           *family, 
 			   cairo_font_slant_t   slant, 
 			   cairo_font_weight_t  weight)
 {
@@ -1600,6 +1904,7 @@ _cairo_gstate_current_font_extents (cairo_gstate_t *gstate,
     status = _cairo_font_font_extents (gstate->font, extents);
 
     cairo_matrix_copy (&gstate->font->matrix, &saved_font_matrix);    
+
     return status;
 }
 
@@ -1622,14 +1927,24 @@ _cairo_gstate_text_extents (cairo_gstate_t *gstate,
 {
     cairo_matrix_t saved_font_matrix;
     cairo_status_t status;
+    double scale_x, scale_y;
 
     cairo_matrix_copy (&saved_font_matrix, &gstate->font->matrix);
-    cairo_matrix_multiply (&gstate->font->matrix, &gstate->ctm, &gstate->font->matrix);
+    _cairo_matrix_compute_scale_factors (&gstate->ctm, &scale_x, &scale_y);
+    cairo_matrix_scale (&gstate->font->matrix, scale_x, scale_y);
 
     status = _cairo_font_text_extents (gstate->font,
 				       utf8, extents);
 
     cairo_matrix_copy (&gstate->font->matrix, &saved_font_matrix);
+
+    extents->x_bearing /= scale_x;
+    extents->y_bearing /= scale_y;
+    extents->width  /= scale_x;
+    extents->height /= scale_y;
+    extents->x_advance /= scale_x;
+    extents->y_advance /= scale_y;
+
     return status;
 }
 
@@ -1640,108 +1955,78 @@ _cairo_gstate_glyph_extents (cairo_gstate_t *gstate,
 			     cairo_text_extents_t *extents)
 {
     cairo_status_t status;
-    int i;
-    cairo_glyph_t *transformed_glyphs = NULL;
     cairo_matrix_t saved_font_matrix;
-
-    transformed_glyphs = malloc (num_glyphs * sizeof(cairo_glyph_t));
-    if (transformed_glyphs == NULL)
-	return CAIRO_STATUS_NO_MEMORY;
-    
-    for (i = 0; i < num_glyphs; ++i)
-    {
-	transformed_glyphs[i] = glyphs[i];
-	cairo_matrix_transform_point (&gstate->ctm, 
-				      &(transformed_glyphs[i].x), 
-				      &(transformed_glyphs[i].y));
-    }
+    double scale_x, scale_y;
 
     cairo_matrix_copy (&saved_font_matrix, &gstate->font->matrix);
-    cairo_matrix_multiply (&gstate->font->matrix, &gstate->ctm, &gstate->font->matrix);
+    _cairo_matrix_compute_scale_factors (&gstate->ctm, &scale_x, &scale_y);
+    cairo_matrix_scale (&gstate->font->matrix, scale_x, scale_y);
 
     status = _cairo_font_glyph_extents (gstate->font,
-					transformed_glyphs, num_glyphs,
+					glyphs, num_glyphs,
 					extents);
 
     cairo_matrix_copy (&gstate->font->matrix, &saved_font_matrix);
 
-    free (transformed_glyphs);
+    extents->x_bearing /= scale_x;
+    extents->y_bearing /= scale_y;
+    extents->width  /= scale_x;
+    extents->height /= scale_y;
+    extents->x_advance /= scale_x;
+    extents->y_advance /= scale_y;
+
     return status;
 }
-
-
-static cairo_status_t 
-setup_text_rendering_context(cairo_gstate_t *gstate, 
-			     double *x, double *y,
-			     cairo_matrix_t *user_to_source)
-{
-    cairo_status_t status;
-    cairo_matrix_t device_to_source;
-  
-    /* XXX: I believe this is correct, but it would be much more clear
-       to have some explicit current_point accesor functions, (one for
-       user- and one for device-space). */
-
-    if (gstate->has_current_point) {
-	*x = gstate->current_point.x;
-	*y = gstate->current_point.y;
-    } else {
-	*x = 0;
-	*y = 0;
-	cairo_matrix_transform_point (&gstate->ctm, x, y);
-    }
-  
-    status = _cairo_gstate_ensure_source (gstate);
-    if (status)
-	return status;
-  
-    /* XXX: This same source matrix manipulation code shows up in
-       about 3 or 4 places. We should move that into a shared function
-       or two. */
-    if (! gstate->source_is_solid) {
-	cairo_surface_get_matrix (gstate->source, user_to_source);
-	cairo_matrix_multiply (&device_to_source, &gstate->ctm_inverse, user_to_source);
-	cairo_surface_set_matrix (gstate->source, &device_to_source);
-    }
-    return CAIRO_STATUS_SUCCESS;
-}
-
-static void 
-restore_text_rendering_context(cairo_gstate_t *gstate, 
-			       cairo_matrix_t *user_to_source)
-{
-    /* restore the matrix originally in the source surface */
-    if (! gstate->source_is_solid)
-	cairo_surface_set_matrix (gstate->source, user_to_source);  
-}
-
 
 cairo_status_t
 _cairo_gstate_show_text (cairo_gstate_t *gstate, 
 			 const unsigned char *utf8)
 {
     cairo_status_t status;
+    cairo_point_t point;
     double x, y;
-    cairo_matrix_t user_to_source;
     cairo_matrix_t saved_font_matrix;
-    
-    status = setup_text_rendering_context(gstate, &x, &y, &user_to_source);
-    if (status)
-	return status;
+    cairo_pattern_t pattern;
+    cairo_text_extents_t text_extents;
+    cairo_box_t extents;
+
+    status = _cairo_path_current_point (&gstate->path, &point);
+    if (status == CAIRO_STATUS_NO_CURRENT_POINT) {
+	x = 0;
+	y = 0;
+	cairo_matrix_transform_point (&gstate->ctm, &x, &y);
+    } else {
+	x = _cairo_fixed_to_double (point.x);
+	y = _cairo_fixed_to_double (point.y);
+    }
     
     cairo_matrix_copy (&saved_font_matrix, &gstate->font->matrix);
     cairo_matrix_multiply (&gstate->font->matrix, &gstate->ctm, &gstate->font->matrix);
 
+    _cairo_pattern_init_copy (&pattern, gstate->pattern);
+    
+    status = _cairo_gstate_text_extents (gstate, utf8, &text_extents);
+    if (status)
+	return status;
+    
+    extents.p1.x = _cairo_fixed_from_double (x);
+    extents.p1.y = _cairo_fixed_from_double (y);
+    extents.p2.x = _cairo_fixed_from_double (x + text_extents.width);
+    extents.p2.y = _cairo_fixed_from_double (y + text_extents.height);
+    status = _cairo_gstate_create_pattern (gstate, &pattern, &extents);
+    if (status)
+	return status;
+    
     status = _cairo_font_show_text (gstate->font,
-				    gstate->operator, gstate->source,
+				    gstate->operator, pattern.source,
 				    gstate->surface, x, y, utf8);
     
     cairo_matrix_copy (&gstate->font->matrix, &saved_font_matrix);
-    restore_text_rendering_context (gstate, &user_to_source);
+
+    _cairo_pattern_fini (&pattern);
 
     return status;
 }
-
 
 cairo_status_t
 _cairo_gstate_show_glyphs (cairo_gstate_t *gstate, 
@@ -1749,11 +2034,12 @@ _cairo_gstate_show_glyphs (cairo_gstate_t *gstate,
 			   int num_glyphs)
 {
     cairo_status_t status;
-    double x, y;
-    cairo_matrix_t user_to_source;
     cairo_matrix_t saved_font_matrix;
     int i;
     cairo_glyph_t *transformed_glyphs = NULL;
+    cairo_pattern_t pattern;
+    cairo_text_extents_t text_extents;
+    cairo_box_t extents;
 
     transformed_glyphs = malloc (num_glyphs * sizeof(cairo_glyph_t));
     if (transformed_glyphs == NULL)
@@ -1767,25 +2053,37 @@ _cairo_gstate_show_glyphs (cairo_gstate_t *gstate,
 				      &(transformed_glyphs[i].y));
     }
     
-    status = setup_text_rendering_context (gstate, &x, &y, &user_to_source);
-    if (status)
-	return status;
-    
     cairo_matrix_copy (&saved_font_matrix, &gstate->font->matrix);
     cairo_matrix_multiply (&gstate->font->matrix, &gstate->ctm, &gstate->font->matrix);
 
+    _cairo_pattern_init_copy (&pattern, gstate->pattern);
+    _cairo_gstate_glyph_extents (gstate, transformed_glyphs, num_glyphs,
+                                 &text_extents);
+    if (status)
+	return status;
+
+    extents.p1.x = _cairo_fixed_from_double (transformed_glyphs[0].x);
+    extents.p1.y = _cairo_fixed_from_double (transformed_glyphs[0].y);
+    extents.p2.x = _cairo_fixed_from_double (transformed_glyphs[0].x +
+					     text_extents.width);
+    extents.p2.y = _cairo_fixed_from_double (transformed_glyphs[0].y +
+					     text_extents.height);
+    status = _cairo_gstate_create_pattern (gstate, &pattern, &extents);
+    if (status)
+	return status;
+
     status = _cairo_font_show_glyphs (gstate->font, 
-				      gstate->operator, gstate->source,
-				      gstate->surface, x, y, 
+				      gstate->operator, pattern.source,
+				      gstate->surface,
 				      transformed_glyphs, num_glyphs);
     
     cairo_matrix_copy (&gstate->font->matrix, &saved_font_matrix);
-    restore_text_rendering_context (gstate, &user_to_source);
+
+    _cairo_pattern_fini (&pattern);
 
     free (transformed_glyphs);
     
     return status;
-
 }
 
 
@@ -1795,21 +2093,35 @@ _cairo_gstate_text_path (cairo_gstate_t *gstate,
 {
     cairo_status_t status;
     cairo_matrix_t saved_font_matrix;
+    cairo_point_t point;
+    double x, y;
+
+    status = _cairo_path_current_point (&gstate->path, &point);
+    if (status == CAIRO_STATUS_NO_CURRENT_POINT) {
+	x = 0;
+	y = 0;
+	cairo_matrix_transform_point (&gstate->ctm, &x, &y);
+    } else {
+	x = _cairo_fixed_to_double (point.x);
+	y = _cairo_fixed_to_double (point.y);
+    }
 
     cairo_matrix_copy (&saved_font_matrix, &gstate->font->matrix);
     cairo_matrix_multiply (&gstate->font->matrix, &gstate->ctm, &gstate->font->matrix);
 
     status = _cairo_font_text_path (gstate->font, 
-				    &gstate->path,
-				    utf8);
+				    x, y,
+				    utf8,
+				    &gstate->path);
 
     cairo_matrix_copy (&gstate->font->matrix, &saved_font_matrix);
+
     return status;
 }
 
 
 cairo_status_t
-_cairo_gstate_glyph_path (cairo_gstate_t *gstate, 
+_cairo_gstate_glyph_path (cairo_gstate_t *gstate,
 			  cairo_glyph_t *glyphs, 
 			  int num_glyphs)
 {
@@ -1834,11 +2146,11 @@ _cairo_gstate_glyph_path (cairo_gstate_t *gstate,
     cairo_matrix_multiply (&gstate->font->matrix, &gstate->ctm, &gstate->font->matrix);
 
     status = _cairo_font_glyph_path (gstate->font, 
-				     &gstate->path,
-				     transformed_glyphs, num_glyphs);
+				     transformed_glyphs, num_glyphs,
+				     &gstate->path);
 
     cairo_matrix_copy (&gstate->font->matrix, &saved_font_matrix);
-    
+
     free (transformed_glyphs);
     return status;
 }

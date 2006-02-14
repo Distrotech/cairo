@@ -25,7 +25,10 @@
 #include "cairoint.h"
 #include <fontconfig/fontconfig.h>
 #include <fontconfig/fcfreetype.h>
-#include <freetype/freetype.h>
+
+#include <ft2build.h>
+#include FT_FREETYPE_H
+#include FT_OUTLINE_H
 
 typedef struct {
     cairo_font_t base;
@@ -39,13 +42,10 @@ typedef struct {
     FcPattern *pattern;
 } cairo_ft_font_t;
 
-
-#define DOUBLE_TO_26_6(d) ((FT_F26Dot6)((d) * 63.0))
-#define DOUBLE_FROM_26_6(t) (((double)((t) >> 6)) \
-			     + ((double)((t) & 0x3F) / 63.0))
-#define DOUBLE_TO_16_16(d) ((FT_Fixed)((d) * 65535.0))
-#define DOUBLE_FROM_16_16(t) (((double)((t) >> 16)) \
-			      + ((double)((t) & 0xFFFF) / 65535.0))
+#define DOUBLE_TO_26_6(d) ((FT_F26Dot6)((d) * 64.0))
+#define DOUBLE_FROM_26_6(t) ((double)(t) / 64.0)
+#define DOUBLE_TO_16_16(d) ((FT_Fixed)((d) * 65536.0))
+#define DOUBLE_FROM_16_16(t) ((double)(t) / 65536.0)
 
 /* implement the platform-specific interface */
 
@@ -101,29 +101,31 @@ cairo_ft_font_create (FT_Library ft_library, FcPattern *pattern)
 }
 
 FT_Face
-cairo_ft_font_face (cairo_font_t *font)
+cairo_ft_font_face (cairo_font_t *abstract_font)
 {
+    cairo_ft_font_t *font = (cairo_ft_font_t *) abstract_font;
+
     if (font == NULL)
         return NULL;
 
-    return ((cairo_ft_font_t *) font)->face;
+    return font->face;
 }
 
 FcPattern *
-cairo_ft_font_pattern (cairo_font_t  *font)
+cairo_ft_font_pattern (cairo_font_t *abstract_font)
 {
+    cairo_ft_font_t *font = (cairo_ft_font_t *) abstract_font;
+
     if (font == NULL)
         return NULL;
 
-    return ((cairo_ft_font_t *) font)->pattern;
+    return font->pattern;
 }
-
-
 
 /* implement the backend interface */
 
 static cairo_font_t *
-_cairo_ft_font_create (char                 *family, 
+_cairo_ft_font_create (const char           *family, 
                        cairo_font_slant_t   slant, 
                        cairo_font_weight_t  weight)
 {
@@ -175,6 +177,9 @@ _cairo_ft_font_create (char                 *family,
     }
 
     font = cairo_ft_font_create (ft_library, pat);
+    if (font == NULL)
+	return NULL;
+
     ft_font = (cairo_ft_font_t *) font;
 
     ft_font->owns_ft_library = 1;
@@ -188,45 +193,43 @@ _cairo_ft_font_create (char                 *family,
     return font;  
 }
 
-
 static cairo_font_t *
-_cairo_ft_font_copy (cairo_font_t *font)
+_cairo_ft_font_copy (void *abstract_font)
 {
-    cairo_ft_font_t * ft_font_new = NULL;
-    cairo_ft_font_t * ft_font = NULL;
+    cairo_ft_font_t * font_new = NULL;
+    cairo_ft_font_t * font = abstract_font;
   
-    ft_font = (cairo_ft_font_t *)font;
+    if (font->base.backend != &cairo_ft_font_backend)
+	return NULL;
 
-    ft_font_new = (cairo_ft_font_t *)cairo_ft_font_create_for_ft_face (ft_font->face);
-    if (ft_font_new == NULL)
+    font_new = (cairo_ft_font_t *) cairo_ft_font_create_for_ft_face (font->face);
+    if (font_new == NULL)
         return NULL;
 
-    if (ft_font_new != NULL && ft_font->pattern != NULL)
-        ft_font_new->pattern = FcPatternDuplicate (ft_font->pattern);  
+    if (font_new != NULL && font->pattern != NULL)
+        font_new->pattern = FcPatternDuplicate (font->pattern);  
 
-    return (cairo_font_t *)ft_font_new;
+    return (cairo_font_t *) font_new;
 }
 
 static void 
-_cairo_ft_font_destroy (cairo_font_t *font)
+_cairo_ft_font_destroy (void *abstract_font)
 {
-    cairo_ft_font_t * ft_font = NULL;
+    cairo_ft_font_t * font = abstract_font;
   
     if (font == NULL)
         return;
 
-    ft_font = (cairo_ft_font_t *)font;
+    if (font->face != NULL && font->owns_face)
+        FT_Done_Face (font->face);
   
-    if (ft_font->face != NULL && ft_font->owns_face)
-        FT_Done_Face (ft_font->face);
-  
-    if (ft_font->pattern != NULL)
-        FcPatternDestroy (ft_font->pattern);
+    if (font->pattern != NULL)
+        FcPatternDestroy (font->pattern);
 
-    if (ft_font->ft_library && ft_font->owns_ft_library)
-	FT_Done_FreeType (ft_font->ft_library);
+    if (font->ft_library && font->owns_ft_library)
+	FT_Done_FreeType (font->ft_library);
 
-    free (ft_font);
+    free (font);
 }
 
 static void 
@@ -260,21 +263,7 @@ _utf8_to_ucs4 (char const *utf8,
         len -= step;
         utf8 += step;
     }
-    *nchars = alloc;
-}
-
-static void
-_get_scale_factors(cairo_matrix_t *matrix, double *sx, double *sy)
-{
-    double e0, e1;
-    e1 = 1.; e0 = 0.;
-
-    cairo_matrix_transform_distance (matrix, &e1, &e0);
-    *sx = sqrt(e1*e1 + e0*e0);
-
-    e1 = 1.; e0 = 0.;
-    cairo_matrix_transform_distance (matrix, &e0, &e1);
-    *sy = sqrt(e1*e1 + e0*e0);    
+    *nchars = n;
 }
 
 static void
@@ -292,7 +281,7 @@ _install_font_matrix(cairo_matrix_t *matrix, FT_Face face)
      * transformation.
      */
 
-    _get_scale_factors(matrix, &scale_x, &scale_y);
+    _cairo_matrix_compute_scale_factors (matrix, &scale_x, &scale_y);
     
     cairo_matrix_copy (&normalized, matrix);
 
@@ -314,22 +303,18 @@ _install_font_matrix(cairo_matrix_t *matrix, FT_Face face)
 		     0, 0);
 }
 
-
 static int
-_utf8_to_glyphs (cairo_font_t        *font,
-		 const unsigned char *utf8,
-		 cairo_glyph_t       **glyphs,
-		 size_t              *nglyphs)
+_utf8_to_glyphs (cairo_ft_font_t	*font,
+		 const unsigned char	*utf8,
+		 double			x0,
+		 double			y0,
+		 cairo_glyph_t		**glyphs,
+		 size_t			*nglyphs)
 {
-    cairo_ft_font_t *ft;
+    FT_Face face = font->face;
     double x = 0., y = 0.;
     size_t i;
     FT_ULong *ucs4 = NULL; 
-
-    if (font == NULL)
-        return 0;
-
-    ft = (cairo_ft_font_t *)font;
 
     _utf8_to_ucs4 (utf8, &ucs4, nglyphs);
 
@@ -343,18 +328,18 @@ _utf8_to_glyphs (cairo_font_t        *font,
         return 0;
     }
 
-    _install_font_matrix (&font->matrix, ft->face);
+    _install_font_matrix (&font->base.matrix, face);
 
     for (i = 0; i < *nglyphs; i++)
     {            
-        (*glyphs)[i].index = FT_Get_Char_Index (ft->face, ucs4[i]);
-        (*glyphs)[i].x = x;
-        (*glyphs)[i].y = y;
+        (*glyphs)[i].index = FT_Get_Char_Index (face, ucs4[i]);
+        (*glyphs)[i].x = x0 + x;
+        (*glyphs)[i].y = y0 + y;
 
-        FT_Load_Glyph (ft->face, (*glyphs)[i].index, FT_LOAD_DEFAULT);
+        FT_Load_Glyph (face, (*glyphs)[i].index, FT_LOAD_DEFAULT);
 	
-        x += DOUBLE_FROM_26_6 (ft->face->glyph->advance.x);
-        y -= DOUBLE_FROM_26_6 (ft->face->glyph->advance.y);
+        x += DOUBLE_FROM_26_6 (face->glyph->advance.x);
+        y -= DOUBLE_FROM_26_6 (face->glyph->advance.y);
     }
 
     free (ucs4);
@@ -362,51 +347,114 @@ _utf8_to_glyphs (cairo_font_t        *font,
 }
 
 static cairo_status_t 
-_cairo_ft_font_font_extents (cairo_font_t *font,
-                             cairo_font_extents_t *extents)
+_cairo_ft_font_font_extents (void			*abstract_font,
+                             cairo_font_extents_t	*extents)
 {
+    cairo_ft_font_t *font = abstract_font;
+    FT_Face face = font->face;
     double scale_x, scale_y;
-    cairo_ft_font_t *ft = (cairo_ft_font_t *)font;
-    cairo_status_t status = CAIRO_STATUS_SUCCESS;
 
-    _get_scale_factors(&font->matrix, &scale_x, &scale_y);
+    double upm = face->units_per_EM;
 
-#define FONT_UNIT_TO_DEV(x) ((double)(x) / (double)(ft->face->units_per_EM))
+    _cairo_matrix_compute_scale_factors (&font->base.matrix, &scale_x, &scale_y);
 
-    extents->ascent = FONT_UNIT_TO_DEV(ft->face->ascender) * scale_y;
-    extents->descent = FONT_UNIT_TO_DEV(ft->face->descender) * scale_y;
-    extents->height = FONT_UNIT_TO_DEV(ft->face->height) * scale_y;
-    extents->max_x_advance = FONT_UNIT_TO_DEV(ft->face->max_advance_width) * scale_x;
-    extents->max_y_advance = FONT_UNIT_TO_DEV(ft->face->max_advance_height) * scale_y;
-    return status;
+    extents->ascent =        face->ascender / upm * scale_y;
+    extents->descent =       face->descender / upm * scale_y;
+    extents->height =        face->height / upm * scale_y;
+    extents->max_x_advance = face->max_advance_width / upm * scale_x;
+    extents->max_y_advance = face->max_advance_height / upm * scale_y;
+
+    return CAIRO_STATUS_SUCCESS;
 }
 
 static cairo_status_t 
-_cairo_ft_font_glyph_extents (cairo_font_t         *font,
-                              cairo_glyph_t        *glyphs, 
-                              int                  num_glyphs,
-			      cairo_text_extents_t *extents)
+_cairo_ft_font_glyph_extents (void			*abstract_font,
+                              cairo_glyph_t		*glyphs, 
+                              int			num_glyphs,
+			      cairo_text_extents_t	*extents)
 {
-    cairo_ft_font_t *ft;
-    cairo_status_t status = CAIRO_STATUS_SUCCESS;
+    int i;
+    cairo_ft_font_t *font = abstract_font;
+    cairo_point_double_t origin;
+    cairo_point_double_t glyph_min, glyph_max;
+    cairo_point_double_t total_min, total_max;
+    FT_Error error;
+    FT_Face face = font->face;
+    FT_GlyphSlot glyph = face->glyph;
+    FT_Glyph_Metrics *metrics = &glyph->metrics;
 
-    ft = (cairo_ft_font_t *)font;
+    if (num_glyphs == 0)
+    {
+	extents->x_bearing = 0.0;
+	extents->y_bearing = 0.0;
+	extents->width  = 0.0;
+	extents->height = 0.0;
+	extents->x_advance = 0.0;
+	extents->y_advance = 0.0;
 
-    /* FIXME: lift code from xft to do this */
+	return CAIRO_STATUS_SUCCESS;
+    }
 
-    return status;
+    origin.x = glyphs[0].x;
+    origin.y = glyphs[0].y;
+
+    _install_font_matrix (&font->base.matrix, face);
+
+    for (i = 0; i < num_glyphs; i++)
+    {
+	error = FT_Load_Glyph (face, glyphs[i].index, FT_LOAD_DEFAULT);
+	/* XXX: What to do in this error case? */
+	if (error)
+	    continue;
+
+	/* XXX: Need to add code here to check the font's FcPattern
+           for FC_VERTICAL_LAYOUT and if set get vertBearingX/Y
+           instead. This will require that
+           cairo_ft_font_create_for_ft_face accept an
+           FcPattern. */
+	glyph_min.x = glyphs[i].x + DOUBLE_FROM_26_6 (metrics->horiBearingX);
+	glyph_min.y = glyphs[i].y - DOUBLE_FROM_26_6 (metrics->horiBearingY);
+	glyph_max.x = glyph_min.x + DOUBLE_FROM_26_6 (metrics->width);
+	glyph_max.y = glyph_min.y + DOUBLE_FROM_26_6 (metrics->height);
+    
+	if (i==0) {
+	    total_min = glyph_min;
+	    total_max = glyph_max;
+	} else {
+	    if (glyph_min.x < total_min.x)
+		total_min.x = glyph_min.x;
+	    if (glyph_min.y < total_min.y)
+		total_min.y = glyph_min.y;
+
+	    if (glyph_max.x > total_max.x)
+		total_max.x = glyph_max.x;
+	    if (glyph_max.y > total_max.y)
+		total_max.y = glyph_max.y;
+	}
+    }
+
+    extents->x_bearing = total_min.x - origin.x;
+    extents->y_bearing = total_min.y - origin.y;
+    extents->width     = total_max.x - total_min.x;
+    extents->height    = total_max.y - total_min.y;
+    extents->x_advance = glyphs[i-1].x + DOUBLE_FROM_26_6 (metrics->horiAdvance) - origin.x;
+    extents->y_advance = glyphs[i-1].y + 0 - origin.y;
+
+    return CAIRO_STATUS_SUCCESS;
 }
 
+
 static cairo_status_t 
-_cairo_ft_font_text_extents (cairo_font_t        *font,
-                             const unsigned char *utf8,
-			      cairo_text_extents_t *extents)
+_cairo_ft_font_text_extents (void 			*abstract_font,
+                             const unsigned char	*utf8,
+			     cairo_text_extents_t	*extents)
 {
+    cairo_ft_font_t *font = abstract_font;
     cairo_glyph_t *glyphs;
     size_t nglyphs;
     cairo_status_t status = CAIRO_STATUS_SUCCESS;
 
-    if (_utf8_to_glyphs (font, utf8, &glyphs, &nglyphs))
+    if (_utf8_to_glyphs (font, utf8, 0, 0, &glyphs, &nglyphs))
     {
         status = _cairo_ft_font_glyph_extents (font, glyphs, nglyphs, 
 					       extents);      
@@ -414,24 +462,22 @@ _cairo_ft_font_text_extents (cairo_font_t        *font,
     }
     return status;
 }
-		     
-
 
 static cairo_status_t 
-_cairo_ft_font_show_glyphs (cairo_font_t        *font,
+_cairo_ft_font_show_glyphs (void		*abstract_font,
                             cairo_operator_t    operator,
                             cairo_surface_t     *source,
                             cairo_surface_t     *surface,
-                            double              x0,
-                            double              y0,
                             const cairo_glyph_t *glyphs,
                             int                 num_glyphs)
 {
+    cairo_ft_font_t *font = abstract_font;
     cairo_status_t status;
     int i;
     cairo_ft_font_t *ft = NULL;
     FT_GlyphSlot glyphslot;
     cairo_surface_t *mask = NULL;
+    cairo_point_double_t origin;
 
     double x, y;
     int width, height, stride;
@@ -444,22 +490,27 @@ _cairo_ft_font_show_glyphs (cairo_font_t        *font,
 
     ft = (cairo_ft_font_t *)font;
     glyphslot = ft->face->glyph;
-    _install_font_matrix (&font->matrix, ft->face);
+    _install_font_matrix (&font->base.matrix, ft->face);
 
     for (i = 0; i < num_glyphs; i++)
     {
 	unsigned char *bitmap;
 
         FT_Load_Glyph (ft->face, glyphs[i].index, FT_LOAD_DEFAULT);
-        FT_Render_Glyph (glyphslot, FT_RENDER_MODE_NORMAL);
+        FT_Render_Glyph (glyphslot, ft_render_mode_normal);
       
         width = glyphslot->bitmap.width;
         height = glyphslot->bitmap.rows;
         stride = glyphslot->bitmap.pitch;
 	bitmap = glyphslot->bitmap.buffer;
    
-	x = x0 + glyphs[i].x;
-	y = y0 + glyphs[i].y;      
+	x = glyphs[i].x;
+	y = glyphs[i].y;
+
+	if (i == 0) {
+	    origin.x = x;
+	    origin.y = y;
+	}
 
         /* X gets upset with zero-sized images (such as whitespace) */
         if (width * height == 0)
@@ -502,11 +553,14 @@ _cairo_ft_font_show_glyphs (cairo_font_t        *font,
 	    return CAIRO_STATUS_NO_MEMORY;
 	}
 	
-	status = _cairo_surface_composite (operator, source, mask, surface,
-					   0, 0, 0, 0, 
-					   x + glyphslot->bitmap_left, 
-					   y - glyphslot->bitmap_top, 
-					   (double)width, (double)height);
+	status =
+	    _cairo_surface_composite (operator, source, mask, surface,
+				      -origin.x + x + glyphslot->bitmap_left,
+				      -origin.y + y - glyphslot->bitmap_top,
+				      0, 0, 
+				      x + glyphslot->bitmap_left, 
+				      y - glyphslot->bitmap_top, 
+				      (double) width, (double) height);
 	
 	cairo_surface_destroy (mask);
 	if (bitmap != glyphslot->bitmap.buffer)
@@ -519,7 +573,7 @@ _cairo_ft_font_show_glyphs (cairo_font_t        *font,
 }
 
 static cairo_status_t 
-_cairo_ft_font_show_text (cairo_font_t        *font,
+_cairo_ft_font_show_text (void		      *abstract_font,
                           cairo_operator_t    operator,
                           cairo_surface_t     *source,
                           cairo_surface_t     *surface,
@@ -527,15 +581,16 @@ _cairo_ft_font_show_text (cairo_font_t        *font,
                           double              y0,
                           const unsigned char *utf8)
 {
+    cairo_ft_font_t *font = abstract_font;
     cairo_glyph_t *glyphs;
-    size_t nglyphs;
+    int num_glyphs;
     
-    if (_utf8_to_glyphs (font, utf8, &glyphs, &nglyphs))
+    if (_utf8_to_glyphs (font, utf8, x0, y0, &glyphs, &num_glyphs))
     {
         cairo_status_t res;
         res = _cairo_ft_font_show_glyphs (font, operator, 
-                                          source, surface, x0, y0, 
-                                          glyphs, nglyphs);      
+                                          source, surface,
+                                          glyphs, num_glyphs);      
         free (glyphs);
         return res;
     }
@@ -543,42 +598,153 @@ _cairo_ft_font_show_text (cairo_font_t        *font,
         return CAIRO_STATUS_NO_MEMORY;
 }
 
-
-static cairo_status_t 
-_cairo_ft_font_glyph_path (cairo_font_t        *font,
-                           cairo_path_t        *path, 
-                           cairo_glyph_t       *glyphs, 
-                           int                 num_glyphs)
+static int
+_move_to (FT_Vector *to, void *closure)
 {
-    cairo_status_t status = CAIRO_STATUS_SUCCESS;
-    cairo_ft_font_t *ft;
-    
-    ft = (cairo_ft_font_t *)font;
-    
-    /* FIXME: lift code from xft to do this */
-    
-    return status;
+    cairo_path_t *path = closure;
+    cairo_point_t point;
+
+    point.x = _cairo_fixed_from_26_6 (to->x);
+    point.y = _cairo_fixed_from_26_6 (to->y);
+
+    _cairo_path_close_path (path);
+    _cairo_path_move_to (path, &point);
+
+    return 0;
+}
+
+static int
+_line_to (FT_Vector *to, void *closure)
+{
+    cairo_path_t *path = closure;
+    cairo_point_t point;
+
+    point.x = _cairo_fixed_from_26_6 (to->x);
+    point.y = _cairo_fixed_from_26_6 (to->y);
+
+    _cairo_path_line_to (path, &point);
+
+    return 0;
+}
+
+static int
+_conic_to (FT_Vector *control, FT_Vector *to, void *closure)
+{
+    cairo_path_t *path = closure;
+
+    cairo_point_t p0, p1, p2, p3;
+    cairo_point_t conic;
+
+    _cairo_path_current_point (path, &p0);
+
+    conic.x = _cairo_fixed_from_26_6 (control->x);
+    conic.y = _cairo_fixed_from_26_6 (control->y);
+
+    p3.x = _cairo_fixed_from_26_6 (to->x);
+    p3.y = _cairo_fixed_from_26_6 (to->y);
+
+    p1.x = p0.x + 2.0/3.0 * (conic.x - p0.x);
+    p1.y = p0.y + 2.0/3.0 * (conic.y - p0.y);
+
+    p2.x = p3.x + 2.0/3.0 * (conic.x - p3.x);
+    p2.y = p3.y + 2.0/3.0 * (conic.y - p3.y);
+
+    _cairo_path_curve_to (path,
+			  &p1, &p2, &p3);
+
+    return 0;
+}
+
+static int
+_cubic_to (FT_Vector *control1, FT_Vector *control2, FT_Vector *to, void *closure)
+{
+    cairo_path_t *path = closure;
+    cairo_point_t p0, p1, p2;
+
+    p0.x = _cairo_fixed_from_26_6 (control1->x);
+    p0.y = _cairo_fixed_from_26_6 (control1->y);
+
+    p1.x = _cairo_fixed_from_26_6 (control2->x);
+    p1.y = _cairo_fixed_from_26_6 (control2->y);
+
+    p2.x = _cairo_fixed_from_26_6 (to->x);
+    p2.y = _cairo_fixed_from_26_6 (to->y);
+
+    _cairo_path_curve_to (path, &p0, &p1, &p2);
+
+    return 0;
 }
 
 static cairo_status_t 
-_cairo_ft_font_text_path (cairo_font_t        *font,
-                          cairo_path_t        *path, 
-                          const unsigned char *utf8)
+_cairo_ft_font_glyph_path (void			*abstract_font,
+                           cairo_glyph_t	*glyphs, 
+                           int			num_glyphs,
+                           cairo_path_t		*path)
 {
+    int i;
+    cairo_ft_font_t *font = abstract_font;
+    FT_GlyphSlot glyph;
+    FT_Error error;
+    FT_Outline_Funcs outline_funcs = {
+	_move_to,
+	_line_to,
+	_conic_to,
+	_cubic_to,
+	0, /* shift */
+	0, /* delta */
+    };
+
+    glyph = font->face->glyph;
+    _install_font_matrix (&font->base.matrix, font->face);
+
+    for (i = 0; i < num_glyphs; i++)
+    {
+	FT_Matrix invert_y = {
+	    DOUBLE_TO_16_16 (1.0), 0,
+	    0, DOUBLE_TO_16_16 (-1.0),
+	};
+
+	error = FT_Load_Glyph (font->face, glyphs[i].index, FT_LOAD_DEFAULT);
+	/* XXX: What to do in this error case? */
+	if (error)
+	    continue;
+	/* XXX: Do we want to support bitmap fonts here? */
+	if (glyph->format == ft_glyph_format_bitmap)
+	    continue;
+
+	/* Font glyphs have an inverted Y axis compared to cairo. */
+	FT_Outline_Transform (&glyph->outline, &invert_y);
+	FT_Outline_Translate (&glyph->outline,
+			      DOUBLE_TO_26_6(glyphs[i].x),
+			      DOUBLE_TO_26_6(glyphs[i].y));
+	FT_Outline_Decompose (&glyph->outline, &outline_funcs, path);
+    }
+    _cairo_path_close_path (path);
+    
+    return CAIRO_STATUS_SUCCESS;
+}
+
+static cairo_status_t 
+_cairo_ft_font_text_path (void		      *abstract_font,
+			  double	      x,
+			  double	      y,
+                          const unsigned char *utf8,
+                          cairo_path_t        *path)
+{
+    cairo_ft_font_t *font = abstract_font;
     cairo_glyph_t *glyphs;
     size_t nglyphs;
     
-    if (_utf8_to_glyphs (font, utf8, &glyphs, &nglyphs))
+    if (_utf8_to_glyphs (font, utf8, x, y, &glyphs, &nglyphs))
     {
         cairo_status_t res;
-        res = _cairo_ft_font_glyph_path (font, path, glyphs, nglyphs);      
+        res = _cairo_ft_font_glyph_path (font, glyphs, nglyphs, path);
         free (glyphs);
         return res;
     }
     else
         return CAIRO_STATUS_NO_MEMORY;
 }
-
 
 cairo_font_t *
 cairo_ft_font_create_for_ft_face (FT_Face face)
@@ -602,16 +768,15 @@ cairo_ft_font_create_for_ft_face (FT_Face face)
     return (cairo_font_t *) f;
 }
 
-
 const struct cairo_font_backend cairo_ft_font_backend = {
-    font_extents:          (void *) _cairo_ft_font_font_extents,
-    text_extents:          (void *) _cairo_ft_font_text_extents,
-    glyph_extents:         (void *) _cairo_ft_font_glyph_extents,
-    show_text:             (void *) _cairo_ft_font_show_text,
-    show_glyphs:           (void *) _cairo_ft_font_show_glyphs,
-    text_path:             (void *) _cairo_ft_font_text_path,
-    glyph_path:            (void *) _cairo_ft_font_glyph_path,
-    create:                (void *) _cairo_ft_font_create,
-    copy:                  (void *) _cairo_ft_font_copy,
-    destroy:               (void *) _cairo_ft_font_destroy
+    _cairo_ft_font_create,
+    _cairo_ft_font_copy,
+    _cairo_ft_font_destroy,
+    _cairo_ft_font_font_extents,
+    _cairo_ft_font_text_extents,
+    _cairo_ft_font_glyph_extents,
+    _cairo_ft_font_show_text,
+    _cairo_ft_font_show_glyphs,
+    _cairo_ft_font_text_path,
+    _cairo_ft_font_glyph_path,
 };

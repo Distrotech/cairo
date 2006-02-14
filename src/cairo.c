@@ -29,9 +29,6 @@
 
 #define CAIRO_TOLERANCE_MINIMUM	0.0002 /* We're limited by 16 bits of sub-pixel precision */
 
-static void
-_cairo_restrict_value (double *value, double min, double max);
-
 cairo_t *
 cairo_create (void)
 {
@@ -220,12 +217,18 @@ cairo_set_rgb_color (cairo_t *cr, double red, double green, double blue)
 }
 
 void
-cairo_set_pattern (cairo_t *cr, cairo_surface_t *pattern)
+cairo_set_pattern (cairo_t *cr, cairo_pattern_t *pattern)
 {
     if (cr->status)
 	return;
 
     cr->status = _cairo_gstate_set_pattern (cr->gstate, pattern);
+}
+
+cairo_pattern_t *
+cairo_current_pattern (cairo_t *cr)
+{
+    return _cairo_gstate_current_pattern (cr->gstate);
 }
 
 void
@@ -636,6 +639,35 @@ cairo_in_fill (cairo_t *cr, double x, double y)
 }
 
 void
+cairo_stroke_extents (cairo_t *cr,
+                      double *x1, double *y1, double *x2, double *y2)
+{
+    if (cr->status)
+	return;
+    
+    cr->status = _cairo_gstate_stroke_extents (cr->gstate, x1, y1, x2, y2);
+}
+
+void
+cairo_fill_extents (cairo_t *cr,
+                    double *x1, double *y1, double *x2, double *y2)
+{
+    if (cr->status)
+	return;
+    
+    cr->status = _cairo_gstate_fill_extents (cr->gstate, x1, y1, x2, y2);
+}
+
+void
+cairo_init_clip (cairo_t *cr)
+{
+    if (cr->status)
+	return;
+
+    cr->status = _cairo_gstate_init_clip (cr->gstate);
+}
+
+void
 cairo_clip (cairo_t *cr)
 {
     if (cr->status)
@@ -646,7 +678,7 @@ cairo_clip (cairo_t *cr)
 
 void
 cairo_select_font (cairo_t              *cr, 
-		   char                 *family, 
+		   const char           *family, 
 		   cairo_font_slant_t   slant, 
 		   cairo_font_weight_t  weight)
 {
@@ -706,8 +738,6 @@ cairo_transform_font (cairo_t *cr, cairo_matrix_t *matrix)
     cr->status = _cairo_gstate_transform_font (cr->gstate, matrix);
 }
 
-
-/* XXX: NYI
 void
 cairo_text_extents (cairo_t                *cr,
 		    const unsigned char    *utf8,
@@ -731,7 +761,6 @@ cairo_glyph_extents (cairo_t                *cr,
     cr->status = _cairo_gstate_glyph_extents (cr->gstate, glyphs, num_glyphs,
 					      extents);
 }
-*/
 
 void
 cairo_show_text (cairo_t *cr, const unsigned char *utf8)
@@ -751,7 +780,6 @@ cairo_show_glyphs (cairo_t *cr, cairo_glyph_t *glyphs, int num_glyphs)
     cr->status = _cairo_gstate_show_glyphs (cr->gstate, glyphs, num_glyphs);
 }
 
-/* XXX: NYI
 void
 cairo_text_path  (cairo_t *cr, const unsigned char *utf8)
 {
@@ -769,7 +797,6 @@ cairo_glyph_path (cairo_t *cr, cairo_glyph_t *glyphs, int num_glyphs)
 
     cr->status = _cairo_gstate_glyph_path (cr->gstate, glyphs, num_glyphs);  
 }
-*/
 
 void
 cairo_show_surface (cairo_t		*cr,
@@ -868,6 +895,43 @@ cairo_current_target_surface (cairo_t *cr)
 }
 DEPRECATE (cairo_get_target_surface, cairo_current_target_surface);
 
+void
+cairo_current_path (cairo_t			*cr,
+		    cairo_move_to_func_t	*move_to,
+		    cairo_line_to_func_t	*line_to,
+		    cairo_curve_to_func_t	*curve_to,
+		    cairo_close_path_func_t	*close_path,
+		    void			*closure)
+{
+    if (cr->status)
+	return;
+	
+    cr->status = _cairo_gstate_interpret_path (cr->gstate,
+					       move_to,
+					       line_to,
+					       curve_to,
+					       close_path,
+					       closure);
+}
+
+void
+cairo_current_path_flat (cairo_t			*cr,
+			 cairo_move_to_func_t		*move_to,
+			 cairo_line_to_func_t		*line_to,
+			 cairo_close_path_func_t	*close_path,
+			 void				*closure)
+{
+    if (cr->status)
+	return;
+
+    cr->status = _cairo_gstate_interpret_path (cr->gstate,
+					       move_to,
+					       line_to,
+					       NULL,
+					       close_path,
+					       closure);
+}
+
 cairo_status_t
 cairo_status (cairo_t *cr)
 {
@@ -901,7 +965,7 @@ cairo_status_string (cairo_t *cr)
 }
 DEPRECATE (cairo_get_status_string, cairo_status_string);
 
-static void
+void
 _cairo_restrict_value (double *value, double min, double max)
 {
     if (*value < min)

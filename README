@@ -1,4 +1,5 @@
 Cairo - Multi-platform 2D graphics library
+http://cairographics.org
 
 Compiling
 ---------
@@ -25,10 +26,7 @@ Dependencies
 ------------
 Cairo currently requires the following supporting libraries:
 
-	slim
-	libpixregion
-	libic
-
+	libpixman
 	Xft2
 	fontconfig
 	freetype2
@@ -39,19 +37,19 @@ There's not much documentation yet apart from the cairo.h header
 file. We'll be correcting that shortly.
 
 In the meantime, the cairo-demo module in CVS provides a few example
-programs using Cairo. These may be helpful to a programmer just
-beginning with Cairo. Also, familiarity with the PostScript imaging
-model will help in understanding Cairo.
+programs using cairo. These may be helpful to a programmer just
+beginning with cairo. Also, familiarity with the PostScript imaging
+model will help in understanding cairo.
 
 History
 -------
-Cairo was developed by Carl Worth <cworth@isi.edu> and Keith Packard
-<keithp@keithp.com>. Many thanks are due to Lyle Ramshaw without whose
-patient help our ignorance would be much more apparent.
+Cairo was originally developed by Carl Worth <cworth@isi.edu> and
+Keith Packard <keithp@keithp.com>. Many thanks are due to Lyle Ramshaw
+without whose patient help our ignorance would be much more apparent.
 
 Mailing List
 ------------
-If you have trouble with Cairo or you have some ideas for how it could be
+If you have trouble with cairo or you have some ideas for how it could be
 improved, please feel free to send a message to cairo@cairographics.org
 
 Cairo is still under active development and all discussion happens on

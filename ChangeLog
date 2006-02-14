@@ -1,3 +1,631 @@
+2004-04-06  Carl Worth  <cworth@isi.edu>
+
+	* NEWS: Added notes for snapshot 0.1.20.
+
+	* RELEASING: Added new RELEASING file.
+
+2004-04-04  David Reveman  <c99drn@cs.umu.se>
+
+	* src/cairoint.h: Added create_pattern backend function and pattern
+	prototypes.
+
+	* src/cairo_xlib_surface.c: Added _cairo_xlib_surface_create_pattern.
+
+	* src/cairo_xcb_surface.c: Added _cairo_xcb_surface_create_pattern.
+
+	* src/cairo_traps.c: Added _cairo_trap_extents and 
+	_cairo_traps_extents.
+
+	* src/cairo_surface.c: Added _cairo_surface_create_pattern.
+
+	* src/cairo_ps_surface.c: Added _cairo_ps_surface_create_pattern.
+
+	* src/cairo_png_surface.c: Added _cairo_png_surface_create_pattern.
+
+	* src/cairo_pattern.c (added): All functions needed for the new
+	pattern API.
+
+	* src/cairo_image_surface.c: Added
+	_cairo_image_abstract_surface_create_pattern.
+
+	* src/cairo_gstate.c (_cairo_gstate_init): Create solid pattern
+	and set alpha to 0.0.
+	(_cairo_gstate_init_copy): Increment pattern references.
+	(_cairo_gstate_fini): Destroy pattern.
+	(_cairo_gstate_set_pattern): Destroy current pattern,
+	increment references to the new pattern and update pattern
+	offset with the current point.
+	(_cairo_gstate_set_rgb_color): Destroy current pattern and
+	create a new solid pattern.
+	(_cairo_gstate_current_rgb_color): Get RGB from current pattern.
+	(_cairo_gstate_set_alpha): Set gstate->alpha without modifying
+	the current pattern.
+	(_cairo_gstate_stroke):
+	(_cairo_gstate_fill): Removed surface matrix computations as
+	they are now handled by _cairo_gstate_create_pattern.
+	(_cairo_gstate_clip_and_composite_trapezoids): Create a
+	possibly backend accelerated pattern source and use it for
+	compositing trapezoids.
+	(_cairo_gstate_clip): Allow backends to not support rectangular
+	clipping regions. Use solid pattern for creating clip surface.
+	(_cairo_gstate_show_surface): Use solid pattern for alpha mask.
+	(_cairo_gstate_show_text):
+	(_cairo_gstate_show_glyphs): Use current pattern when compositing
+	glyphs.
+
+	Added _cairo_gstate_current_pattern and _cairo_gstate_create_pattern,
+	_cairo_gstate_stroke_extents, _cairo_gstate_fill_extents.
+	Removed restore_text_rendering_context, setup_text_rendering_context,
+	_cairo_gstate_ensure_source.
+
+	* src/cairo_ft_font.c (_cairo_ft_font_show_glyphs): Advance
+	source offset.
+
+	* src/cairo.h: Added cairo_current_pattern,
+	cairo_pattern_create_for_surface, cairo_pattern_create_linear,
+	cairo_pattern_create_radial, cairo_pattern_reference,
+	cairo_pattern_destroy, cairo_pattern_add_color_stop,
+	cairo_pattern_set_matrix, cairo_pattern_get_matrix,
+	cairo_pattern_set_extend, cairo_pattern_get_extend,
+	cairo_pattern_set_filter, cairo_pattern_get_filter. cairo_set_pattern
+	now takes a cairo_pattern_t pointer instead of a cairo_surface_t
+	pointer. Added CAIRO_FILTER_GAUSSIAN filter type. Added cairo_extend_t
+	enum.
+
+	* src/cairo.c: _cairo_restrict_value declared not static as it's
+	used in cairo_pattern.c. Added rectangular extents functions
+	cairo_stroke_extents and cairo_fill_extents. cairo_set_pattern now
+	takes a cairo_pattern_t pointer instead of a cairo_surface_t
+	pointer. Added cairo_current_pattern function.
+
+	* src/Makefile.am (libcairo_la_LIBADD): Removed -lz and added PS_LIBS.
+
+	* configure.in: Bump version to 0.1.20. Includes new pattern
+	API. Removed an extra AC_SUBST(XRENDER_LIBS). 
+	PS_SURFACE_LIBS -> PS_LIBS.
+
+	* cairo.pc.in: PS_SURFACE_LIBS -> PS_LIBS.
+
+2004-04-02  Carl Worth  <cworth@east.isi.edu>
+
+	* src/cairo.h: Move weight after slant to match the order in
+	cairo_select_font.
+
+	* TODO: Added notes on DPI for image-based backends and on
+	proposal for new cairo_text_glyphs function.
+
+	* BUGS: Added BUG about cairo_show_text not advancing the current
+	point.
+
+2004-03-30  Carl Worth  <cworth@isi.edu>
+
+	* src/Makefile.am (libcairo_la_LIBADD): Add -lz.
+
+2004-03-30  Carl Worth  <cworth@isi.edu>
+
+	* configure.in: Add checks for Xrender.h in xrender.pc is not
+	found. Remove AC_HELP_STRING to be compatible with older versions
+	of autoconf (thanks to Bill Spitzak <spitzak@d2.com>).
+
+	* src/cairo_xlib_surface.c (_cairo_xlib_surface_set_clip_region):
+	Add question on semantics with empty region. Fix missing return
+	value.
+
+	* src/cairo_image_surface.c
+	(_cairo_image_surface_set_clip_region): Export for internal use.
+	(_cairo_image_abstract_surface_set_clip_region): Add silly wrapper
+	to match the backend interface.
+
+	* src/cairo_gstate.c (_cairo_gstate_init_clip): Remove unused
+	variables.
+
+	* src/cairo.h: Add proposal for cairo_xlib_surface_set_size.
+
+	* BUGS: Added note about problem with cairo_scale_font.
+
+2004-03-23  Olivier Andrieu  <oliv__a@users.sourceforge.net>
+	
+	* src/cairo_ps_surface.c (_cairo_ps_surface_set_clip_region)
+	* src/cairo_png_surface.c (_cairo_png_surface_set_clip_region):
+	Implement _set_clip_region by delegating it to the image backend.
+
+	* src/cairo_xcb_surface.c (_cairo_xcb_surface_set_clip_region):
+	Add a stub.
+
+	* src/cairo.h: Add missing (?) cairo_init_clip
+
+2004-03-20  Dave Beckett  <Dave.Beckett@bristol.ac.uk>
+
+	* configure.in: Move the PNG_CFLAGS/_LIBS substitutes outside
+	the conditional, to match what is already done for XCB.
+	Do the same for XRENDER_CFLAGS/LIBS.
+
+	* configure.in: Substitute PNG_CFLAGS, PNG_LIBS on
+	the configure path when use_png is not enabled to prevent
+	the substituions being undefined.
+
+2004-03-19  Graydon Hoare  <graydon@redhat.com>
+
+	* src/cairo.c (cairo_init_clip): Add.
+	* src/cairo_gstate.c:
+	Initialize, finalize and copy clip.region.
+	Detect rectangular clips and push down to backend.
+
+	* src/cairoint.h
+	(cairo_surface_backend_t): Add set_clip_region slot.
+	(cairo_clip_rec_t): Add region slot.
+	(_cairo_gstate_init_clip)
+	(_cairo_surface_set_clip_region): Prototype.
+
+	* src/cairo_surface.c
+	(_cairo_surface_set_clip_region): Add.
+	
+	* src/cairo_xlib_surface.c 
+	(_cairo_xlib_surface_set_clip_region): Add.
+
+	* src/cairo_image_surface.c 
+	(_cairo_image_surface_set_clip_region): Add.
+
+	* src/cairo_ps_surface.c
+	(_cairo_ps_surface_set_clip_region): Stub, not implemented.
+
+2004-03-16  Jamey Sharp <jamey@minilop.net>
+
+	* src/cairo.h:
+	* src/cairo_xcb_surface.c:
+	Updated for XCB typename renaming. The Xlib and XCB surfaces can
+	be compiled in the same library now.
+
+	* src/cairo_surface.c:
+	Initialize the surface's filter value.
+
+2004-02-26  Carl Worth  <cworth@isi.edu>
+
+	* AUTHORS: Add Jordi and Olivier to the AUTHORS file.
+
+	* src/cairo_ft_font.c (_utf8_to_ucs4): Fix broken return value for
+	nchars (thanks to Jordi Mas <jordi@ximian.com>).
+
+2004-02-24  Olivier Andrieu  <oliv__a@users.sourceforge.net>
+
+	* src/cairo.h:
+	* src/cairo-features.h.in:
+	* src/cairo_png_surface.c: Add PNG backend (cairo_set_target_png
+	and cairo_png_surface_create).
+
+	* cairo.pc.in:
+	* configure.in: autoconf support for the PNG backend. Bump version
+	to 0.1.19.
+	
+	* src/Makefile.am: PNG backend support, removed references to
+	X_LIBS and X_CFLAGS.
+
+2004-02-24  Carl Worth  <cworth@isi.edu>
+
+	* AUTHORS: Add attribution for many people who have made generous
+	contributions to cairo. This list was generated by sifting through
+	the ChangeLog. Please let me know if I have missed anyone.
+
+	* NEWS: Add some historical notes on cairo development, prior to
+	when we began to maintain this NEWS file.
+
+	* README (http): Add pointer to cairographics.org. Fix to use
+	"cairo" rather than "Cairo" when not at the beginning of a
+	sentence.
+
+	* TODO: Remove cairo_current_path, cairo_current_path_flat,
+	cairo_text_extents, cairo_glyph_extents, cairo_text_path, and
+	cairo_glyph_path from the TODO list as they have all been
+	implemented now.
+
+2004-02-17  Carl Worth  <cworth@isi.edu>
+
+	* src/cairo.h: Add comment indication cairo_copy will be going
+	away at some point. Some indentation fixes.
+
+	* configure.in: Bump version to 0.1.18. Includes new functions
+	cairo_current_path, cairo_current_path_flat,
+	cairo_surface_get_filter. Support for XCB backend. Fixes for
+	building in cygwin. Adds cairo_surface_get_filter.
+
+	* src/cairo.h: 
+	* src/cairo.c (cairo_current_path): 
+	(cairo_current_path_flat): Add new path query functions.
+
+	* src/cairo_gstate.c (_gpi_move_to):
+	(_gpi_line_to):
+	(_gpi_curve_to):
+	(_gpi_close_path):
+	(_cairo_gstate_interpret_path): Implement support for
+	cairo_current_path and cairo_current_path_flat. These functions
+	just provide an interface to _cairo_path_interpret and take care
+	of mapping from device space back to user space.
+
+2004-02-13  Carl Worth  <cworth@east.isi.edu>
+
+	* TODO: Add some notes from JG's TODO list on the wiki:
+	http://cairographics.org/CairoToDoList. (Also testing automated
+	mailing to cairo-commit list).
+
+2004-02-12  Carl Worth  <cworth@isi.edu>
+
+	* src/cairo.h: Add typedefs for new callbacks to be used by
+	cairo_current_path: cairo_move_to_func, cairo_line_to_func,
+	cairo_curve_to_func, and cairo_close_path_func.
+
+	* src/cairoint.h: cairo_path.last_move_point and
+	cairo_path.current_point are now fixed-point not doubles for
+	consistency.
+
+	* src/cairo_path.c (_cairo_path_interpret): Now accept 4 explicit
+	function pointers rather than a structure. Eliminate unnecessary
+	done_path callback.
+	
+	* src/cairo_path_bounds.c (_cairo_path_bounds):
+	* src/cairo_path_stroke.c (_cairo_path_stroke_to_traps): 
+	* src/cairo_path_fill.c (_cairo_path_fill_to_traps): Track change
+	in _cairo_path_interpret. Code previously in done_path callback is
+	now here immediately after call to _cairo_path_interpret.
+
+	* src/cairo_path.c (_cairo_path_move_to):
+	(_cairo_path_rel_move_to):
+	(_cairo_path_line_to):
+	(_cairo_path_rel_line_to):
+	(_cairo_path_curve_to):
+	(_cairo_path_rel_curve_to):
+	(_cairo_path_current_point): Internal _cairo_path API modified to
+	accept fixed-point data everywhere. Much cleaner this way.
+
+	* src/cairo_gstate.c (_cairo_gstate_move_to):
+	(_cairo_gstate_line_to):
+	(_cairo_gstate_curve_to):
+	(_cairo_gstate_rel_move_to):
+	(_cairo_gstate_rel_line_to):
+	(_cairo_gstate_rel_curve_to):
+	(_cairo_gstate_current_point):
+	(_cairo_gstate_show_text):
+	(_cairo_gstate_text_path): Have to convert doubles to fixed-point
+	to track changes in _cairo_path API.
+
+	* src/cairo_ft_font.c (_move_to, _line_to, _conic_to, _cubic_to):
+	Keep data in fixed-point rather than going through intermediate
+	doubles. Track changes in _cairo_path API.
+
+	* src/cairo_fixed.c (_cairo_fixed_from_26_6): New function to help
+	when working with freetype.
+
+2004-02-02  Jamey Sharp  <jamey@minilop.net>
+
+	* configure.in:
+	* src/Makefile.am:
+	* src/cairo-features.h.in:
+	* src/cairo.h:
+	* src/cairo_xcb_surface.c (added):
+	Ported the Xlib surface backend to XCB.
+
+2004-02-02  Graydon Hoare  <graydon@redhat.com>
+
+	* src/cairo_xlib_surface.c 
+	(CAIRO_SURFACE_RENDER_HAS_FILTERS): New predicate.
+	(_cairo_xlib_surface_set_filter): Skip filterless servers.
+	(_cairo_xlib_surface_clone_similar): Fix typo.
+
+2004-01-27  Graydon Hoare  <graydon@redhat.com>
+
+	* src/cairoint.h (cairo_surface): New "filter" field.
+	* src/cairo_surface.c 
+	(cairo_surface_get_filter): New function.
+	(cairo_surface_set_filter): Store filter in surface.
+	* src/cairo.h (cairo_surface_get_filter): Declare.
+	* src/cairo_xlib_surface.c
+	(_cairo_xlib_surface_clone_similar): Copy filter setting.
+	(_cairo_xlib_surface_set_filter): Use constants from Xrender.h
+
+2004-01-24  Carl Worth  <cworth@isi.edu>
+
+	* src/cairo_path_stroke.c (_cairo_stroker_add_sub_edge): Fix to
+	use tessellate_polygon instead of tessellate_rectangle as the
+	matrix may have skewed the coordinates into a non-rectangular
+	shape.
+
+	* src/cairo_xlib_surface.c (_cairo_xlib_surface_set_filter): Add
+	missing break statements to switch.
+
+2004-01-22  Richard D. Worth  <richard@theworths.org>
+
+	* src/Makefile.am: Add '-no-undefined' to end of
+	libcairo_la_LDFLAGS to enable building shared library under
+	cygwin.
+
+	* src/cairo.h: Remove all 'extern ' and ' __external_linkage'
+	(macro for __declspec(dllexport) and __declspec(dllimport))
+	from function declarations. These are no longer needed for cygwin.
+
+	* src/cairo_traps.c: Changed type of _line_segs_intersect_ceil
+	from 'static cairo_fixed_t' to 'static int' to match definition.
+	This was necessary to compile under cygwin.
+	
+2003-12-17  Carl Worth  <cworth@east.isi.edu>
+
+	* src/cairo.h: Remove trailing commas from enums, (some compilers
+	like to complain about them).
+
+2003-12-16  Dave Beckett  <Dave.Beckett@bristol.ac.uk>
+
+	* README: Do not require libpixregion, libic.
+
+2003-12-16  Carl Worth  <cworth@east.isi.edu>
+
+	* NEWS: Add more notes culled from the ChangeLog.
+
+2003-12-16  Carl Worth  <cworth@isi.edu>
+
+	* NEWS: Begin maintaining NEWS file. Add notes on 0.1.17.
+
+	* configure.in: Bump version to 0.1.17 for new functions:
+	cairo_text_extents, cairo_glyph_extents, cairo_text_path,
+	cairo_glyph_path.
+
+	* src/cairo.h: 
+	* src/cairo.c (cairo_text_path): 
+	(cairo_glyph_path): Re-enable cairo_text_path and cairo_glyph_path.
+
+	* src/cairo_gstate.c (_cairo_gstate_glyph_path): Add missing
+	transformation.
+
+	* src/cairo_ft_font.c (_move_to):
+	(_line_to):
+	(_conic_to):
+	(_cubic_to):
+	(_cairo_ft_font_glyph_path): Initial implementation of glyph_path.
+
+2003-12-16  Carl Worth  <cworth@isi.edu>
+
+	* src/cairoint.h: Move all current_point state fields from
+	cairo_gstate_t to cairo_path_t.
+
+	* src/cairo_path.c (_cairo_path_init): 
+	(_cairo_path_init_copy): 
+	(_cairo_path_fini): 
+	(_cairo_path_move_to): 
+	(_cairo_path_line_to): 
+	(_cairo_path_curve_to): 
+	(_cairo_path_close_path): Add current_point state.
+	(_cairo_path_current_point): New function.
+	(_cairo_path_rel_move_to): 
+	(_cairo_path_rel_line_to): 
+	(_cairo_path_rel_curve_to): New functions.
+
+	* src/cairo_gstate.c (_cairo_gstate_init):
+	(_cairo_gstate_new_path):
+	(_cairo_gstate_move_to):
+	(_cairo_gstate_line_to):
+	(_cairo_gstate_curve_to):
+	(_cairo_gstate_rel_move_to):
+	(_cairo_gstate_rel_line_to):
+	(_cairo_gstate_rel_curve_to):
+	(_cairo_gstate_close_path):
+	(_cairo_gstate_current_point): Eliminate current_point state.
+	(_cairo_gstate_show_text):
+	(_cairo_gstate_text_path): Use new _cairo_path_current_point.
+
+2003-12-16  Carl Worth  <cworth@isi.edu>
+
+
+	* src/cairo_ft_font.c (_cairo_ft_font_glyph_path):
+	(_cairo_ft_font_text_path): A couple of changes missed in the last
+	batch of commits (reordering so that path is final argument).
+
+	* src/cairoint.h: Change cairo_font_backend_t to use a void * for
+	the abstract font. Put create, copy, and destroy as the first
+	functions in the list. Fix text_path and glyph_path so that the
+	path to be returned is the last argument. Add x,y arguments to
+	text_path.
+
+	* src/cairo_gstate.c (_cairo_gstate_text_path): Compute x,y now
+	needed by cairo_font_text_path.
+	(_cairo_gstate_glyph_path): Track change in
+	cairo_font_text/glyph_path (path argument is now last).
+
+	* src/cairo_ft_font.c: Switch to new macro-based mechanism for
+	including freetype headers.
+	(cairo_ft_font_face):
+	(cairo_ft_font_pattern): Minor cleanup.
+	(_cairo_ft_font_copy):
+	(_cairo_ft_font_destroy):
+	(_utf8_to_glyphs):
+	(_cairo_ft_font_font_extents):
+	(_cairo_ft_font_glyph_extents):
+	(_cairo_ft_font_text_extents):
+	(_cairo_ft_font_show_glyphs):
+	(_cairo_ft_font_show_text): Track changes to cairo_font_backend_t
+	interface.
+
+	* src/cairo_font.c (_cairo_font_text_path):
+	(_cairo_font_glyph_path): Track changes to cairo_font_backend_t
+	interface.
+
+2003-12-16  Carl Worth  <cworth@isi.edu>
+
+	* TODO: Change instances of Cairo to cairo where necessary. Add
+	note about broken dashing on splines.
+
+2003-12-15  Carl Worth  <cworth@isi.edu>
+
+	* src/cairo_gstate.c (_cairo_gstate_text_extents): 
+	(_cairo_gstate_glyph_extents): 
+	* src/cairo_ft_font.c (_cairo_ft_font_glyph_extents): 
+	(_cairo_ft_font_glyph_extents): 
+	* src/cairo.h: Rename cairo_text_exextents_t fields:
+		left_side_bearing -> x_bearing
+		ascent -> y_bearing
+		right_side_bearing (replaced by) width
+		descent (replaced by) height
+
+2003-12-15  Carl Worth  <cworth@isi.edu>
+
+	* src/cairo_gstate.c (_cairo_gstate_text_extents):
+	(_cairo_gstate_glyph_extents): Need to divide out the scale factor
+	to return user-space extents.
+	(_cairo_gstate_glyph_extents): Don't transform glyph locations as
+	they're not relevant to extents.
+
+	* src/cairo_ft_font.c (_cairo_ft_font_font_extents): Clean up
+	implementation.
+	(_cairo_ft_font_glyph_extents): Initial implementation. Thanks to
+	John Ellson <ellson@research.att.com> for most of the work on this
+	function.
+	(_cairo_ft_font_show_text): Clean to use num_glyphs not nglyphs.
+
+	* src/cairo.h: 
+	* src/cairo.c (cairo_text_extents): 
+	(cairo_glyph_extents): Re-enable cairo_text/glyph_extents.
+
+2003-12-15  Carl Worth  <cworth@isi.edu>
+
+	* src/cairo_matrix.c (_cairo_matrix_compute_scale_factors): Move
+	this function from cairo_ft_font.c (_get_scale_factors).
+
+	* src/cairo_ft_font.c (DOUBLE_TO_16_16): Fix minor errors in
+	fixed/floating-point conversion.
+
+	* src/cairoint.h: font->show_glyphs no longer accepts an offset
+	point.
+
+	* src/cairo_ft_font.c (_utf8_to_glyphs):
+	(_cairo_ft_font_text_extents):
+	(_cairo_ft_font_show_text):
+	(_cairo_ft_font_text_path): _utf8_to_glyphs now accepts a point by
+	which each glyph should be offset.
+	(cairo_ft_font_backend): Remove evil void * casts on function
+	pointers.
+
+	* src/cairo_font.c (_cairo_font_show_glyphs): Fix to not require a
+	current point.
+
+	* src/cairo_gstate.c (_cairo_gstate_show_text):
+	(setup_text_rendering_context): Move initialization of current
+	device-space point from setup_text_rendering_context to
+	_cairo_gstate_show_text.
+	(_cairo_gstate_show_glyphs): Fix to not reference current point.
+
+2003-12-12  Dave Beckett  <Dave.Beckett@bristol.ac.uk>
+
+	* src/Makefile.am: Add compatibility defines FONTCONFIG_LIBS,
+	X_LIBS, XRENDER_LIBS to keep automake happy - they look like
+	automake variable names.
+
+2003-12-12  Carl Worth  <cworth@east.isi.edu>
+
+	* src/cairo_font.c (_cairo_font_create): Add comment about
+	building in a font.
+
+	* src/cairo_ft_font.c (_cairo_ft_font_create): Check for NULL
+	return value from cairo_ft_font_create.
+
+	* src/cairo.h: 
+	* src/cairo-features.h.in: 
+	* src/Makefile.am (libcairo_ps_sources): Add conditionals for
+	ps_surface functions, etc.
+
+	* configure.in: Get rid of AC_PATH_XTRA. Instead, find X
+	includes/libraries only via pkg-config xrender.
+	Switch option from --without-x to --disable-xlib
+	Add option --disable-ps
+
+	* cairo.pc.in (Libs): Add -lz only if ps_surface backend is compiled.
+
+	* src/cairo.h (__external_linkage): Add missing definitions from
+	slim_import.h.
+
+2003-12-11  Carl Worth  <cworth@isi.edu>
+
+	* src/cairoint.h: Rename surface->ic_image to
+	surface->pixman_image.
+
+	* src/cairo_image_surface.c
+	(_cairo_image_surface_create_for_pixman_image):
+	(_cairo_image_surface_create_with_masks):
+	(_create_pixman_format):
+	(cairo_image_surface_create):
+	(cairo_image_surface_create_for_data):
+	(_cairo_image_abstract_surface_destroy):
+	(_cairo_image_surface_set_matrix):
+	(_cairo_image_surface_set_filter):
+	(_cairo_image_surface_set_repeat):
+	(_pixman_operator):
+	(_cairo_image_surface_fill_rectangles):
+	(_cairo_image_surface_composite_trapezoids): Rename functions and
+	indentifiers with ic_ in the name that were missed by the recent
+	renaming. Fix indentation problems left by the recent renaming.
+
+	* Shift everything over from libic/libpixregion/slim to
+	libpixman. Many thanks to Dave Beckett
+	<dave.beckett@bristol.ac.uk> for all of the heavy lifting with
+	this renaming effort.
+
+	* src/cairoint.h (slim_hidden_proto1): Directly fold in slim stuff
+	rather than depending on it from an external package.
+
+	* src/cairo_ps_surface.c (_cairo_ps_surface_copy_page): 
+	* src/cairo_image_surface.c: Switch from libic to libpixman.
+
+	* src/cairo.h: Include pixman.h not ic.h.
+	(__external_linkage): Directly fold in slim stuff rather than
+	depending on it from an external package.
+
+	* configure.in (PKG_CHECK_MODULES): 
+	* cairo.pc.in (Requires): Look for libpixman instead of libic and
+	slim.
+
+2003-12-11  Andrew Chant <andrew.chant@utoronto.ca>
+
+	*  cairo_select_font:
+	 _cairo_font_create:
+	 _cairo_ft_font_create:
+	 _cairo_gstate_select_font:
+	 	change char * family to const char * family
+
+2003-12-11  Carl Worth  <cworth@isi.edu>
+
+	* src/cairo_xlib_surface.c (_cairo_xlib_surface_set_image):
+	Replace mysterious image->depth == 32 ? 24 : image->depth with
+	simply image->depth.
+
+2003-12-11  Carl Worth  <cworth@east.isi.edu>
+
+	* cairo.pc.in (Requires): 
+	* configure.in: Add xrender to cairo.pc Renders line if needed.
+
+2003-12-11  Carl Worth  <cworth@east.isi.edu>
+
+	* src/cairo_ps_surface.c (_cairo_ps_surface_copy_page): Fix to use
+	shifts and masks for endianness-correct PS image
+	generation. Rename bgr to rgb now that the byte order issues are
+	clear.
+
+2003-12-08  Carl Worth  <cworth@isi.edu>
+
+	* src/cairo_path_bounds.c (_cairo_path_bounder_move_to):
+	(_cairo_path_bounder_line_to):
+	(_cairo_path_bounder_curve_to):
+	(_cairo_path_bounder_close_path): Track change in
+	cairo_path_callbacks interface.
+
+	* src/cairoint.h: 
+	* src/cairo_path_stroke.c: 
+	* src/cairo_path_fill.c: 
+	* src/cairo_path.c: Clean up cairo_path_callbacks to have move_to,
+	line_to, curve_to, abd close_path instead of add_edge, add_spline,
+	and done_sub_path. Much, much nicer.
+
+	* src/cairo_polygon.c (_cairo_polygon_move_to): Provide
+	cairo_polygon_move_to and cairo_polygon_line_to instead of
+	cairo_polygon_add_point.
+
+	* src/cairo_pen.c (_cairo_pen_stroke_spline_half): Track change in
+	cairo_polygon interface.
+
 2003-12-08  Carl Worth  <cworth@isi.edu>
 
 	* configure.in: Bump version to 0.1.16 since it actually has a

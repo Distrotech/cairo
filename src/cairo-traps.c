@@ -58,7 +58,7 @@ _compute_inverse_slope (cairo_line_t *l);
 static double
 _compute_x_intercept (cairo_line_t *l, double inverse_slope);
 
-static cairo_fixed_t
+static int
 _line_segs_intersect_ceil (cairo_line_t *left, cairo_line_t *right, cairo_fixed_t *y_ret);
 
 void
@@ -490,7 +490,7 @@ _line_segs_intersect_ceil (cairo_line_t *l1, cairo_line_t *l2, cairo_fixed_t *y_
 */
 cairo_status_t
 _cairo_traps_tessellate_polygon (cairo_traps_t		*traps,
-				 cairo_polygon_t		*poly,
+				 cairo_polygon_t	*poly,
 				 cairo_fill_rule_t	fill_rule)
 {
     cairo_status_t	status;
@@ -607,4 +607,41 @@ _cairo_traps_contain (cairo_traps_t *traps, double x, double y)
     }
 
     return 0;
+}
+
+#define MIN(a,b) ((a) < (b) ? (a) : (b))
+#define MAX(a,b) ((a) > (b) ? (a) : (b))
+
+static void
+_cairo_trap_extents (cairo_trapezoid_t *t, cairo_box_t *extents)
+{
+    cairo_fixed_t x;
+    
+    if (t->top < extents->p1.y)
+	extents->p1.y = t->top;
+    
+    if (t->bottom > extents->p2.y)
+	extents->p2.y = t->bottom;
+    
+    x = MIN (_compute_x (&t->left, t->top),
+	     _compute_x (&t->left, t->bottom));
+    if (x < extents->p1.x)
+	extents->p1.x = x;
+    
+    x = MAX (_compute_x (&t->right, t->top),
+	     _compute_x (&t->right, t->bottom));
+    if (x > extents->p2.x)
+	extents->p2.x = x;
+}
+
+void
+_cairo_traps_extents (cairo_traps_t *traps, cairo_box_t *extents)
+{
+    int i;
+  
+    extents->p1.x = extents->p1.y = SHRT_MAX << 16;
+    extents->p2.x = extents->p2.y = SHRT_MIN << 16;
+    
+    for (i = 0; i < traps->num_traps; i++)
+	_cairo_trap_extents (&traps->traps[i], extents);
 }

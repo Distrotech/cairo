@@ -11,6 +11,10 @@
 <!ENTITY cairo_pop_group SYSTEM "xml/cairo_pop_group.xml">
 <!ENTITY cairo_set_target_surface SYSTEM "xml/cairo_set_target_surface.xml">
 <!ENTITY cairo_set_target_image SYSTEM "xml/cairo_set_target_image.xml">
+<!ENTITY cairo_set_target_ps SYSTEM "xml/cairo_set_target_ps.xml">
+<!ENTITY cairo_set_target_drawable SYSTEM "xml/cairo_set_target_drawable.xml">
+<!ENTITY cairo_set_target_xcb SYSTEM "xml/cairo_set_target_xcb.xml">
+<!ENTITY cairo_set_target_png SYSTEM "xml/cairo_set_target_png.xml">
 <!ENTITY cairo_set_operator SYSTEM "xml/cairo_set_operator.xml">
 <!ENTITY cairo_set_rgb_color SYSTEM "xml/cairo_set_rgb_color.xml">
 <!ENTITY cairo_set_alpha SYSTEM "xml/cairo_set_alpha.xml">
@@ -34,8 +38,12 @@
 <!ENTITY cairo_new_path SYSTEM "xml/cairo_new_path.xml">
 <!ENTITY cairo_move_to SYSTEM "xml/cairo_move_to.xml">
 <!ENTITY cairo_line_to SYSTEM "xml/cairo_line_to.xml">
+<!ENTITY cairo_arc SYSTEM "xml/cairo_arc.xml">
+<!ENTITY cairo_arc_negative SYSTEM "xml/cairo_arc_negative.xml">
 <!ENTITY cairo_rel_move_to SYSTEM "xml/cairo_rel_move_to.xml">
 <!ENTITY cairo_rel_line_to SYSTEM "xml/cairo_rel_line_to.xml">
+<!ENTITY cairo_rectangle SYSTEM "xml/cairo_rectangle.xml">
+<!ENTITY cairo_curve_to SYSTEM "xml/cairo_curve_to.xml">
 <!ENTITY cairo_stroke_path SYSTEM "xml/cairo_stroke_path.xml">
 <!ENTITY cairo_close_path SYSTEM "xml/cairo_close_path.xml">
 <!ENTITY cairo_stroke SYSTEM "xml/cairo_stroke.xml">
@@ -44,6 +52,7 @@
 <!ENTITY cairo_select_font SYSTEM "xml/cairo_select_font.xml">
 <!ENTITY cairo_scale_font SYSTEM "xml/cairo_scale_font.xml">
 <!ENTITY cairo_show_text SYSTEM "xml/cairo_show_text.xml">
+<!ENTITY cairo_text_extents SYSTEM "xml/cairo_text_extents.xml">
 <!ENTITY cairo_current_operator SYSTEM "xml/cairo_current_operator.xml">
 <!ENTITY cairo_current_rgb_color SYSTEM "xml/cairo_current_rgb_color.xml">
 <!ENTITY cairo_current_alpha SYSTEM "xml/cairo_current_alpha.xml">
@@ -80,6 +89,10 @@
 <!ENTITY cairo_matrix_t SYSTEM "xml/cairo_matrix_t.xml">
 <!ENTITY cairo_surface_t SYSTEM "xml/cairo_surface_t.xml">
 <!ENTITY cairo_format_t SYSTEM "xml/cairo_format_t.xml">
+<!ENTITY cairo_operator_t SYSTEM "xml/cairo_operator_t.xml">
+<!ENTITY cairo_fill_rule_t SYSTEM "xml/cairo_fill_rule_t.xml">
+<!ENTITY cairo_line_cap_t SYSTEM "xml/cairo_line_cap_t.xml">
+<!ENTITY cairo_text_extents_t SYSTEM "xml/cairo_text_extents_t.xml">
 ]>
 <book lang="en"> 
 <title>Cairo: A Vector Graphics Library</title> 
@@ -97,6 +110,10 @@
 &cairo_pop_group;
 &cairo_set_target_surface;
 &cairo_set_target_image;
+&cairo_set_target_ps;
+&cairo_set_target_png;
+&cairo_set_target_drawable;
+&cairo_set_target_xcb;
 &cairo_set_operator;
 &cairo_set_rgb_color;
 &cairo_set_alpha;
@@ -120,8 +137,12 @@
 &cairo_new_path;
 &cairo_move_to;
 &cairo_line_to;
+&cairo_arc;
+&cairo_arc_negative;
 &cairo_rel_move_to;
 &cairo_rel_line_to;
+&cairo_rectangle;
+&cairo_curve_to;
 &cairo_stroke_path;
 &cairo_close_path;
 &cairo_stroke;
@@ -130,6 +151,7 @@
 &cairo_select_font;
 &cairo_scale_font;
 &cairo_show_text;
+&cairo_text_extents;
 &cairo_current_operator;
 &cairo_current_rgb_color;
 &cairo_current_alpha;
@@ -169,6 +191,10 @@
 &cairo_matrix_t;
 &cairo_surface_t;
 &cairo_format_t;
+&cairo_operator_t;
+&cairo_fill_rule_t;
+&cairo_line_cap_t;
+&cairo_text_extents_t;
 </reference>
 </book>
 

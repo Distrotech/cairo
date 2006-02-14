@@ -286,19 +286,19 @@ _cairo_ps_surface_copy_page (void *abstract_surface)
     int i, x, y;
 
     cairo_surface_t *white_surface;
-    char *bgr, *compressed;
-    long bgr_size, compressed_size;
+    char *rgb, *compressed;
+    long rgb_size, compressed_size;
 
     cairo_color_t white;
 
-    bgr_size = 3 * width * height;
-    bgr = malloc (bgr_size);
-    if (bgr == NULL) {
+    rgb_size = 3 * width * height;
+    rgb = malloc (rgb_size);
+    if (rgb == NULL) {
 	status = CAIRO_STATUS_NO_MEMORY;
 	goto BAIL0;
     }
 
-    compressed_size = (int) (1.0 + 1.1 * bgr_size);
+    compressed_size = (int) (1.0 + 1.1 * rgb_size);
     compressed = malloc (compressed_size);
     if (compressed == NULL) {
 	status = CAIRO_STATUS_NO_MEMORY;
@@ -330,16 +330,15 @@ _cairo_ps_surface_copy_page (void *abstract_surface)
 
     i = 0;
     for (y = 0; y < height; y++) {
-	char *line = surface->image->data + y * surface->image->stride;
-	for (x = 0; x < width; x++) {
-	    unsigned char *pixel = (unsigned char *) line + x * 4;
-	    bgr[i++] = *(pixel+2);
-	    bgr[i++] = *(pixel+1);
-	    bgr[i++] = *(pixel);
+	pixman_bits_t *pixel = (pixman_bits_t *) (surface->image->data + y * surface->image->stride);
+	for (x = 0; x < width; x++, pixel++) {
+	    rgb[i++] = (*pixel & 0x00ff0000) >> 16;
+	    rgb[i++] = (*pixel & 0x0000ff00) >>  8;
+	    rgb[i++] = (*pixel & 0x000000ff) >>  0;
 	}
     }
 
-    compress (compressed, &compressed_size, bgr, bgr_size);
+    compress (compressed, &compressed_size, rgb, rgb_size);
 
     /* Page header */
     fprintf (file, "%%%%Page: %d\n", ++surface->pages);
@@ -375,7 +374,7 @@ _cairo_ps_surface_copy_page (void *abstract_surface)
     BAIL2:
     free (compressed);
     BAIL1:
-    free (bgr);
+    free (rgb);
     BAIL0:
     return status;
 }
@@ -395,6 +394,23 @@ _cairo_ps_surface_show_page (void *abstract_surface)
     return CAIRO_STATUS_SUCCESS;
 }
 
+static cairo_int_status_t
+_cairo_ps_surface_set_clip_region (void *abstract_surface,
+				   pixman_region16_t *region)
+{
+    cairo_ps_surface_t *surface = abstract_surface;
+
+    return _cairo_image_surface_set_clip_region (surface->image, region);
+}
+
+static cairo_int_status_t
+_cairo_ps_surface_create_pattern (void *abstract_surface,
+                                  cairo_pattern_t *pattern,
+                                  cairo_box_t *extents)
+{
+    return CAIRO_INT_STATUS_UNSUPPORTED;
+}
+
 static const cairo_surface_backend_t cairo_ps_surface_backend = {
     _cairo_ps_surface_create_similar,
     _cairo_ps_surface_destroy,
@@ -408,5 +424,7 @@ static const cairo_surface_backend_t cairo_ps_surface_backend = {
     _cairo_ps_surface_fill_rectangles,
     _cairo_ps_surface_composite_trapezoids,
     _cairo_ps_surface_copy_page,
-    _cairo_ps_surface_show_page
+    _cairo_ps_surface_show_page,
+    _cairo_ps_surface_set_clip_region,
+    _cairo_ps_surface_create_pattern
 };
