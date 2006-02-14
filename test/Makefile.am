@@ -6,6 +6,7 @@ composite-integer-translate-source \
 composite-integer-translate-over \
 composite-integer-translate-over-repeat \
 create-from-png			\
+create-from-png-stream		\
 fill-and-stroke			\
 fill-rule			\
 filter-nearest-offset		\
@@ -29,6 +30,9 @@ source-clip			\
 source-surface-scale-paint	\
 surface-finish-twice		\
 surface-pattern			\
+text-antialias-gray		\
+text-antialias-none		\
+text-antialias-subpixel		\
 text-cache-crash		\
 text-rotate			\
 transforms			\
@@ -59,6 +63,7 @@ composite-integer-translate-source-ref.png		\
 composite-integer-translate-over-ref.png		\
 composite-integer-translate-over-repeat-ref.png		\
 create-from-png-ref.png			\
+create-from-png-stream-ref.png		\
 fill-and-stroke-ref.png			\
 fill-rule-ref.png			\
 filter-nearest-offset-ref.png		\
@@ -80,6 +85,8 @@ set-source-ref.png			\
 source-clip-ref.png			\
 source-surface-scale-paint-ref.png	\
 surface-pattern-ref.png			\
+text-antialias-gray-ref.png		\
+text-antialias-none-ref.png		\
 transforms-ref.png			\
 translate-show-surface-ref.png		\
 trap-clip-ref.png			\
@@ -103,6 +110,7 @@ filter-nearest-offset		\
 pixman-rotate			\
 self-intersecting		\
 source-surface-scale-paint	\
+text-antialias-subpixel		\
 text-rotate
 
 check_PROGRAMS = $(TESTS)
@@ -143,6 +151,7 @@ composite_integer_translate_source_LDADD = $(LDADDS)
 composite_integer_translate_over_LDADD = $(LDADDS)
 composite_integer_translate_over_repeat_LDADD = $(LDADDS)
 create_from_png_LDADD = $(LDADDS)
+create_from_png_stream_LDADD = $(LDADDS)
 fill_and_stroke_LDADD = $(LDADDS)
 fill_rule_LDADD = $(LDADDS)
 filter_nearest_offset_LDADD = $(LDADDS)
@@ -169,6 +178,9 @@ source_clip_LDADD = $(LDADDS)
 source_surface_scale_paint_LDADD = $(LDADDS)
 surface_finish_twice_LDADD = $(LDADDS)
 surface_pattern_LDADD = $(LDADDS)
+text_antialias_gray_LDADD = $(LDADDS)
+text_antialias_none_LDADD = $(LDADDS)
+text_antialias_subpixel_LDADD = $(LDADDS)
 text_cache_crash_LDADD = $(LDADDS)
 text_rotate_LDADD = $(LDADDS)
 transforms_LDADD = $(LDADDS)
@@ -190,4 +202,4 @@ CLEANFILES =					\
 	pdf-clip.pdf
 
 check-valgrind:
-	TESTS_ENVIRONMENT="libtool --mode=execute valgrind --tool=memcheck --leak-check=yes --show-reachable=yes" $(MAKE) check
+	TESTS_ENVIRONMENT="libtool --mode=execute valgrind --tool=memcheck --suppressions=./.valgrind-suppressions --leak-check=yes --show-reachable=yes" $(MAKE) check 2>&1 | tee valgrind.log

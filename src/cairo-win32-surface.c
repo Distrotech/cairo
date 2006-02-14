@@ -243,23 +243,29 @@ _cairo_win32_surface_create_for_dc (HDC             original_dc,
 				    int	            width,
 				    int	            height)
 {
+    cairo_status_t status;
     cairo_win32_surface_t *surface;
     char *bits;
     int rowstride;
 
     surface = malloc (sizeof (cairo_win32_surface_t));
-    if (!surface)
-	return NULL;
+    if (surface == NULL) {
+	_cairo_error (CAIRO_STATUS_NO_MEMORY);
+	return &_cairo_surface_nil;
+    }
 
-    if (_create_dc_and_bitmap (surface, original_dc, format,
-			       width, height,
-			       &bits, &rowstride) != CAIRO_STATUS_SUCCESS)
+    status = _create_dc_and_bitmap (surface, original_dc, format,
+				    width, height,
+				    &bits, &rowstride);
+    if (status)
 	goto FAIL;
 
     surface->image = cairo_image_surface_create_for_data (bits, format,
 							  width, height, rowstride);
-    if (!surface->image)
+    if (surface->image->status) {
+	status = CAIRO_STATUS_NO_MEMORY;
 	goto FAIL;
+    }
     
     surface->format = format;
     
@@ -283,9 +289,14 @@ _cairo_win32_surface_create_for_dc (HDC             original_dc,
     }
     if (surface)
 	free (surface);
-    
-    return NULL;
-    
+
+    if (status == CAIRO_STATUS_NO_MEMORY) {
+	_cairo_error (CAIRO_STATUS_NO_MEMORY);
+	return &_cairo_surface_nil;
+    } else {
+	_cairo_error (status);
+	return &_cairo_surface_nil;
+    }
 }
 
 static cairo_surface_t *
@@ -359,7 +370,7 @@ _cairo_win32_surface_get_subimage (cairo_win32_surface_t  *surface,
 								       content,
 								       width,
 								       height);
-    if (!local)
+    if (local->base.status)
 	return CAIRO_STATUS_NO_MEMORY;
     
     if (!BitBlt (local->dc, 
@@ -892,12 +903,16 @@ cairo_win32_surface_create (HDC hdc)
      */
     if (GetClipBox (hdc, &rect) == ERROR) {
 	_cairo_win32_print_gdi_error ("cairo_win32_surface_create");
-	return NULL;
+	/* XXX: Can we make a more reasonable guess at the error cause here? */
+	_cairo_error (CAIRO_STATUS_NO_MEMORY);
+	return &_cairo_surface_nil;
     }
     
     surface = malloc (sizeof (cairo_win32_surface_t));
-    if (!surface)
-	return NULL;
+    if (surface == NULL) {
+	_cairo_error (CAIRO_STATUS_NO_MEMORY);
+	return &_cairo_surface_nil;
+    }
 
     surface->image = NULL;
     surface->format = CAIRO_FORMAT_RGB24;

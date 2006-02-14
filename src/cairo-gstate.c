@@ -121,6 +121,8 @@ _cairo_gstate_init (cairo_gstate_t  *gstate,
     cairo_matrix_init_scale (&gstate->font_matrix,
 			     CAIRO_GSTATE_DEFAULT_FONT_SIZE, 
 			     CAIRO_GSTATE_DEFAULT_FONT_SIZE);
+
+    _cairo_font_options_init_default (&gstate->font_options);
     
     gstate->clip.mode = _cairo_surface_get_clip_mode (target);
     gstate->clip.region = NULL;
@@ -280,8 +282,8 @@ _cairo_gstate_begin_group (cairo_gstate_t *gstate)
 	return CAIRO_STATUS_NO_MEMORY;
 
     gstate->target = cairo_surface_create (gstate->dpy);
-    if (gstate->target == NULL)
-	return CAIRO_STATUS_NO_MEMORY;
+    if (gstate->target->status)
+	return gstate->target->status;
 
     _cairo_surface_set_drawableWH (gstate->target, pix, width, height);
 
@@ -399,9 +401,6 @@ _cairo_gstate_get_clip_extents (cairo_gstate_t	    *gstate,
 cairo_surface_t *
 _cairo_gstate_get_target (cairo_gstate_t *gstate)
 {
-    if (gstate == NULL)
-	return NULL;
-
     return gstate->target;
 }
 
@@ -906,7 +905,7 @@ _cairo_gstate_mask (cairo_gstate_t  *gstate,
 						     CAIRO_CONTENT_ALPHA,
 						     extents.width,
 						     extents.height);
-	if (intermediate == NULL)
+	if (intermediate->status)
 	    return CAIRO_STATUS_NO_MEMORY;
 
 	status = _cairo_surface_composite (CAIRO_OPERATOR_SOURCE,
@@ -1247,7 +1246,7 @@ _composite_traps_intermediate_surface (cairo_gstate_t    *gstate,
 							extents->width,
 							extents->height,
 							CAIRO_COLOR_TRANSPARENT);
-    if (intermediate == NULL)
+    if (intermediate->status)
 	return CAIRO_STATUS_NO_MEMORY;
     
     _cairo_pattern_init_solid (&pattern.solid, CAIRO_COLOR_WHITE);
@@ -1723,7 +1722,7 @@ _cairo_gstate_intersect_clip_mask (cairo_gstate_t *gstate,
 						   surface_rect.width,
 						   surface_rect.height,
 						   CAIRO_COLOR_WHITE);
-    if (surface == NULL)
+    if (surface->status)
 	return CAIRO_STATUS_NO_MEMORY;
 
     /* Render the new clipping path into the new mask surface. */
@@ -1827,8 +1826,8 @@ _cairo_gstate_select_font_face (cairo_gstate_t       *gstate,
     cairo_font_face_t *font_face;
 
     font_face = _cairo_simple_font_face_create (family, slant, weight);
-    if (!font_face)
-	return CAIRO_STATUS_NO_MEMORY;
+    if (font_face->status)
+	return font_face->status;
 
     _cairo_gstate_set_font_face (gstate, font_face);
     cairo_font_face_destroy (font_face);
@@ -1863,6 +1862,24 @@ _cairo_gstate_get_font_matrix (cairo_gstate_t *gstate,
 			       cairo_matrix_t *matrix)
 {
     *matrix = gstate->font_matrix;
+}
+
+cairo_status_t
+_cairo_gstate_set_font_options (cairo_gstate_t             *gstate,
+				const cairo_font_options_t *options)
+{
+    _cairo_gstate_unset_font (gstate);
+
+    gstate->font_options = *options;
+
+    return CAIRO_STATUS_SUCCESS;
+}
+
+void
+_cairo_gstate_get_font_options (cairo_gstate_t       *gstate,
+				cairo_font_options_t *options)
+{
+    *options = gstate->font_options;
 }
 
 cairo_status_t
@@ -1960,11 +1977,15 @@ static cairo_status_t
 _cairo_gstate_ensure_font_face (cairo_gstate_t *gstate)
 {
     if (!gstate->font_face) {
-	gstate->font_face = _cairo_simple_font_face_create (CAIRO_FONT_FAMILY_DEFAULT,
-							    CAIRO_FONT_SLANT_DEFAULT,
-							    CAIRO_FONT_WEIGHT_DEFAULT);
-	if (!gstate->font_face)
-	    return CAIRO_STATUS_NO_MEMORY;
+	cairo_font_face_t *font_face;
+
+	font_face = _cairo_simple_font_face_create (CAIRO_FONT_FAMILY_DEFAULT,
+						    CAIRO_FONT_SLANT_DEFAULT,
+						    CAIRO_FONT_WEIGHT_DEFAULT);
+	if (font_face->status)
+	    return font_face->status;
+	else
+	    gstate->font_face = font_face;
     }
     
     return CAIRO_STATUS_SUCCESS;
@@ -1974,6 +1995,7 @@ static cairo_status_t
 _cairo_gstate_ensure_font (cairo_gstate_t *gstate)
 {
     cairo_status_t status;
+    cairo_font_options_t options;
     
     if (gstate->scaled_font)
 	return CAIRO_STATUS_SUCCESS;
@@ -1982,9 +2004,13 @@ _cairo_gstate_ensure_font (cairo_gstate_t *gstate)
     if (status)
 	return status;
 
+    cairo_surface_get_font_options (gstate->target, &options);
+    cairo_font_options_merge (&options, &gstate->font_options);
+    
     gstate->scaled_font = cairo_scaled_font_create (gstate->font_face,
 						    &gstate->font_matrix,
-						    &gstate->ctm);
+						    &gstate->ctm,
+						    &options);
     
     if (!gstate->scaled_font)
 	return CAIRO_STATUS_NO_MEMORY;
@@ -2000,7 +2026,9 @@ _cairo_gstate_get_font_extents (cairo_gstate_t *gstate,
     if (status)
 	return status;
 
-    return cairo_scaled_font_extents (gstate->scaled_font, extents);
+    cairo_scaled_font_extents (gstate->scaled_font, extents);
+
+    return CAIRO_STATUS_SUCCESS;
 }
 
 cairo_status_t
@@ -2043,6 +2071,9 @@ cairo_status_t
 _cairo_gstate_set_font_face (cairo_gstate_t    *gstate, 
 			     cairo_font_face_t *font_face)
 {
+    if (font_face->status)
+	return font_face->status;
+    
     if (font_face != gstate->font_face) {
 	if (gstate->font_face)
 	    cairo_font_face_destroy (gstate->font_face);
@@ -2136,7 +2167,7 @@ _cairo_gstate_show_glyphs (cairo_gstate_t *gstate,
 							    extents.width,
 							    extents.height,
 							    CAIRO_COLOR_TRANSPARENT);
-	if (intermediate == NULL) {
+	if (intermediate->status) {
 	    status = CAIRO_STATUS_NO_MEMORY;
 	    goto BAIL1;
 	}

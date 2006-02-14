@@ -39,13 +39,26 @@
 
 #include "cairoint.h"
 
+/* Forward declare so we can use it as an arbitrary backend for
+ * _cairo_font_face_nil.
+ */
+static const cairo_font_face_backend_t _cairo_simple_font_face_backend;
+
 /* cairo_font_face_t */
+
+const cairo_font_face_t _cairo_font_face_nil = {
+    CAIRO_STATUS_NO_MEMORY,	/* status */
+    -1,		                /* ref_count */
+    { 0, 0, 0, NULL },		/* user_data */
+    &_cairo_simple_font_face_backend
+};
 
 void
 _cairo_font_face_init (cairo_font_face_t               *font_face, 
 		       const cairo_font_face_backend_t *backend)
 {
-    font_face->refcount = 1;
+    font_face->status = CAIRO_STATUS_SUCCESS;
+    font_face->ref_count = 1;
     font_face->backend = backend;
 
     _cairo_user_data_array_init (&font_face->user_data);
@@ -66,7 +79,10 @@ cairo_font_face_reference (cairo_font_face_t *font_face)
     if (font_face == NULL)
 	return;
 
-    font_face->refcount++;
+    if (font_face->ref_count == (unsigned int)-1)
+	return;
+
+    font_face->ref_count++;
 }
 
 /**
@@ -83,7 +99,10 @@ cairo_font_face_destroy (cairo_font_face_t *font_face)
     if (font_face == NULL)
 	return;
 
-    if (--(font_face->refcount) > 0)
+    if (font_face->ref_count == (unsigned int)-1)
+	return;
+
+    if (--(font_face->ref_count) > 0)
 	return;
 
     font_face->backend->destroy (font_face);
@@ -92,12 +111,28 @@ cairo_font_face_destroy (cairo_font_face_t *font_face)
      * FreeType backend where cairo_ft_font_face_t and cairo_ft_unscaled_font_t
      * need to effectively mutually reference each other
      */
-    if (font_face->refcount > 0)
+    if (font_face->ref_count > 0)
 	return;
 
     _cairo_user_data_array_fini (&font_face->user_data);
 
     free (font_face);
+}
+
+/**
+ * cairo_font_face_status:
+ * @surface: a #cairo_font_face_t
+ * 
+ * Checks whether an error has previously occurred for this
+ * font face
+ * 
+ * Return value: %CAIRO_STATUS_SUCCESS or another error such as
+ *   %CAIRO_STATUS_NO_MEMORY.
+ **/
+cairo_status_t
+cairo_font_face_status (cairo_font_face_t *font_face)
+{
+    return font_face->status;
 }
 
 /**
@@ -142,6 +177,9 @@ cairo_font_face_set_user_data (cairo_font_face_t	   *font_face,
 			       void			   *user_data,
 			       cairo_destroy_func_t	    destroy)
 {
+    if (font_face->ref_count == -1)
+	return CAIRO_STATUS_NO_MEMORY;
+    
     return _cairo_user_data_array_set_data (&font_face->user_data,
 					    key, user_data, destroy);
 }
@@ -158,8 +196,6 @@ struct _cairo_simple_font_face {
     cairo_font_slant_t slant;
     cairo_font_weight_t weight;
 };
-
-static const cairo_font_face_backend_t _cairo_simple_font_face_backend;
 
 /* We maintain a global cache from family/weight/slant => cairo_font_face_t
  * for cairo_simple_font_t. The primary purpose of this cache is to provide
@@ -355,17 +391,18 @@ _cairo_simple_font_face_destroy (void *abstract_face)
 }
 
 static cairo_status_t
-_cairo_simple_font_face_create_font (void                 *abstract_face,
-				     const cairo_matrix_t *font_matrix,
-				     const cairo_matrix_t *ctm,
-				     cairo_scaled_font_t **scaled_font)
+_cairo_simple_font_face_create_font (void                        *abstract_face,
+				     const cairo_matrix_t        *font_matrix,
+				     const cairo_matrix_t        *ctm,
+				     const cairo_font_options_t  *options,
+				     cairo_scaled_font_t        **scaled_font)
 {
     const cairo_scaled_font_backend_t * backend = CAIRO_SCALED_FONT_BACKEND_DEFAULT;
 
     cairo_simple_font_face_t *simple_face = abstract_face;
 
     return backend->create (simple_face->family, simple_face->slant, simple_face->weight,
-			    font_matrix, ctm, scaled_font);
+			    font_matrix, ctm, options, scaled_font);
 }
 
 static const cairo_font_face_backend_t _cairo_simple_font_face_backend = {
@@ -405,20 +442,74 @@ _cairo_simple_font_face_create (const char          *family,
     cache = _get_global_simple_cache ();
     if (cache == NULL) {
 	_unlock_global_simple_cache ();
-	return NULL;
+	_cairo_error (CAIRO_STATUS_NO_MEMORY);
+	return (cairo_font_face_t *)&_cairo_font_face_nil;
     }
     status = _cairo_cache_lookup (cache, &key, (void **) &entry, &created_entry);
     if (status == CAIRO_STATUS_SUCCESS && !created_entry)
 	cairo_font_face_reference (&entry->font_face->base);
     
     _unlock_global_simple_cache ();
-    if (status)
-	return NULL;
+    if (status) {
+	_cairo_error (status);
+	return (cairo_font_face_t *)&_cairo_font_face_nil;
+    }
 
     return &entry->font_face->base;
 }
 
 /* cairo_scaled_font_t */
+
+static const cairo_scaled_font_t _cairo_scaled_font_nil = {
+    CAIRO_STATUS_NO_MEMORY,	/* status */
+    -1,				/* ref_count */
+    { 1., 0., 0., 1., 0, 0},	/* font_matrix */
+    { 1., 0., 0., 1., 0, 0},	/* ctm */
+    { 1., 0., 0., 1., 0, 0},	/* scale */
+    NULL,			/* font_face */
+    CAIRO_SCALED_FONT_BACKEND_DEFAULT,
+};
+
+/**
+ * _cairo_scaled_font_set_error:
+ * @scaled_font: a scaled_font
+ * @status: a status value indicating an error, (eg. not
+ * CAIRO_STATUS_SUCCESS)
+ * 
+ * Sets scaled_font->status to @status and calls _cairo_error;
+ *
+ * All assignments of an error status to scaled_font->status should happen
+ * through _cairo_scaled_font_set_error() or else _cairo_error() should be
+ * called immediately after the assignment.
+ *
+ * The purpose of this function is to allow the user to set a
+ * breakpoint in _cairo_error() to generate a stack trace for when the
+ * user causes cairo to detect an error.
+ **/
+void
+_cairo_scaled_font_set_error (cairo_scaled_font_t *scaled_font,
+			      cairo_status_t status)
+{
+    scaled_font->status = status;
+
+    _cairo_error (status);
+}
+
+/**
+ * cairo_scaled_font_status:
+ * @surface: a #cairo_scaled_font_t
+ * 
+ * Checks whether an error has previously occurred for this
+ * scaled_font.
+ * 
+ * Return value: %CAIRO_STATUS_SUCCESS or another error such as
+ *   %CAIRO_STATUS_NO_MEMORY.
+ **/
+cairo_status_t
+cairo_scaled_font_status (cairo_scaled_font_t *scaled_font)
+{
+    return scaled_font->status;
+}
 
 /* Here we keep a cache from cairo_font_face_t/matrix/ctm => cairo_scaled_font_t.
  *
@@ -444,6 +535,7 @@ typedef struct {
     cairo_font_face_t *font_face;
     const cairo_matrix_t *font_matrix;
     const cairo_matrix_t *ctm;
+    cairo_font_options_t options;
 } cairo_font_cache_key_t;
 
 typedef struct {
@@ -554,7 +646,9 @@ _cairo_font_cache_hash (void *cache, void *key)
 			    sizeof(double) * 4,
 			    hash);
 
-    return hash ^ (unsigned long)k->font_face;
+    return (hash ^
+	    (unsigned long)k->font_face ^
+	    cairo_font_options_hash (&k->options));
 }
 
 static int
@@ -573,7 +667,8 @@ _cairo_font_cache_keys_equal (void *cache,
 		    sizeof(double) * 4) == 0 &&
 	    memcmp ((unsigned char *)(&a->ctm->xx),
 		    (unsigned char *)(&b->ctm->xx),
-		    sizeof(double) * 4) == 0);
+		    sizeof(double) * 4) == 0 &&
+	    cairo_font_options_equal (&a->options, &b->options));
 }
 
 /* The cache lookup failed in the outer cache, so we pull
@@ -614,6 +709,7 @@ _cairo_outer_font_cache_create_entry (void  *cache,
     entry->key.font_face = entry->scaled_font->font_face;
     entry->key.font_matrix = &entry->scaled_font->font_matrix;
     entry->key.ctm = &entry->scaled_font->ctm;
+    entry->key.options = ((cairo_font_cache_key_t *) key)->options;
     
     *return_entry = entry;
 
@@ -650,6 +746,7 @@ _cairo_inner_font_cache_create_entry (void  *cache,
     status = k->font_face->backend->create_font (k->font_face,
 						 k->font_matrix,
 						 k->ctm,
+						 &k->options,
 						 &entry->scaled_font);
     if (status) {
 	free (entry);
@@ -663,6 +760,7 @@ _cairo_inner_font_cache_create_entry (void  *cache,
     entry->key.font_face = k->font_face;
     entry->key.font_matrix = &entry->scaled_font->font_matrix;
     entry->key.ctm = &entry->scaled_font->ctm;
+    entry->key.options = k->options;
     
     *return_entry = entry;
 
@@ -712,6 +810,8 @@ static const cairo_cache_backend_t _cairo_inner_font_cache_backend = {
  *       cairo_set_font_matrix().
  * @ctm: user to device transformation matrix with which the font will
  *       be used.
+ * @options: options to use when getting metrics for the font and
+ *           rendering with it.
  * 
  * Creates a #cairo_scaled_font_t object from a font face and matrices that
  * describe the size of the font and the environment in which it will
@@ -721,24 +821,30 @@ static const cairo_cache_backend_t _cairo_inner_font_cache_backend = {
  *  cairo_scaled_font_destroy()
  **/
 cairo_scaled_font_t *
-cairo_scaled_font_create (cairo_font_face_t    *font_face,
-			  const cairo_matrix_t *font_matrix,
-			  const cairo_matrix_t *ctm)
+cairo_scaled_font_create (cairo_font_face_t          *font_face,
+			  const cairo_matrix_t       *font_matrix,
+			  const cairo_matrix_t       *ctm,
+			  const cairo_font_options_t *options)
 {
     cairo_font_cache_entry_t *entry;
     cairo_font_cache_key_t key;
     cairo_cache_t *cache;
     cairo_status_t status;
 
+    if (font_face->status)
+	return (cairo_scaled_font_t*) &_cairo_scaled_font_nil;
+
     key.font_face = font_face;
     key.font_matrix = font_matrix;
     key.ctm = ctm;
+    key.options = *options;
     
     _lock_global_font_cache ();
     cache = _get_outer_font_cache ();
     if (cache == NULL) {
 	_unlock_global_font_cache ();
-	return NULL;
+	_cairo_error (CAIRO_STATUS_NO_MEMORY);
+	return (cairo_scaled_font_t*) &_cairo_scaled_font_nil;
     }
     
     status = _cairo_cache_lookup (cache, &key, (void **) &entry, NULL);
@@ -746,8 +852,10 @@ cairo_scaled_font_create (cairo_font_face_t    *font_face,
 	cairo_scaled_font_reference (entry->scaled_font);
     
     _unlock_global_font_cache ();
-    if (status)
-	return NULL;
+    if (status) {
+	_cairo_error (status);
+	return (cairo_scaled_font_t*) &_cairo_scaled_font_nil;
+    }
     
     return entry->scaled_font;
 }
@@ -758,11 +866,13 @@ _cairo_scaled_font_init (cairo_scaled_font_t               *scaled_font,
 			 const cairo_matrix_t              *ctm,
 			 const cairo_scaled_font_backend_t *backend)
 {
+    scaled_font->status = CAIRO_STATUS_SUCCESS;
+
     scaled_font->font_matrix = *font_matrix;
     scaled_font->ctm = *ctm;
     cairo_matrix_multiply (&scaled_font->scale, &scaled_font->font_matrix, &scaled_font->ctm);
     
-    scaled_font->refcount = 1;
+    scaled_font->ref_count = 1;
     scaled_font->backend = backend;
 }
 
@@ -772,6 +882,9 @@ _cairo_scaled_font_text_to_glyphs (cairo_scaled_font_t *scaled_font,
 				   cairo_glyph_t      **glyphs, 
 				   int 		       *num_glyphs)
 {
+    if (scaled_font->status)
+	return scaled_font->status;
+
     return scaled_font->backend->text_to_glyphs (scaled_font, utf8, glyphs, num_glyphs);
 }
 
@@ -781,6 +894,9 @@ _cairo_scaled_font_glyph_extents (cairo_scaled_font_t   *scaled_font,
 				  int 			 num_glyphs,
 				  cairo_text_extents_t  *extents)
 {
+    if (scaled_font->status)
+	return scaled_font->status;
+
     return scaled_font->backend->glyph_extents (scaled_font, glyphs, num_glyphs, extents);
 }
 
@@ -791,6 +907,9 @@ _cairo_scaled_font_glyph_bbox (cairo_scaled_font_t *scaled_font,
 			       int                  num_glyphs,
 			       cairo_box_t	   *bbox)
 {
+    if (scaled_font->status)
+	return scaled_font->status;
+
     return scaled_font->backend->glyph_bbox (scaled_font, glyphs, num_glyphs, bbox);
 }
 
@@ -809,6 +928,9 @@ _cairo_scaled_font_show_glyphs (cairo_scaled_font_t    *scaled_font,
 				int                     num_glyphs)
 {
     cairo_status_t status;
+
+    if (scaled_font->status)
+	return scaled_font->status;
 
     status = _cairo_surface_show_glyphs (scaled_font, operator, pattern, 
 					 surface,
@@ -834,20 +956,31 @@ _cairo_scaled_font_glyph_path (cairo_scaled_font_t *scaled_font,
 			       int		    num_glyphs,
 			       cairo_path_fixed_t  *path)
 {
+    if (scaled_font->status)
+	return scaled_font->status;
+
     return scaled_font->backend->glyph_path (scaled_font, glyphs, num_glyphs, path);
 }
 
-void
+cairo_status_t
 _cairo_scaled_font_get_glyph_cache_key (cairo_scaled_font_t     *scaled_font,
 					cairo_glyph_cache_key_t *key)
 {
+    if (scaled_font->status)
+	return scaled_font->status;
+
     scaled_font->backend->get_glyph_cache_key (scaled_font, key);
+
+    return CAIRO_STATUS_SUCCESS;
 }
 
 cairo_status_t
 _cairo_scaled_font_font_extents (cairo_scaled_font_t  *scaled_font,
 				 cairo_font_extents_t *extents)
 {
+    if (scaled_font->status)
+	return scaled_font->status;
+
     return scaled_font->backend->font_extents (scaled_font, extents);
 }
 
@@ -855,7 +988,7 @@ void
 _cairo_unscaled_font_init (cairo_unscaled_font_t               *unscaled_font, 
 			   const cairo_unscaled_font_backend_t *backend)
 {
-    unscaled_font->refcount = 1;
+    unscaled_font->ref_count = 1;
     unscaled_font->backend = backend;
 }
 
@@ -865,7 +998,7 @@ _cairo_unscaled_font_reference (cairo_unscaled_font_t *unscaled_font)
     if (unscaled_font == NULL)
 	return;
 
-    unscaled_font->refcount++;
+    unscaled_font->ref_count++;
 }
 
 void
@@ -874,7 +1007,7 @@ _cairo_unscaled_font_destroy (cairo_unscaled_font_t *unscaled_font)
     if (unscaled_font == NULL)
 	return;
 
-    if (--(unscaled_font->refcount) > 0)
+    if (--(unscaled_font->ref_count) > 0)
 	return;
 
     unscaled_font->backend->destroy (unscaled_font);
@@ -901,7 +1034,10 @@ cairo_scaled_font_reference (cairo_scaled_font_t *scaled_font)
     if (scaled_font == NULL)
 	return;
 
-    scaled_font->refcount++;
+    if (scaled_font->ref_count == (unsigned int)-1)
+	return;
+
+    scaled_font->ref_count++;
 }
 
 /**
@@ -921,7 +1057,10 @@ cairo_scaled_font_destroy (cairo_scaled_font_t *scaled_font)
     if (scaled_font == NULL)
 	return;
 
-    if (--(scaled_font->refcount) > 0)
+    if (scaled_font->ref_count == (unsigned int)-1)
+	return;
+
+    if (--(scaled_font->ref_count) > 0)
 	return;
 
     if (scaled_font->font_face) {
@@ -954,17 +1093,23 @@ cairo_scaled_font_destroy (cairo_scaled_font_t *scaled_font)
  * Return value: %CAIRO_STATUS_SUCCESS on success. Otherwise, an
  *  error such as %CAIRO_STATUS_NO_MEMORY.
  **/
-cairo_status_t
+void
 cairo_scaled_font_extents (cairo_scaled_font_t  *scaled_font,
 			   cairo_font_extents_t *extents)
 {
     cairo_int_status_t status;
     double  font_scale_x, font_scale_y;
+    
+    if (scaled_font->status) {
+	_cairo_scaled_font_set_error (scaled_font, scaled_font->status);
+	return;
+    }
 
     status = _cairo_scaled_font_font_extents (scaled_font, extents);
-
-    if (status)
-      return status;
+    if (status) {
+	_cairo_scaled_font_set_error (scaled_font, status);
+	return;
+    }
     
     _cairo_matrix_compute_scale_factors (&scaled_font->font_matrix,
 					 &font_scale_x, &font_scale_y,
@@ -980,8 +1125,6 @@ cairo_scaled_font_extents (cairo_scaled_font_t  *scaled_font,
     extents->height *= font_scale_y;
     extents->max_x_advance *= font_scale_x;
     extents->max_y_advance *= font_scale_y;
-      
-    return status;
 }
 
 /**
@@ -1007,6 +1150,11 @@ cairo_scaled_font_glyph_extents (cairo_scaled_font_t   *scaled_font,
     double min_x = 0.0, min_y = 0.0, max_x = 0.0, max_y = 0.0;
     double x_pos = 0.0, y_pos = 0.0;
     int set = 0;
+
+    if (scaled_font->status) {
+	_cairo_scaled_font_set_error (scaled_font, scaled_font->status);
+	return;
+    }
 
     if (!num_glyphs)
     {

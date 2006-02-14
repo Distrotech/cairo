@@ -36,6 +36,7 @@
  */
 
 #include <png.h>
+#include <errno.h>
 #include "cairoint.h"
 
 /* Unpremultiplies data and converts native endian ARGB => RGBA bytes */
@@ -315,19 +316,15 @@ static cairo_surface_t *
 read_png (png_rw_ptr	read_func,
 	  void		*closure)
 {
-    cairo_surface_t *surface;
-    png_byte *data;
+    cairo_surface_t *surface = (cairo_surface_t*) &_cairo_surface_nil;
+    png_byte *data = NULL;
     int i;
-    png_struct *png;
+    png_struct *png = NULL;
     png_info *info;
     png_uint_32 png_width, png_height, stride;
     int depth, color_type, interlace;
     unsigned int pixel_size;
-    png_byte **row_pointers;
-
-    surface = NULL;
-    data = NULL;
-    row_pointers = NULL;
+    png_byte **row_pointers = NULL;
 
     /* XXX: Perhaps we'll want some other error handlers? */
     png = png_create_read_struct (PNG_LIBPNG_VER_STRING,
@@ -335,7 +332,7 @@ read_png (png_rw_ptr	read_func,
                                   NULL,
                                   NULL);
     if (png == NULL)
-	return NULL;
+	goto BAIL;
 
     info = png_create_info_struct (png);
     if (info == NULL)
@@ -343,8 +340,10 @@ read_png (png_rw_ptr	read_func,
 
     png_set_read_fn (png, closure, read_func);
 
-    if (setjmp (png_jmpbuf (png)))
+    if (setjmp (png_jmpbuf (png))) {
+	surface = (cairo_surface_t*) &_cairo_surface_nil_read_error;
 	goto BAIL;
+    }
 
     png_read_info (png, info);
 
@@ -402,13 +401,22 @@ read_png (png_rw_ptr	read_func,
     surface = cairo_image_surface_create_for_data (data,
 						   CAIRO_FORMAT_ARGB32,
 						   png_width, png_height, stride);
+    if (surface->status)
+	goto BAIL;
+
     _cairo_image_surface_assume_ownership_of_data ((cairo_image_surface_t*)surface);
     data = NULL;
 
  BAIL:
-    free (row_pointers);
-    free (data);
-    png_destroy_read_struct (&png, &info, NULL);
+    if (row_pointers)
+	free (row_pointers);
+    if (data)
+	free (data);
+    if (png)
+	png_destroy_read_struct (&png, &info, NULL);
+
+    if (surface->status)
+	_cairo_error (surface->status);
 
     return surface;
 }
@@ -431,8 +439,13 @@ stdio_read_func (png_structp png, png_bytep data, png_size_t size)
  * given PNG file.
  * 
  * Return value: a new #cairo_surface_t initialized with the contents
- * of the PNG file or %NULL if the file is not a valid PNG file or
- * memory could not be allocated for the operation.
+ * of the PNG file, or a "nil" surface if any error occurred. A nil
+ * surface can be checked for with cairo_surface_status(surface) which
+ * may return one of the following values: 
+ *
+ *	CAIRO_STATUS_NO_MEMORY
+ *	CAIRO_STATUS_FILE_NOT_FOUND
+ *	CAIRO_STATUS_READ_ERROR
  **/
 cairo_surface_t *
 cairo_image_surface_create_from_png (const char *filename)
@@ -441,8 +454,19 @@ cairo_image_surface_create_from_png (const char *filename)
     cairo_surface_t *surface;
 
     fp = fopen (filename, "rb");
-    if (fp == NULL)
-	return NULL;
+    if (fp == NULL) {
+	switch (errno) {
+	case ENOMEM:
+	    _cairo_error (CAIRO_STATUS_NO_MEMORY);
+	    return (cairo_surface_t*) &_cairo_surface_nil;
+	case ENOENT:
+	    _cairo_error (CAIRO_STATUS_FILE_NOT_FOUND);
+	    return (cairo_surface_t*) &_cairo_surface_nil_file_not_found;
+	default:
+	    _cairo_error (CAIRO_STATUS_READ_ERROR);
+	    return (cairo_surface_t*) &_cairo_surface_nil_read_error;
+	}
+    }
   
     surface = read_png (stdio_read_func, fp);
 
@@ -489,6 +513,6 @@ cairo_image_surface_create_from_png_stream (cairo_read_func_t	read_func,
     png_closure.read_func = read_func;
     png_closure.closure = closure;
 
-    return read_png (stream_read_func, &closure);
+    return read_png (stream_read_func, &png_closure);
 }
 

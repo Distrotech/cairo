@@ -62,34 +62,52 @@ static const cairo_t cairo_nil = {
  * a bit of a pain, but it should be easy to always catch as long as
  * one adds a new test case to test a trigger of the new status value.
  */
-#define CAIRO_STATUS_LAST_STATUS CAIRO_STATUS_PATTERN_TYPE_MISMATCH
+#define CAIRO_STATUS_LAST_STATUS CAIRO_STATUS_FILE_NOT_FOUND
 
 /**
  * _cairo_error:
+ * @status: a status value indicating an error, (eg. not
+ * CAIRO_STATUS_SUCCESS)
+ * 
+ * Checks that status is an error status, but does nothing else.
+ *
+ * All assignments of an error status to any user-visible object
+ * within the cairo application should result in a call to
+ * _cairo_error().
+ *
+ * The purpose of this function is to allow the user to set a
+ * breakpoint in _cairo_error() to generate a stack trace for when the
+ * user causes cairo to detect an error.
+ **/
+void
+_cairo_error (cairo_status_t status)
+{
+    assert (status > CAIRO_STATUS_SUCCESS &&
+	    status <= CAIRO_STATUS_LAST_STATUS);
+}
+
+/**
+ * _cairo_set_error:
  * @cr: a cairo context
  * @status: a status value indicating an error, (eg. not
  * CAIRO_STATUS_SUCCESS)
  * 
- * Sets cr->status to @status.
+ * Sets cr->status to @status and calls _cairo_error;
  *
  * All assignments of an error status to cr->status should happen
- * either inside of _cairo_error(), or else _cairo_error() should be
+ * through _cairo_set_error() or else _cairo_error() should be
  * called immediately after the assignment.
  *
  * The purpose of this function is to allow the user to set a
  * breakpoint in _cairo_error() to generate a stack trace for when the
  * user causes cairo to detect an error.
- *
- * _cairo_error also calls the error notify callback function that the
- * user may have set with cairo_set_error_notify.
  **/
 static void
-_cairo_error (cairo_t *cr, cairo_status_t status)
+_cairo_set_error (cairo_t *cr, cairo_status_t status)
 {
-    assert (status > CAIRO_STATUS_SUCCESS &&
-	    status <= CAIRO_STATUS_LAST_STATUS);
-
     cr->status = status;
+
+    _cairo_error (status);
 }
 
 /**
@@ -142,13 +160,13 @@ cairo_create (cairo_surface_t *target)
 
     if (target == NULL) {
 	cr->gstate = NULL;
-	_cairo_error (cr, CAIRO_STATUS_NULL_POINTER);
+	_cairo_set_error (cr, CAIRO_STATUS_NULL_POINTER);
 	return cr;
     }
 
     cr->gstate = _cairo_gstate_create (target);
     if (cr->gstate == NULL)
-	_cairo_error (cr, CAIRO_STATUS_NO_MEMORY);
+	_cairo_set_error (cr, CAIRO_STATUS_NO_MEMORY);
 
     return cr;
 }
@@ -222,14 +240,14 @@ cairo_save (cairo_t *cr)
     cairo_gstate_t *top;
 
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     top = _cairo_gstate_clone (cr->gstate);
 
     if (top == NULL) {
-	_cairo_error (cr, CAIRO_STATUS_NO_MEMORY);
+	_cairo_set_error (cr, CAIRO_STATUS_NO_MEMORY);
 	return;
     }
 
@@ -252,7 +270,7 @@ cairo_restore (cairo_t *cr)
     cairo_gstate_t *top;
 
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -262,7 +280,7 @@ cairo_restore (cairo_t *cr)
     _cairo_gstate_destroy (top);
 
     if (cr->gstate == NULL)
-	_cairo_error (cr, CAIRO_STATUS_INVALID_RESTORE);
+	_cairo_set_error (cr, CAIRO_STATUS_INVALID_RESTORE);
 }
 slim_hidden_def(cairo_restore);
 
@@ -311,13 +329,13 @@ void
 cairo_set_operator (cairo_t *cr, cairo_operator_t op)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_set_operator (cr->gstate, op);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -341,7 +359,7 @@ cairo_set_source_rgb (cairo_t *cr, double red, double green, double blue)
     cairo_pattern_t *pattern;
 
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -374,7 +392,7 @@ cairo_set_source_rgba (cairo_t *cr,
     cairo_pattern_t *pattern;
 
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -416,7 +434,7 @@ cairo_set_source_surface (cairo_t	  *cr,
     cairo_matrix_t matrix;
 
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -447,23 +465,23 @@ void
 cairo_set_source (cairo_t *cr, cairo_pattern_t *source)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     if (source == NULL) {
-	_cairo_error (cr, CAIRO_STATUS_NULL_POINTER);
+	_cairo_set_error (cr, CAIRO_STATUS_NULL_POINTER);
 	return;
     }
 
     if (source->status) {
-	_cairo_error (cr, source->status);
+	_cairo_set_error (cr, source->status);
 	return;
     }
 
     cr->status = _cairo_gstate_set_source (cr->gstate, source);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -479,12 +497,8 @@ cairo_set_source (cairo_t *cr, cairo_pattern_t *source)
 cairo_pattern_t *
 cairo_get_source (cairo_t *cr)
 {
-    if (cr->status) {
-	cairo_pattern_t *pattern;
-	pattern = _cairo_pattern_create_in_error (cr->status);
-	_cairo_error (cr, cr->status);
-	return pattern;
-    }
+    if (cr->status)
+	return (cairo_pattern_t*) &cairo_solid_pattern_nil.base;
 
     return _cairo_gstate_get_source (cr->gstate);
 }
@@ -506,7 +520,7 @@ void
 cairo_set_tolerance (cairo_t *cr, double tolerance)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -514,7 +528,7 @@ cairo_set_tolerance (cairo_t *cr, double tolerance)
 
     cr->status = _cairo_gstate_set_tolerance (cr->gstate, tolerance);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -532,13 +546,13 @@ void
 cairo_set_fill_rule (cairo_t *cr, cairo_fill_rule_t fill_rule)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_set_fill_rule (cr->gstate, fill_rule);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -559,7 +573,7 @@ void
 cairo_set_line_width (cairo_t *cr, double width)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -567,7 +581,7 @@ cairo_set_line_width (cairo_t *cr, double width)
 
     cr->status = _cairo_gstate_set_line_width (cr->gstate, width);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -588,13 +602,13 @@ void
 cairo_set_line_cap (cairo_t *cr, cairo_line_cap_t line_cap)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_set_line_cap (cr->gstate, line_cap);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -615,39 +629,39 @@ void
 cairo_set_line_join (cairo_t *cr, cairo_line_join_t line_join)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_set_line_join (cr->gstate, line_join);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 void
 cairo_set_dash (cairo_t *cr, double *dashes, int ndash, double offset)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_set_dash (cr->gstate, dashes, ndash, offset);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 void
 cairo_set_miter_limit (cairo_t *cr, double limit)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_set_miter_limit (cr->gstate, limit);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 
@@ -667,13 +681,13 @@ void
 cairo_translate (cairo_t *cr, double tx, double ty)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_translate (cr->gstate, tx, ty);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -691,13 +705,13 @@ void
 cairo_scale (cairo_t *cr, double sx, double sy)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_scale (cr->gstate, sx, sy);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 
@@ -717,13 +731,13 @@ void
 cairo_rotate (cairo_t *cr, double angle)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_rotate (cr->gstate, angle);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -740,13 +754,13 @@ cairo_transform (cairo_t	      *cr,
 		 const cairo_matrix_t *matrix)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_transform (cr->gstate, matrix);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -762,13 +776,13 @@ cairo_set_matrix (cairo_t	       *cr,
 		  const cairo_matrix_t *matrix)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_set_matrix (cr->gstate, matrix);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -784,13 +798,13 @@ void
 cairo_identity_matrix (cairo_t *cr)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_identity_matrix (cr->gstate);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -807,13 +821,13 @@ void
 cairo_user_to_device (cairo_t *cr, double *x, double *y)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_user_to_device (cr->gstate, x, y);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -831,13 +845,13 @@ void
 cairo_user_to_device_distance (cairo_t *cr, double *dx, double *dy)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_user_to_device_distance (cr->gstate, dx, dy);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -854,13 +868,13 @@ void
 cairo_device_to_user (cairo_t *cr, double *x, double *y)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_device_to_user (cr->gstate, x, y);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -878,20 +892,20 @@ void
 cairo_device_to_user_distance (cairo_t *cr, double *dx, double *dy)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_device_to_user_distance (cr->gstate, dx, dy);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 void
 cairo_new_path (cairo_t *cr)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -905,7 +919,7 @@ cairo_move_to (cairo_t *cr, double x, double y)
     cairo_fixed_t x_fixed, y_fixed;
 
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -915,7 +929,7 @@ cairo_move_to (cairo_t *cr, double x, double y)
 
     cr->status = _cairo_path_fixed_move_to (&cr->path, x_fixed, y_fixed);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 slim_hidden_def(cairo_move_to);
 
@@ -925,7 +939,7 @@ cairo_line_to (cairo_t *cr, double x, double y)
     cairo_fixed_t x_fixed, y_fixed;
 
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -935,7 +949,7 @@ cairo_line_to (cairo_t *cr, double x, double y)
 
     cr->status = _cairo_path_fixed_line_to (&cr->path, x_fixed, y_fixed);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 void
@@ -949,7 +963,7 @@ cairo_curve_to (cairo_t *cr,
     cairo_fixed_t x3_fixed, y3_fixed;
 	
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -971,7 +985,7 @@ cairo_curve_to (cairo_t *cr,
 					     x2_fixed, y2_fixed,
 					     x3_fixed, y3_fixed);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -1014,7 +1028,7 @@ cairo_arc (cairo_t *cr,
 	   double angle1, double angle2)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -1054,7 +1068,7 @@ cairo_arc_negative (cairo_t *cr,
 		    double angle1, double angle2)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -1096,7 +1110,7 @@ cairo_rel_move_to (cairo_t *cr, double dx, double dy)
     cairo_fixed_t dx_fixed, dy_fixed;
 
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -1106,7 +1120,7 @@ cairo_rel_move_to (cairo_t *cr, double dx, double dy)
 
     cr->status = _cairo_path_fixed_rel_move_to (&cr->path, dx_fixed, dy_fixed);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 void
@@ -1115,7 +1129,7 @@ cairo_rel_line_to (cairo_t *cr, double dx, double dy)
     cairo_fixed_t dx_fixed, dy_fixed;
 
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -1125,7 +1139,7 @@ cairo_rel_line_to (cairo_t *cr, double dx, double dy)
 
     cr->status = _cairo_path_fixed_rel_line_to (&cr->path, dx_fixed, dy_fixed);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 slim_hidden_def(cairo_rel_line_to);
 
@@ -1140,7 +1154,7 @@ cairo_rel_curve_to (cairo_t *cr,
     cairo_fixed_t dx3_fixed, dy3_fixed;
 
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -1162,7 +1176,7 @@ cairo_rel_curve_to (cairo_t *cr,
 						 dx2_fixed, dy2_fixed,
 						 dx3_fixed, dy3_fixed);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 void
@@ -1171,7 +1185,7 @@ cairo_rectangle (cairo_t *cr,
 		 double width, double height)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -1191,7 +1205,7 @@ cairo_stroke_to_path (cairo_t *cr)
 
     cr->status = _cairo_gstate_stroke_path (cr->gstate);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 */
 
@@ -1199,13 +1213,13 @@ void
 cairo_close_path (cairo_t *cr)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_path_fixed_close_path (&cr->path);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 slim_hidden_def(cairo_close_path);
 
@@ -1220,13 +1234,13 @@ void
 cairo_paint (cairo_t *cr)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_paint (cr->gstate);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -1247,7 +1261,7 @@ cairo_paint_with_alpha (cairo_t *cr,
     cairo_pattern_union_t pattern;
   
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -1261,7 +1275,7 @@ cairo_paint_with_alpha (cairo_t *cr,
 
     cr->status = _cairo_gstate_mask (cr->gstate, &pattern.base);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 
     _cairo_pattern_fini (&pattern.base);
 }
@@ -1281,23 +1295,23 @@ cairo_mask (cairo_t         *cr,
 	    cairo_pattern_t *pattern)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     if (pattern == NULL) {
-	_cairo_error (cr, CAIRO_STATUS_NULL_POINTER);
+	_cairo_set_error (cr, CAIRO_STATUS_NULL_POINTER);
 	return;
     }
     
     if (pattern->status) {
-	_cairo_error (cr, pattern->status);
+	_cairo_set_error (cr, pattern->status);
 	return;
     }
 
     cr->status = _cairo_gstate_mask (cr->gstate, pattern);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -1322,7 +1336,7 @@ cairo_mask_surface (cairo_t         *cr,
     cairo_matrix_t matrix;
 
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -1372,13 +1386,13 @@ void
 cairo_stroke_preserve (cairo_t *cr)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_stroke (cr->gstate, &cr->path);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 slim_hidden_def(cairo_stroke_preserve);
 
@@ -1413,13 +1427,13 @@ void
 cairo_fill_preserve (cairo_t *cr)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_fill (cr->gstate, &cr->path);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 slim_hidden_def(cairo_fill_preserve);
 
@@ -1427,26 +1441,26 @@ void
 cairo_copy_page (cairo_t *cr)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_copy_page (cr->gstate);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 void
 cairo_show_page (cairo_t *cr)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_show_page (cr->gstate);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 cairo_bool_t
@@ -1455,7 +1469,7 @@ cairo_in_stroke (cairo_t *cr, double x, double y)
     int inside;
 
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return 0;
     }
 
@@ -1463,20 +1477,20 @@ cairo_in_stroke (cairo_t *cr, double x, double y)
 					  &cr->path,
 					  x, y, &inside);
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return 0;
     }
 
     return inside;
 }
 
-int
+cairo_bool_t
 cairo_in_fill (cairo_t *cr, double x, double y)
 {
     int inside;
 
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return 0;
     }
 
@@ -1484,7 +1498,7 @@ cairo_in_fill (cairo_t *cr, double x, double y)
 					&cr->path,
 					x, y, &inside);
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return 0;
     }
 
@@ -1496,7 +1510,7 @@ cairo_stroke_extents (cairo_t *cr,
                       double *x1, double *y1, double *x2, double *y2)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
     
@@ -1504,7 +1518,7 @@ cairo_stroke_extents (cairo_t *cr,
 					       &cr->path,
 					       x1, y1, x2, y2);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 void
@@ -1512,7 +1526,7 @@ cairo_fill_extents (cairo_t *cr,
                     double *x1, double *y1, double *x2, double *y2)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
     
@@ -1520,7 +1534,7 @@ cairo_fill_extents (cairo_t *cr,
 					     &cr->path,
 					     x1, y1, x2, y2);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -1579,13 +1593,13 @@ void
 cairo_clip_preserve (cairo_t *cr)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_clip (cr->gstate, &cr->path);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 slim_hidden_def(cairo_clip_preserve);
 
@@ -1609,13 +1623,13 @@ void
 cairo_reset_clip (cairo_t *cr)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_reset_clip (cr->gstate);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -1640,13 +1654,13 @@ cairo_select_font_face (cairo_t              *cr,
 			cairo_font_weight_t   weight)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_select_font_face (cr->gstate, family, slant, weight);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -1666,15 +1680,15 @@ cairo_get_font_face (cairo_t *cr)
     cairo_font_face_t *font_face;
 
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return NULL;
     }
 
     cr->status = _cairo_gstate_get_font_face (cr->gstate, &font_face);
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	/* XXX: When available:
-	return _cairo_font_face_create_in_error (cr->status);
+	return _cairo_font_face_nil;
 	*/
 	return NULL;
     }
@@ -1695,13 +1709,13 @@ cairo_font_extents (cairo_t              *cr,
 		    cairo_font_extents_t *extents)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_get_font_extents (cr->gstate, extents);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -1718,13 +1732,13 @@ cairo_set_font_face (cairo_t           *cr,
 		     cairo_font_face_t *font_face)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_set_font_face (cr->gstate, font_face);  
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -1742,13 +1756,13 @@ void
 cairo_set_font_size (cairo_t *cr, double size)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_set_font_size (cr->gstate, size);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -1769,13 +1783,13 @@ cairo_set_font_matrix (cairo_t		    *cr,
 		       const cairo_matrix_t *matrix)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_set_font_matrix (cr->gstate, matrix);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -1790,6 +1804,49 @@ void
 cairo_get_font_matrix (cairo_t *cr, cairo_matrix_t *matrix)
 {
     _cairo_gstate_get_font_matrix (cr->gstate, matrix);
+}
+
+/**
+ * cairo_set_font_options:
+ * @cr: a #cairo_t
+ * @options: font options to use
+ * 
+ * Sets a set of custom font rendering options for the #cairo_t.
+ * Rendering options are derived by merging these options with the
+ * options derived from underlying surface; if the value in @options
+ * has a default value (like %CAIRO_ANTIALIAS_DEFAULT), then the value
+ * from the surface is used.
+ **/
+void
+cairo_set_font_options (cairo_t                    *cr,
+			const cairo_font_options_t *options)
+{
+    if (cr->status) {
+	_cairo_set_error (cr, cr->status);
+	return;
+    }
+
+    cr->status = _cairo_gstate_set_font_options (cr->gstate, options);
+    if (cr->status)
+	_cairo_set_error (cr, cr->status);
+}
+
+/**
+ * cairo_get_font_options:
+ * @cr: a #cairo_t
+ * @options: a #cairo_font_options_t object into which to store
+ *   the retrieved options. All existing values are overwritten
+ * 
+ * Retrieves font rendering options set via #cairo_set_font_options.
+ * Note that the returned options do not include any options derived
+ * from the underlying surface; they are literally the options
+ * passed to cairo_set_font_options().
+ **/
+void
+cairo_get_font_options (cairo_t              *cr,
+			cairo_font_options_t *options)
+{
+    _cairo_gstate_get_font_options (cr->gstate, options);
 }
 
 /**
@@ -1822,7 +1879,7 @@ cairo_text_extents (cairo_t              *cr,
     double x, y;
 
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -1845,7 +1902,7 @@ cairo_text_extents (cairo_t              *cr,
     if (cr->status) {
 	if (glyphs)
 	    free (glyphs);
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 	
@@ -1854,7 +1911,7 @@ cairo_text_extents (cairo_t              *cr,
 	free (glyphs);
 
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -1882,14 +1939,14 @@ cairo_glyph_extents (cairo_t                *cr,
 		     cairo_text_extents_t   *extents)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_glyph_extents (cr->gstate, glyphs, num_glyphs,
 					      extents);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 void
@@ -1900,7 +1957,7 @@ cairo_show_text (cairo_t *cr, const char *utf8)
     double x, y;
 
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -1916,7 +1973,7 @@ cairo_show_text (cairo_t *cr, const char *utf8)
     if (cr->status) {
 	if (glyphs)
 	    free (glyphs);
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -1926,20 +1983,20 @@ cairo_show_text (cairo_t *cr, const char *utf8)
 	free (glyphs);
 
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 void
 cairo_show_glyphs (cairo_t *cr, cairo_glyph_t *glyphs, int num_glyphs)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     cr->status = _cairo_gstate_show_glyphs (cr->gstate, glyphs, num_glyphs);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 void
@@ -1950,7 +2007,7 @@ cairo_text_path  (cairo_t *cr, const char *utf8)
     double x, y;
 
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -1963,7 +2020,7 @@ cairo_text_path  (cairo_t *cr, const char *utf8)
     if (cr->status) {
 	if (glyphs)
 	    free (glyphs);
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -1974,7 +2031,7 @@ cairo_text_path  (cairo_t *cr, const char *utf8)
 	free (glyphs);
 
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 
 }
 
@@ -1982,7 +2039,7 @@ void
 cairo_glyph_path (cairo_t *cr, cairo_glyph_t *glyphs, int num_glyphs)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
@@ -1990,7 +2047,7 @@ cairo_glyph_path (cairo_t *cr, cairo_glyph_t *glyphs, int num_glyphs)
 					   glyphs, num_glyphs,
 					   &cr->path);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 /**
@@ -2156,20 +2213,19 @@ cairo_get_matrix (cairo_t *cr, cairo_matrix_t *matrix)
  * Gets the target surface for the cairo context as passed to
  * cairo_create().
  * 
- * Return value: the target surface, (or NULL if @cr is in an error
- * state). This object is owned by cairo. To keep a reference to it,
- * you must call cairo_surface_reference().
+ * Return value: the target surface. This object is owned by cairo. To
+ * keep a reference to it, you must call cairo_surface_reference().
+ *
+ * This function will always return a valid pointer, but the result
+ * can be a "nil" surface if @cr is already in an error state,
+ * (ie. cairo_status(cr) != CAIRO_STATUS_SUCCESS). A nil surface is
+ * indicated by cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS.
  **/
 cairo_surface_t *
 cairo_get_target (cairo_t *cr)
 {
-    if (cr->status) {
-	_cairo_error (cr, cr->status);
-	/* XXX: Should be as follows when available:
-	return _cairo_surface_create_in_error ();
-	*/
-	return NULL;
-    }
+    if (cr->status)
+	return (cairo_surface_t*) &_cairo_surface_nil;
 
     return _cairo_gstate_get_target (cr->gstate);
 }
@@ -2190,20 +2246,18 @@ cairo_get_target (cairo_t *cr)
  * will have no data, (data==NULL and num_data==0), if either of the
  * following conditions hold:
  *
- * 1) If there is insufficient memory to copy the path. In this case
- *    path->status will be set to CAIRO_STATUS_NO_MEMORY.
+ * 1) If there is insufficient memory to copy the path.
  *
- * 2) If @cr is already in an error state. In this case path->status
- *    will contain the same status that would be returned by
- *    cairo_status(cr).
+ * 2) If @cr is already in an error state.
+ *
+ * In either case, path->status will be set to CAIRO_STATUS_NO_MEMORY,
+ * (regardless of what the error status in @cr might have been).
  **/
 cairo_path_t *
 cairo_copy_path (cairo_t *cr)
 {
-    if (cr->status) {
-	_cairo_error (cr, cr->status);
-	return _cairo_path_data_create_in_error (cr->status);
-    } 
+    if (cr->status)
+	return &cairo_path_nil;
 
     return _cairo_path_data_create (&cr->path, cr->gstate);
 }
@@ -2242,7 +2296,7 @@ cairo_path_t *
 cairo_copy_path_flat (cairo_t *cr)
 {
     if (cr->status)
-	return _cairo_path_data_create_in_error (cr->status);
+	return &cairo_path_nil;
     else
 	return _cairo_path_data_create_flat (&cr->path, cr->gstate);
 }
@@ -2264,31 +2318,31 @@ cairo_append_path (cairo_t	*cr,
 		   cairo_path_t *path)
 {
     if (cr->status) {
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 	return;
     }
 
     if (path == NULL) {
-	_cairo_error (cr, CAIRO_STATUS_NULL_POINTER);
+	_cairo_set_error (cr, CAIRO_STATUS_NULL_POINTER);
 	return;
     }
 
     if (path->status) {
 	if (path->status <= CAIRO_STATUS_LAST_STATUS)
-	    _cairo_error (cr, path->status);
+	    _cairo_set_error (cr, path->status);
 	else
-	    _cairo_error (cr, CAIRO_STATUS_INVALID_STATUS);
+	    _cairo_set_error (cr, CAIRO_STATUS_INVALID_STATUS);
 	return;
     }
 
     if (path->data == NULL) {
-	_cairo_error (cr, CAIRO_STATUS_NULL_POINTER);
+	_cairo_set_error (cr, CAIRO_STATUS_NULL_POINTER);
 	return;
     }
 
     cr->status = _cairo_path_data_append_to_context (path, cr);
     if (cr->status)
-	_cairo_error (cr, cr->status);
+	_cairo_set_error (cr, cr->status);
 }
 
 cairo_status_t
@@ -2314,7 +2368,7 @@ cairo_status_to_string (cairo_status_t status)
     case CAIRO_STATUS_INVALID_MATRIX:
 	return "invalid matrix (not invertible)";
     case CAIRO_STATUS_INVALID_STATUS:
-	return " invalid value for an input cairo_status_t";
+	return "invalid value for an input cairo_status_t";
     case CAIRO_STATUS_NULL_POINTER:
 	return "NULL pointer";
     case CAIRO_STATUS_INVALID_STRING:
@@ -2331,6 +2385,14 @@ cairo_status_to_string (cairo_status_t status)
 	return "the surface type is not appropriate for the operation";
     case CAIRO_STATUS_PATTERN_TYPE_MISMATCH:
 	return "the pattern type is not appropriate for the operation";
+    case CAIRO_STATUS_INVALID_CONTENT:
+	return "invalid value for an input cairo_content_t";
+    case CAIRO_STATUS_INVALID_FORMAT:
+	return "invalid value for an input cairo_format_t";
+    case CAIRO_STATUS_INVALID_VISUAL:
+	return "invalid value for an input Visual*";
+    case CAIRO_STATUS_FILE_NOT_FOUND:
+	return "file not found";
     }
 
     return "<unknown error status>";

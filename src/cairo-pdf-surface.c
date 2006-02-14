@@ -109,7 +109,7 @@ struct cairo_pdf_stream {
 
 struct cairo_pdf_document {
     cairo_output_stream_t *output_stream;
-    unsigned long refcount;
+    unsigned long ref_count;
     cairo_surface_t *owner;
     cairo_bool_t finished;
 
@@ -290,8 +290,10 @@ _cairo_pdf_surface_create_for_stream_internal (cairo_output_stream_t	*stream,
     cairo_surface_t *surface;
 
     document = _cairo_pdf_document_create (stream, width, height);
-    if (document == NULL)
-      return NULL;
+    if (document == NULL) {
+	_cairo_error (CAIRO_STATUS_NO_MEMORY);
+	return (cairo_surface_t*) &_cairo_surface_nil;
+    }
 
     surface = _cairo_pdf_surface_create_for_document (document, width, height);
 
@@ -310,8 +312,10 @@ cairo_pdf_surface_create_for_stream (cairo_write_func_t		write,
     cairo_output_stream_t *stream;
 
     stream = _cairo_output_stream_create (write, closure);
-    if (stream == NULL)
-	return NULL;
+    if (stream == NULL) {
+	_cairo_error (CAIRO_STATUS_NO_MEMORY);
+	return (cairo_surface_t*) &_cairo_surface_nil;
+    }
 
     return _cairo_pdf_surface_create_for_stream_internal (stream, width, height);
 }
@@ -324,8 +328,10 @@ cairo_pdf_surface_create (const char	*filename,
     cairo_output_stream_t *stream;
 
     stream = _cairo_output_stream_create_for_file (filename);
-    if (stream == NULL)
-	return NULL;
+    if (stream == NULL) {
+	_cairo_error (CAIRO_STATUS_NO_MEMORY);
+	return (cairo_surface_t*) &_cairo_surface_nil;
+    }
 
     return _cairo_pdf_surface_create_for_stream_internal (stream, width, height);
 }
@@ -349,8 +355,10 @@ _cairo_pdf_surface_create_for_document (cairo_pdf_document_t	*document,
     cairo_pdf_surface_t *surface;
 
     surface = malloc (sizeof (cairo_pdf_surface_t));
-    if (surface == NULL)
-	return NULL;
+    if (surface == NULL) {
+	_cairo_error (CAIRO_STATUS_NO_MEMORY);
+	return (cairo_surface_t*) &_cairo_surface_nil;
+    }
 
     _cairo_surface_init (&surface->base, &cairo_pdf_surface_backend);
 
@@ -1379,6 +1387,16 @@ _cairo_pdf_surface_intersect_clip_path (void			*dst,
     return status;
 }
 
+static void
+_cairo_pdf_surface_get_font_options (void                  *abstract_surface,
+				     cairo_font_options_t  *options)
+{
+  _cairo_font_options_init_default (options);
+
+  cairo_font_options_set_hint_style (options, CAIRO_HINT_STYLE_NONE);
+  cairo_font_options_set_hint_metrics (options, CAIRO_HINT_METRICS_OFF);
+}
+
 static const cairo_surface_backend_t cairo_pdf_surface_backend = {
     _cairo_pdf_surface_create_similar,
     _cairo_pdf_surface_finish,
@@ -1396,7 +1414,8 @@ static const cairo_surface_backend_t cairo_pdf_surface_backend = {
     _cairo_pdf_surface_intersect_clip_path,
     _cairo_pdf_surface_get_extents,
     _cairo_pdf_surface_show_glyphs,
-    _cairo_pdf_surface_fill_path
+    _cairo_pdf_surface_fill_path,
+    _cairo_pdf_surface_get_font_options
 };
 
 static cairo_pdf_document_t *
@@ -1411,7 +1430,7 @@ _cairo_pdf_document_create (cairo_output_stream_t	*output_stream,
 	return NULL;
 
     document->output_stream = output_stream;
-    document->refcount = 1;
+    document->ref_count = 1;
     document->owner = NULL;
     document->finished = FALSE;
     document->width = width;
@@ -1642,14 +1661,14 @@ _cairo_pdf_document_write_xref (cairo_pdf_document_t *document)
 static void
 _cairo_pdf_document_reference (cairo_pdf_document_t *document)
 {
-    document->refcount++;
+    document->ref_count++;
 }
 
 static void
 _cairo_pdf_document_destroy (cairo_pdf_document_t *document)
 {
-    document->refcount--;
-    if (document->refcount > 0)
+    document->ref_count--;
+    if (document->ref_count > 0)
       return;
 
     _cairo_pdf_document_finish (document);

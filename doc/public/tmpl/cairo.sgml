@@ -74,6 +74,23 @@ Drawing contexts.
 @cr: 
 
 
+<!-- ##### ENUM cairo_content_t ##### -->
+<para>
+
+</para>
+
+@CAIRO_CONTENT_COLOR: 
+@CAIRO_CONTENT_ALPHA: 
+@CAIRO_CONTENT_COLOR_ALPHA: 
+
+<!-- ##### MACRO CAIRO_CONTENT_VALID ##### -->
+<para>
+
+</para>
+
+@content: 
+
+
 <!-- ##### ENUM cairo_format_t ##### -->
 <para>
 
@@ -83,6 +100,14 @@ Drawing contexts.
 @CAIRO_FORMAT_RGB24: 
 @CAIRO_FORMAT_A8: 
 @CAIRO_FORMAT_A1: 
+
+<!-- ##### MACRO CAIRO_FORMAT_VALID ##### -->
+<para>
+
+</para>
+
+@format: 
+
 
 <!-- ##### ENUM cairo_operator_t ##### -->
 <para>
@@ -689,6 +714,24 @@ Drawing contexts.
 @matrix: 
 
 
+<!-- ##### FUNCTION cairo_set_font_options ##### -->
+<para>
+
+</para>
+
+@cr: 
+@options: 
+
+
+<!-- ##### FUNCTION cairo_get_font_options ##### -->
+<para>
+
+</para>
+
+@cr: 
+@options: 
+
+
 <!-- ##### FUNCTION cairo_show_text ##### -->
 <para>
 
@@ -942,7 +985,7 @@ Drawing contexts.
 @CAIRO_STATUS_INVALID_POP_GROUP: 
 @CAIRO_STATUS_NO_CURRENT_POINT: 
 @CAIRO_STATUS_INVALID_MATRIX: 
-@CAIRO_STATUS_NO_TARGET_SURFACE: 
+@CAIRO_STATUS_INVALID_STATUS: 
 @CAIRO_STATUS_NULL_POINTER: 
 @CAIRO_STATUS_INVALID_STRING: 
 @CAIRO_STATUS_INVALID_PATH_DATA: 
@@ -951,6 +994,10 @@ Drawing contexts.
 @CAIRO_STATUS_SURFACE_FINISHED: 
 @CAIRO_STATUS_SURFACE_TYPE_MISMATCH: 
 @CAIRO_STATUS_PATTERN_TYPE_MISMATCH: 
+@CAIRO_STATUS_INVALID_CONTENT: 
+@CAIRO_STATUS_INVALID_FORMAT: 
+@CAIRO_STATUS_INVALID_VISUAL: 
+@CAIRO_STATUS_FILE_NOT_FOUND: 
 
 <!-- ##### FUNCTION cairo_status ##### -->
 <para>
