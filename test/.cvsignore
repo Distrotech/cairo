@@ -2,12 +2,16 @@
 .libs
 Makefile
 Makefile.in
+coverage
 fill_rule
+imagediff
 leaky_polygon
 line_width
 move_to_show_surface
+pixman_rotate
 text_cache_crash
 text_rotate
+clip_twice
 *-out.png
 *-diff.png
 

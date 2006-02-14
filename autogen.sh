@@ -22,6 +22,7 @@ libtoolize_min_vers=1.4
 
 # The awk-based string->number conversion we use needs a C locale to work as expected.
 LANG=C
+LC_NUMERIC=C
 
 ARGV0=$0
 
@@ -133,4 +134,4 @@ do_cmd $AUTOMAKE $AUTOMAKE_FLAGS
 
 do_cmd $AUTOCONF
 
-do_cmd ./configure --enable-maintainer-mode ${1+"$@"} && echo "Now type \`make' to compile" || exit 1
+do_cmd ./configure --enable-maintainer-mode --enable-gtk-doc ${1+"$@"} && echo "Now type \`make' to compile" || exit 1
