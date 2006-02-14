@@ -1,6 +1,5 @@
 #!/bin/sh
 # Run this to generate all the initial makefiles, etc.
-
 set -e
 
 PACKAGE=cairo
@@ -15,11 +14,14 @@ AUTOCONF=${AUTOCONF-autoconf}
 
 # automake 1.8 requires autoconf 2.58
 # automake 1.7 requires autoconf 2.54
-automake_min_vers=1.7
+# I don't know what automake 1.4 wants, but the following seems to work...
+automake_min_vers=1.4
 aclocal_min_vers=$automake_min_vers
 autoconf_min_vers=2.54
 libtoolize_min_vers=1.4
 
+# The awk-based string->number conversion we use needs a C locale to work as expected.
+LANG=C
 
 ARGV0=$0
 

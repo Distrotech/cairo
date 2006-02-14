@@ -1,3 +1,443 @@
+2004-10-27  Carl Worth  <cworth@cworth.org>
+
+	* configure.in: Increment CAIRO_VERSION to 0.2.0.
+
+	* NEWS: Add notes for snapshot 0.2.0.
+	Add note on reverted tessellation regression bugs.
+
+	* RELEASING: Update release instructions for new release-publish
+	target.
+
+	* Makefile.am: Add release-check and release-publish targets
+	copied from libpixman.
+
+	* test/Makefile.am (AM_LDFLAGS): Fix to always link tests against
+	locally built library, not installed version.
+
+	* test/fill_rule.c: Add new test for cairo_set_fill_rule. Also
+	demonstrate some of the current tessellation bugs with the version
+	of the code that is in CVS.
+
+2004-10-26  Carl Worth  <cworth@cworth.org>
+
+	* test/cairo_test.c (cairo_test): Find reference images in
+	${srcdir} so that make distcheck will work.
+
+	* test/Makefile.am (cairo_test_lib): Add header files so that make
+	distcheck is happy.
+	(INCLUDES): Add -D_GNU_SOURCE for asprintf. Someone motivated may
+	want to find a more portable approach.
+	(EXTRA_DIST): Add reference images for the sake of make distcheck.
+
+	* configure.in: Shell doesn't like whitespace around assignment
+	operator.
+
+	* test/README: Add paragraph on new features.	
+
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/README:
+	* test/cairo_test.c:
+	* test/cairo_test.h:
+	* test/line_width-ref.png:
+	* test/line_width.c:
+	* test/move_to_show_surface-ref.png:
+	* test/move_to_show_surface.c:
+	* test/read_png.c:
+	* test/read_png.h:
+	* test/write_png.c:
+	* test/write_png.h:
+	* test/xmalloc.c:
+	* test/xmalloc.h: Add initial regression test suite.
+
+	* configure.in: Don't AC_SUBST a dozen different FOO_CFLAGS and
+	FOO_LIBS. Instead, incrementally build up just CAIRO_CFLAGS and
+	CAIRO_LIBS.
+
+	* cairo.pc.in (Libs): Don't list flags that should get picked up
+	via dependency information through Requires.
+
+	* BUGS (font-size): Add description of move_to_show_surface.
+
+2004-10-21  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo_png_surface.c:
+	* src/cairo.c:
+	* src/cairo.h:
+	* src/cairo_cache.c:
+	* src/cairo_color.c:
+	* src/cairo_fixed.c:
+	* src/cairo_font.c:
+	* src/cairo_ft_font.c:
+	* src/cairo_glitz_surface.c:
+	* src/cairo_gstate.c:
+	* src/cairo_hull.c:
+	* src/cairo_image_surface.c:
+	* src/cairo_matrix.c:
+	* src/cairo_path.c:
+	* src/cairo_path_bounds.c:
+	* src/cairo_path_fill.c:
+	* src/cairo_path_stroke.c:
+	* src/cairo_pattern.c:
+	* src/cairo_pen.c:
+	* src/cairo_png_surface.c:
+	* src/cairo_polygon.c:
+	* src/cairo_ps_surface.c:
+	* src/cairo_slope.c:
+	* src/cairo_spline.c:
+	* src/cairo_surface.c:
+	* src/cairo_traps.c:
+	* src/cairo_xcb_surface.c:
+	* src/cairo_xlib_surface.c:
+	* src/cairoint.h: Convert all files to utf-8. Add copyright
+	information to cairo_png_surface.c.
+
+	* src/cairo_hull.c (_cairo_hull_vertex_compare): Fix comparison so
+	that it results in a stable sort. This should fix some rendering
+	bugs due to broken pens.
+
+	* TODO: Add items on custom caps and getting access to hidden
+	image data
+
+	* Makefile.am (EXTRA_DIST): Add COPYING-LGPL-2.1 and
+	COPYING-MPL-1.1 to the distribution.
+
+2004-10-13  Carl Worth  <cworth@cworth.org>
+
+	* autogen.sh: automake 1.4 seems to be sufficient. Don't require
+	1.6.
+
+2004-10-12  Keith Packard  <keithp@keithp.com>
+
+	* src/cairo_traps.c: (_cairo_traps_init), (_cairo_traps_add_trap),
+	(_cairo_traps_extents):
+	* src/cairoint.h:
+	Compute extents of cairo_traps_t on the fly using approximate
+	method which is correct given the way cairo generates trapezoids.
+	
+	* src/cairo_xlib_surface.c: (_cairo_xlib_surface_create_similar):
+	Avoid zero-dimensioned pixmaps
+
+2004-10-12  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo_pen.c: Fix a few typos in pen vertex math description.
+
+2004-10-12  Keith Packard  <keithp@keithp.com>
+
+	reviewed by: Carl Worth <cworth@cworth.org>
+
+	* src/cairo_pen.c: (_cairo_pen_init), (_cairo_pen_vertices_needed):
+	Adapt function from Walter Brisken to compute pen ellipse major
+	axis length and use that to compute the required number of pen
+	vertices.
+
+2004-10-07  Graydon Hoare  <graydon@redhat.com>
+
+	* src/Makefile.am (libcairo_la_SOURCES): Add cairo_cache.c
+
+	* src/cairo.c
+	(cairo_text_extents)
+	(cairo_show_text)
+	(cairo_text_path): Rewrite using temporary glyph arrays
+
+	* src/cairo_cache.c: New file.
+
+	* src/cairo_font.c (_cairo_glyph_cache_create)
+	(_cairo_glyph_cache_destroy)
+	(_cairo_glyph_cache_reference)
+	(_cairo_glyph_cache_pop_last)
+	(_cairo_glyph_surface_init)
+	(_cairo_font_lookup_glyph): Remove old glyph cache code.
+	(_cairo_font_scale)
+	(_cairo_font_transform): Remove font-transforming code.
+	(_cairo_font_text_extents)
+	(_cairo_font_text_bbox)
+	(_cairo_font_show_text)
+	(_cairo_font_text_path): Remove text-API code.
+	(_cairo_font_cache_key_t): New structure type.
+	(_font_cache_hash)
+	(_font_cache_keys_equal)
+	(_font_cache_create_entry)
+	(_font_cache_destroy_entry)
+	(_font_cache_destroy_cache): New font cache code.
+	(_global_font_cache)
+	(_lock_global_font_cache)
+	(_unlock_global_font_cache)
+	(_get_global_font_cache): New global font cache.
+	(_cairo_font_text_to_glyphs)
+	(_cairo_glyph_cache_hash)
+	(_cairo_glyph_cache_keys_equal)
+	(_image_glyph_cache_create_entry)
+	(_image_glyph_cache_destroy_entry)		
+	(_image_glyph_cache_destroy_cache): New glyph cache code.
+	(_global_image_glyph_cache)
+	(_cairo_lock_global_image_glyph_cache)
+	(_cairo_unlock_global_image_glyph_cache)
+	(_cairo_get_global_image_glyph_cache): New global glyph cache.
+	(_cairo_font_cache_backend): New structure.
+	(_cairo_image_cache_backend): Likewise.
+	(_cairo_font_create): Reimplement in terms of font cache.
+	(_cairo_font_init): Remove matrix and glyph cache related code.
+	(_cairo_font_copy): Likewise.
+	(_cairo_font_show_glyphs): Delegate to surface when possible.
+	(_cairo_font_glyph_extents)
+	(_cairo_font_glyph_bbox)
+	(_cairo_font_glyph_path)
+	(_cairo_font_font_extents)
+	(_cairo_font_show_glyphs): Rename to as cairo_unscaled_font_XXX,
+	and add scale parameter.
+
+	* src/cairo_ft_font.c
+	(ft_cache_t)
+	(ft_font_val_t)
+	(cairo_ft_cache_key_t)
+	(cairo_ft_cache_entry_t): New structure types.
+	(_create_from_face)
+	(_reference_font_val)
+	(_destroy_font_val)
+	(_create_from_library_and_pattern): New functions.
+	(_ft_font_cache_hash)
+	(_ft_font_cache_keys_equal)
+	(_ft_font_cache_create_entry)
+	(_ft_font_cache_destroy_entry)	
+	(_ft_font_cache_destroy_cache): New ft font cache code.
+	(_global_ft_cache)
+	(_lock_global_ft_cache)
+	(_unlock_global_ft_cache)
+	(_get_global_ft_cache): New global ft font cache.
+	(_ft_font_cache_backend): New structure.
+	(_cairo_ft_font_create): Rewrite to use cache.
+	(_cairo_ft_font_destroy): Likewise.
+	(_cairo_ft_font_copy): Remove.
+	(_install_font_matrix): Rename as _install_font_scale.
+	(_utf8_to_glyphs): Rename as _cairo_ft_font_text_to_glyphs.
+	(_cairo_ft_font_text_to_glyphs): Use cache for metrics.
+	(_cairo_ft_font_extents): Accept size, use scaled metrics.
+	(_cairo_ft_font_glyph_extents)
+	(_cairo_ft_font_glyph_bbox)
+	(_cairo_ft_font_show_glyphs)
+	(_cairo_ft_font_glyph_path): Modify to use size, cache. 
+	(_cairo_ft_font_text_extents)
+	(_cairo_ft_font_text_bbox)
+	(_cairo_ft_font_show_text)		
+	(_cairo_ft_font_text_path): Remove text-API code.
+	(cairo_ft_font_create)
+	(cairo_ft_font_create_for_ft_face)
+	(cairo_ft_font_face)
+	(cairo_ft_font_pattern): Rewrite using ft_font_val_t.
+
+	* src/cairo_gstate.c (cairo_gstate_init_copy): Just reference font.
+	(_cairo_gstate_fini): Finalize font matrix.
+	(_cairo_gstate_default_matrix): Initialize font matrix.
+	(_cairo_gstate_clip): Re-enable clipping rectangle.
+	(_cairo_gstate_select_font)
+	(_cairo_gstate_set_font): Set font matrix to identity.
+	(_cairo_gstate_scale_font): Scale font matrix, not font.
+	(_cairo_gstate_transform_font): Transform font matrix, not font.
+	(_cairo_gstate_set_font_transform): Install as font matrix, not in font.
+	(_build_font_scale): New helper function.
+	(_cairo_gstate_text_to_glyphs): New function.
+	(_cairo_gstate_current_font_extents)
+	(_cairo_gstate_glyph_extents)
+	(_cairo_gstate_show_glyphs)
+	(_cairo_gstate_glyph_path): Rewrite using font matrix and size.
+	(_cairo_gstate_text_path
+	(_cairo_gstate_text_extents)
+	(_cairo_gstate_show_text): Remove text-API code.
+
+	* src/cairo_xlib_surface.c 
+	(_cairo_xlib_surface_set_clip_region): Minor bug fix.
+	(_cairo_xlib_surface_show_glyphs): New function.
+	(_cairo_xlib_surface_backend): Add reference to new function.
+	(glyphset_cache_t)
+	(glyphset_cache_entry_t): New structure types.	
+	(_next_xlib_glyph): New helper function.
+	(_xlib_glyphset_cache_create_value)
+	(_xlib_glyphset_cache_destroy_cache)
+	(_xlib_glyphset_cache_destroy_value)
+	(_xlib_glyphset_cache_backend): New  glyphset cache code.
+	(_xlib_glyphset_caches)
+	(_lock_xlib_glyphset_caches)
+	(_unlock_xlib_glyphset_caches)
+	(_get_glyphset_cache): New global glyphset cache.
+
+	* src/cairo_glitz_surface.c (cairo_glitz_surface_backend):
+	Add NULL entry for show_glyphs. 
+
+	* src/cairo_image_surface.c (cairo_image_surface_backend):
+	Add NULL entry for show_glyphs. 
+
+	* src/cairo_ps_surface.c (cairo_ps_surface_backend):
+	Add NULL entry for show_glyphs. 
+
+	* src/cairo_png_surface.c (cairo_png_surface_backend):
+	Add NULL entry for show_glyphs. 
+
+	* src/cairo_xcb_surface.c (cairo_xcb_surface_backend):
+	Add NULL entry for show_glyphs. 
+
+	* src/cairoint.h (cairo_cache_backend_t): New structure type.
+	(cairo_cache_entry_base_t)
+	(cairo_cache_arrangement_t)
+	(cairo_cache_t): New structure types.
+	(_cairo_cache_init)
+	(_cairo_cache_reference)
+	(_cairo_cache_destroy)
+	(_cairo_cache_lookup)
+	(_cairo_hash_string): New cache functions.
+	(CAIRO_IMAGE_GLYPH_CACHE_MEMORY_DEFAULT)
+	(CAIRO_XLIB_GLYPH_CACHE_MEMORY_DEFAULT)
+	(CAIRO_FONT_CACHE_NUM_FONTS_DEFAULT)
+	(CAIRO_FT_CACHE_NUM_FONTS_DEFAULT): New constants.
+	(cairo_font_scale_t)
+	(cairo_glyph_cache_key_t)
+	(cairo_image_glyph_cache_entry_t): New structure types.
+	(_cairo_lock_global_image_glyph_cache)
+	(_cairo_unlock_global_image_glyph_cache)
+	(_cairo_get_global_image_glyph_cache)
+	(_cairo_glyph_cache_hash)
+	(_cairo_glyph_cache_keys_equal): New functions for glyph caches.
+	(cairo_font_backend_t): Remove text-API calls, add scale params,
+	remove copy call.
+	(cairo_surface_backend_t): Add show_glyphs entry.
+	(cairo_glyph_surface_t)
+	(cairo_glyph_surface_node_t): Remove old glyph cache structures.
+	(cairo_unscaled_font_t): New structure type.
+	(cairo_font): Remove glyph cache member, add pointer to unscaled.
+	(cairo_gstate): Add font_matrix member, change to hold unscaled.
+	(_cairo_gstate_set_font_transform)
+	(_cairo_gstate_current_font_transform)
+	(_cairo_gstate_text_to_glyphs): New functions.
+	(_cairo_gstate_text_path
+	(_cairo_gstate_text_extents)
+	(_cairo_gstate_show_text)
+	(_cairo_font_text_extents)
+	(_cairo_font_text_bbox)
+	(_cairo_font_show_text)
+	(_cairo_font_text_path): Remove text-API code.
+	(_cairo_font_glyph_extents)
+	(_cairo_font_glyph_bbox)
+	(_cairo_font_glyph_path)
+	(_cairo_font_font_extents)
+	(_cairo_font_show_glyphs): Add scale parameter.
+
+2004-10-04  David Reveman  <c99drn@cs.umu.se>
+
+	* configure.in: Require version 0.2.3 of glitz.
+
+	* src/cairo_glitz_surface.c: Do not use VBOs and PBOs for immediate
+	mode drawing.
+
+2004-09-30  Jamey Sharp <jamey@minilop.net>
+
+	* src/cairo_xcb_surface.c:
+	Update for minor XCB API change.
+
+2004-09-20  David Reveman  <c99drn@cs.umu.se>
+
+	* src/cairo_glitz_surface.c (_cairo_glitz_surface_create_similar): 
+	Make sure that only offscreen formats are picked.
+	(_cairo_glitz_surface_create_similar): Only try to find offscreen
+	multi-sample format if offscreen multi-sampling is supported.
+	(_cairo_glitz_surface_create_similar): If we can't find a drawable
+	format try to pick a non-drawable format.
+	(_cairo_glitz_surface_composite): Mask clone should be in
+	CAIRO_FORMAT_A8 format.
+
+2004-09-15  David Reveman  <c99drn@cs.umu.se>
+
+	* src/cairo_glitz_surface.c (_cairo_glitz_surface_set_image): Do
+	the scanline order conversion in cairo.
+	(_cairo_glitz_surface_create_pattern): Pre-multiply gradient colors.
+	(_cairo_glitz_surface_create_similar): Find similar formats
+	correctly.
+
+2004-09-12  David Reveman  <c99drn@cs.umu.se>
+
+	* src/cairo_glitz_surface.c (_cairo_glitz_surface_create_pattern):
+	Pickup repeat setting when cloning surface.
+	(_cairo_glitz_surface_create_pattern): cairo_surface_set_repeat
+	likes to get a cairo_surface_t pointer not a cairo_glitz_surface_t
+	pointer.
+	(_cairo_glitz_surface_set_image): Get pixel masks from pixman image
+	format.
+
+2004-09-11  Carl Worth  <stacyworth@pippin.local>
+
+	* autogen.sh: Require automake 1.6 rather than 1.7 since it seems
+	to work just fine.
+
+2004-09-11  David Reveman  <c99drn@cs.umu.se>
+
+	* configure.in: Require version 0.2.2 of glitz.
+
+	* src/cairo_glitz_surface.c (_cairo_glitz_surface_create_pattern): 
+	0.5 should no longer be added to gradient stop coordinates.
+
+	* src/cairo.h: CAIRO_HAS_GL_SURFACE -> CAIRO_HAS_GLITZ_SURFACE.
+	cairo_set_target_gl -> cairo_set_target_glitz.
+	cairo_gl_surface_create -> cairo_glitz_surface_create.
+
+	* src/cairo-features.h.in: GL_SURFACE_FEATURE -> GLITZ_SURFACE_FEATURE.
+
+	* src/Makefile.am: CAIRO_HAS_GL_SURFACE -> CAIRO_HAS_GLITZ_SURFACE,
+	libcairo_gl_sources -> libcairo_glitz_sources, cairo_gl_surface.c ->
+	cairo_glitz_surface.c, GL_CFLAGS -> GLITZ_CFLAGS and
+	GL_LIBS -> GLITZ_LIBS.
+
+	* cairo.pc.in (Requires): GL_REQUIRES -> GLITZ_REQUIRES.
+
+	* configure.in: Replaced the gl backend with the new glitz backend.
+	Cairo now requires version 0.2.1 of glitz.
+
+2004-09-04  Carl Worth  <cworth@brudder.east.isi.edu>
+
+	* COPYING:
+	* COPYING-MPL-1.1: 
+	* COPYING-LGPL-2.1:
+	* src/cairo-features.h.in:
+	* src/cairo.c:
+	* src/cairo.h:
+	* src/cairo_color.c:
+	* src/cairo_fixed.c:
+	* src/cairo_font.c:
+	* src/cairo_gstate.c:
+	* src/cairo_hull.c:
+	* src/cairo_image_surface.c:
+	* src/cairo_matrix.c:
+	* src/cairo_path.c:
+	* src/cairo_path_bounds.c:
+	* src/cairo_path_fill.c:
+	* src/cairo_path_stroke.c:
+	* src/cairo_pen.c:
+	* src/cairo_polygon.c:
+	* src/cairo_ps_surface.c:
+	* src/cairo_slope.c:
+	* src/cairo_spline.c:
+	* src/cairo_surface.c:
+	* src/cairo_xcb_surface.c:
+	* src/cairo_xlib_surface.c:
+	* src/cairoint.h: Add the MPL as a new license option, in addition
+	to the LGPL.
+
+2004-08-14  Carl Worth  <cworth@isi.edu>
+
+	* src/cairo_image_surface.c
+	(_cairo_image_surface_set_clip_region): Make a copy of the region
+	since pixman is currently taking ownership of it (ugh). Thanks to
+	Vladimir Vukicevic <vladimir@pobox.com> and Peter Dennis Bartok
+	<peter@novonyx.com>.
+
+	* autogen.sh (LANG): Explicitly set LANG=C to fix the awk
+	string->number conversion for user with locales that don't match
+	ASCII digit conventions.
+
+2004-08-03  Carl Worth  <cworth@isi.edu>
+
+	* src/cairo_gstate.c (extract_transformed_rectangle): Temporarily
+	disable rectangle-based clipping optimization as it's not working
+	(see cairo_snippets/xxx_clip_rectangle for a test case).
+
 2004-08-02  Carl Worth  <cworth@isi.edu>
 
 	* COPYING:
@@ -24,6 +464,8 @@
 	* src/cairo_xcb_surface.c:
 	* src/cairo_xlib_surface.c:
 	* src/cairoint.h: Change from MIT license to LGPL.
+	Fix to explicitly refer to GNU Lesser Public License 2.1 rather
+	than the Library Public License version 2 or "any later version"
 
 	* src/cairo_pattern.c: 
 	* src/cairo_gl_surface.c: Fix copyright attributions mistakenly

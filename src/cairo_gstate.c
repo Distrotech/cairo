@@ -1,22 +1,37 @@
 /* cairo - a vector graphics library with display and print output
  *
- * Copyright © 2002 University of Southern California
+ * Copyright Â© 2002 University of Southern California
  *
  * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Library General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
+ * modify it either under the terms of the GNU Lesser General Public
+ * License version 2.1 as published by the Free Software Foundation
+ * (the "LGPL") or, at your option, under the terms of the Mozilla
+ * Public License Version 1.1 (the "MPL"). If you do not alter this
+ * notice, a recipient may use your version of this file under either
+ * the MPL or the LGPL.
  *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Library General Public License for more details.
+ * You should have received a copy of the LGPL along with this library
+ * in the file COPYING-LGPL-2.1; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * You should have received a copy of the MPL along with this library
+ * in the file COPYING-MPL-1.1
  *
- * You should have received a copy of the GNU Library General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * The contents of this file are subject to the Mozilla Public License
+ * Version 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
  *
- * Author: Carl D. Worth <cworth@isi.edu>
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY
+ * OF ANY KIND, either express or implied. See the LGPL or the MPL for
+ * the specific language governing rights and limitations.
+ *
+ * The Original Code is the cairo graphics library.
+ *
+ * The Initial Developer of the Original Code is University of Southern
+ * California.
+ *
+ * Contributor(s):
+ *	Carl D. Worth <cworth@isi.edu>
  */
 
 #include <stdlib.h>
@@ -62,9 +77,9 @@ _cairo_gstate_init (cairo_gstate_t *gstate)
     gstate->num_dashes = 0;
     gstate->dash_offset = 0.0;
 
-    gstate->font = _cairo_font_create (CAIRO_FONT_FAMILY_DEFAULT,
-				       CAIRO_FONT_SLANT_DEFAULT,
-				       CAIRO_FONT_WEIGHT_DEFAULT);
+    gstate->font = _cairo_unscaled_font_create (CAIRO_FONT_FAMILY_DEFAULT,
+						CAIRO_FONT_SLANT_DEFAULT,
+						CAIRO_FONT_WEIGHT_DEFAULT);
 
     gstate->surface = NULL;
 
@@ -104,11 +119,8 @@ _cairo_gstate_init_copy (cairo_gstate_t *gstate, cairo_gstate_t *other)
     }
 
     if (other->font) {
-	gstate->font = _cairo_font_copy (other->font);
-	if (!gstate->font) {
-	    status = CAIRO_STATUS_NO_MEMORY;
-	    goto CLEANUP_DASHES;
-	}
+	gstate->font = other->font;
+	_cairo_unscaled_font_reference (gstate->font);
     }
 
     if (other->clip.region)
@@ -134,9 +146,10 @@ _cairo_gstate_init_copy (cairo_gstate_t *gstate, cairo_gstate_t *other)
 
   CLEANUP_PATH:
     _cairo_path_fini (&gstate->path);
+
   CLEANUP_FONT:
-    cairo_font_destroy (gstate->font);
-  CLEANUP_DASHES:
+    _cairo_unscaled_font_destroy (gstate->font);
+
     free (gstate->dash);
     gstate->dash = NULL;
 
@@ -146,7 +159,7 @@ _cairo_gstate_init_copy (cairo_gstate_t *gstate, cairo_gstate_t *other)
 void
 _cairo_gstate_fini (cairo_gstate_t *gstate)
 {
-    cairo_font_destroy (gstate->font);
+    _cairo_unscaled_font_destroy (gstate->font);
 
     if (gstate->surface)
 	cairo_surface_destroy (gstate->surface);
@@ -161,6 +174,8 @@ _cairo_gstate_fini (cairo_gstate_t *gstate)
     gstate->clip.region = NULL;
 
     cairo_pattern_destroy (gstate->pattern);
+
+    _cairo_matrix_fini (&gstate->font_matrix);
 
     _cairo_matrix_fini (&gstate->ctm);
     _cairo_matrix_fini (&gstate->ctm_inverse);
@@ -611,6 +626,8 @@ _cairo_gstate_default_matrix (cairo_gstate_t *gstate)
     int scale = gstate->pixels_per_inch / CAIRO_GSTATE_PIXELS_PER_INCH_DEFAULT + 0.5;
     if (scale == 0)
 	scale = 1;
+
+    cairo_matrix_set_identity (&gstate->font_matrix);
 
     cairo_matrix_set_identity (&gstate->ctm);
     cairo_matrix_scale (&gstate->ctm, scale, scale);
@@ -1968,16 +1985,28 @@ _cairo_gstate_show_surface (cairo_gstate_t	*gstate,
     return CAIRO_STATUS_SUCCESS;
 }
 
+
 cairo_status_t
 _cairo_gstate_select_font (cairo_gstate_t       *gstate, 
 			   const char           *family, 
 			   cairo_font_slant_t   slant, 
 			   cairo_font_weight_t  weight)
 {
-    if (gstate->font != NULL)
-	cairo_font_destroy (gstate->font);
+    cairo_unscaled_font_t *tmp;
 
-    gstate->font = _cairo_font_create (family, slant, weight);
+    tmp = _cairo_unscaled_font_create (family, slant, weight);
+
+    if (tmp == NULL)
+	return CAIRO_STATUS_NO_MEMORY;
+
+    if (gstate->font != tmp)
+    {
+	if (gstate->font != NULL)
+	    _cairo_unscaled_font_destroy (gstate->font);
+
+	cairo_matrix_set_identity (&gstate->font_matrix);
+	gstate->font = tmp;
+    }
   
     return CAIRO_STATUS_SUCCESS;
 }
@@ -1986,23 +2015,154 @@ cairo_status_t
 _cairo_gstate_scale_font (cairo_gstate_t *gstate, 
 			  double scale)
 {
-    return _cairo_font_scale (gstate->font, scale);
+    return cairo_matrix_scale (&gstate->font_matrix, scale, scale);
 }
 
 cairo_status_t
 _cairo_gstate_transform_font (cairo_gstate_t *gstate, 
 			      cairo_matrix_t *matrix)
 {
-    return _cairo_font_transform (gstate->font, matrix);    
+    cairo_matrix_t tmp;
+    double a, b, c, d, tx, ty;
+    cairo_matrix_get_affine (matrix, &a, &b, &c, &d, &tx, &ty);
+    cairo_matrix_set_affine (&tmp, a, b, c, d, 0, 0);
+    return cairo_matrix_multiply (&gstate->font_matrix, &gstate->font_matrix, &tmp);
 }
+
 
 cairo_status_t
 _cairo_gstate_current_font (cairo_gstate_t *gstate, 
 			    cairo_font_t **font)
 {
-    *font = gstate->font;
+    cairo_font_scale_t scale;
+    cairo_font_t *scaled;
+    double dummy;
+
+    scaled = malloc (sizeof (cairo_font_t));
+    if (scaled == NULL)
+	return CAIRO_STATUS_NO_MEMORY;
+
+    cairo_matrix_get_affine (&gstate->font_matrix,
+			     &scale.matrix[0][0],
+			     &scale.matrix[0][1],
+			     &scale.matrix[1][0],
+			     &scale.matrix[1][1],
+			     &dummy, &dummy);
+
+    _cairo_font_init (scaled, &scale, gstate->font);
+    _cairo_unscaled_font_reference (gstate->font);
+
+    *font = scaled;
 
     return CAIRO_STATUS_SUCCESS;
+}
+
+void
+_cairo_gstate_set_font_transform (cairo_gstate_t *gstate, 
+				  cairo_matrix_t *matrix)
+{
+    cairo_matrix_copy (&gstate->font_matrix, matrix);
+}
+
+void
+_cairo_gstate_current_font_transform (cairo_gstate_t *gstate,
+				      cairo_matrix_t *matrix)
+{
+    cairo_matrix_copy (matrix, &gstate->font_matrix);
+}
+
+/* 
+ * Like everything else in this file, fonts involve Too Many Coordinate Spaces;
+ * it is easy to get confused about what's going on.
+ *
+ * The user's view
+ * ---------------
+ *
+ * Users ask for things in user space. When cairo starts, a user space unit
+ * is about 1/96 inch, which is similar to (but importantly different from)
+ * the normal "point" units most users think in terms of. When a user
+ * selects a font, its scale is set to "one user unit". The user can then
+ * independently scale the user coordinate system *or* the font matrix, in
+ * order to adjust the rendered size of the font.
+ *
+ * If the user asks for a permanent reference to "a font", they are given a
+ * handle to a structure holding a scale matrix and an unscaled font. This
+ * effectively decouples the font from further changes to user space. Even
+ * if the user then "sets" the current cairo_t font to the handle they were
+ * passed, further changes to the cairo_t CTM will not affect externally
+ * held references to the font.
+ *
+ *
+ * The font's view
+ * ---------------
+ *
+ * Fonts are designed and stored (in say .ttf files) in "font space", which
+ * describes an "EM Square" (a design tile) and has some abstract number
+ * such as 1000, 1024, or 2048 units per "EM". This is basically an
+ * uninteresting space for us, but we need to remember that it exists.
+ *
+ * Font resources (from libraries or operating systems) render themselves
+ * to a particular device. Since they do not want to make most programmers
+ * worry about the font design space, the scaling API is simplified to
+ * involve just telling the font the required pixel size of the EM square
+ * (that is, in device space).
+ *
+ *
+ * Cairo's gstate view
+ * -------------------
+ *
+ * In addition to the CTM and CTM inverse, we keep a matrix in the gstate
+ * called the "font matrix" which describes the user's most recent
+ * font-scaling or font-transforming request. This is kept in terms of an
+ * abstract scale factor, composed with the CTM and used to set the font's
+ * pixel size. So if the user asks to "scale the font by 12", the matrix
+ * is:
+ *
+ *   [ 12.0, 0.0, 0.0, 12.0, 0.0, 0.0 ]
+ *
+ * It is an affine matrix, like all cairo matrices, but its tx and ty
+ * components are always set to zero; we don't permit "nudging" fonts
+ * around.
+ *
+ * In order to perform any action on a font, we must build an object
+ * called a cairo_font_scale_t; this contains the central 2x2 matrix 
+ * resulting from "font matrix * CTM".
+ *  
+ * We pass this to the font when making requests of it, which causes it to
+ * reply for a particular [user request, device] combination, under the CTM
+ * (to accomodate the "zoom in" == "bigger fonts" issue above).
+ *
+ * The other terms in our communication with the font are therefore in
+ * device space. When we ask it to perform text->glyph conversion, it will
+ * produce a glyph string in device space. Glyph vectors we pass to it for
+ * measuring or rendering should be in device space. The metrics which we
+ * get back from the font will be in device space. The contents of the
+ * global glyph image cache will be in device space.
+ *
+ *
+ * Cairo's public view
+ * -------------------
+ *
+ * Since the values entering and leaving via public API calls are in user
+ * space, the gstate functions typically need to multiply argumens by the
+ * CTM (for user-input glyph vectors), and return values by the CTM inverse
+ * (for font responses such as metrics or glyph vectors).
+ *
+ */
+
+static void
+_build_font_scale (cairo_gstate_t *gstate,
+		   cairo_font_scale_t *sc)
+{
+    cairo_matrix_t tmp;
+    double dummy;
+    cairo_matrix_multiply (&tmp, &gstate->font_matrix, &gstate->ctm);
+    cairo_matrix_get_affine (&tmp,
+			     &sc->matrix[0][0],
+			     &sc->matrix[0][1],
+			     &sc->matrix[1][0],
+			     &sc->matrix[1][1],
+			     &dummy, &dummy);
 }
 
 cairo_status_t
@@ -2010,56 +2170,93 @@ _cairo_gstate_current_font_extents (cairo_gstate_t *gstate,
 				    cairo_font_extents_t *extents)
 {
     cairo_int_status_t status;
-    cairo_matrix_t saved_font_matrix;
-    
-    cairo_matrix_copy (&saved_font_matrix, &gstate->font->matrix);
-    cairo_matrix_multiply (&gstate->font->matrix, &gstate->ctm, &gstate->font->matrix);
-    
-    status = _cairo_font_font_extents (gstate->font, extents);
+    cairo_font_scale_t sc;
+    double dummy = 0.0;
 
-    cairo_matrix_copy (&gstate->font->matrix, &saved_font_matrix);    
+    _build_font_scale (gstate, &sc);
+
+    status = _cairo_unscaled_font_font_extents (gstate->font, &sc, extents);
+
+    /* The font responded in device space; convert to user space. */
+
+    cairo_matrix_transform_distance (&gstate->ctm_inverse, 
+				     &dummy,
+				     &extents->ascent);
+
+    cairo_matrix_transform_distance (&gstate->ctm_inverse, 
+				     &dummy,
+				     &extents->descent);
+
+    cairo_matrix_transform_distance (&gstate->ctm_inverse, 
+				     &dummy,
+				     &extents->height);
+
+    cairo_matrix_transform_distance (&gstate->ctm_inverse, 
+				     &extents->max_x_advance,
+				     &extents->max_y_advance);
 
     return status;
 }
 
+cairo_status_t
+_cairo_gstate_text_to_glyphs (cairo_gstate_t *gstate, 
+			      const unsigned char *utf8,
+			      cairo_glyph_t **glyphs,
+			      int *nglyphs)
+{
+    cairo_status_t status;
+    cairo_font_scale_t sc;
+
+    cairo_point_t point; 
+    double dev_x, dev_y;
+    int i;
+
+    _build_font_scale (gstate, &sc);
+
+    status = _cairo_path_current_point (&gstate->path, &point);
+    if (status == CAIRO_STATUS_NO_CURRENT_POINT) {
+	dev_x = 0.0;
+	dev_y = 0.0;
+    } else {
+	dev_x = _cairo_fixed_to_double (point.x);
+	dev_y = _cairo_fixed_to_double (point.y);
+    }
+
+    status = _cairo_unscaled_font_text_to_glyphs (gstate->font, 
+						  &sc, utf8, glyphs, nglyphs);
+
+    if (status || !glyphs || !nglyphs || !(*glyphs) || !(nglyphs))
+	return status;
+
+    /* The font responded in device space, starting from (0,0); add any
+       current point offset in device space, and convert to user space. */
+
+    for (i = 0; i < *nglyphs; ++i) {
+ 	(*glyphs)[i].x += dev_x; 
+ 	(*glyphs)[i].y += dev_y; 
+ 	cairo_matrix_transform_point (&gstate->ctm_inverse,  
+ 				      &((*glyphs)[i].x),  
+ 				      &((*glyphs)[i].y)); 
+    }
+    
+    return CAIRO_STATUS_SUCCESS;
+}
 
 cairo_status_t
 _cairo_gstate_set_font (cairo_gstate_t *gstate, 
 			cairo_font_t *font)
 {
     if (gstate->font != NULL)    
-	cairo_font_destroy (gstate->font);
-    gstate->font = font;
-    cairo_font_reference (gstate->font);
+	_cairo_unscaled_font_destroy (gstate->font);
+    gstate->font = font->unscaled;
+    _cairo_unscaled_font_reference (gstate->font);
+    cairo_matrix_set_affine (&gstate->font_matrix,
+			     font->scale.matrix[0][0],
+			     font->scale.matrix[0][1],
+			     font->scale.matrix[1][0],
+			     font->scale.matrix[1][1],
+			     0, 0);
     return CAIRO_STATUS_SUCCESS;
-}
-
-cairo_status_t
-_cairo_gstate_text_extents (cairo_gstate_t *gstate,
-			    const unsigned char *utf8,
-			    cairo_text_extents_t *extents)
-{
-    cairo_matrix_t saved_font_matrix;
-    cairo_status_t status;
-    double scale_x, scale_y;
-
-    cairo_matrix_copy (&saved_font_matrix, &gstate->font->matrix);
-    _cairo_matrix_compute_scale_factors (&gstate->ctm, &scale_x, &scale_y);
-    cairo_matrix_scale (&gstate->font->matrix, scale_x, scale_y);
-
-    status = _cairo_font_text_extents (gstate->font,
-				       utf8, extents);
-
-    cairo_matrix_copy (&gstate->font->matrix, &saved_font_matrix);
-
-    extents->x_bearing /= scale_x;
-    extents->y_bearing /= scale_y;
-    extents->width  /= scale_x;
-    extents->height /= scale_y;
-    extents->x_advance /= scale_x;
-    extents->y_advance /= scale_y;
-
-    return status;
 }
 
 cairo_status_t
@@ -2069,129 +2266,43 @@ _cairo_gstate_glyph_extents (cairo_gstate_t *gstate,
 			     cairo_text_extents_t *extents)
 {
     cairo_status_t status;
-    cairo_matrix_t saved_font_matrix;
-    double scale_x, scale_y;
+    cairo_glyph_t *transformed_glyphs;
+    cairo_font_scale_t sc;
+    int i;
 
-    cairo_matrix_copy (&saved_font_matrix, &gstate->font->matrix);
-    _cairo_matrix_compute_scale_factors (&gstate->ctm, &scale_x, &scale_y);
-    cairo_matrix_scale (&gstate->font->matrix, scale_x, scale_y);
+    _build_font_scale (gstate, &sc);
 
-    status = _cairo_font_glyph_extents (gstate->font,
-					glyphs, num_glyphs,
-					extents);
+    transformed_glyphs = malloc (num_glyphs * sizeof(cairo_glyph_t));
+    if (transformed_glyphs == NULL)
+	return CAIRO_STATUS_NO_MEMORY;
 
-    cairo_matrix_copy (&gstate->font->matrix, &saved_font_matrix);
-
-    extents->x_bearing /= scale_x;
-    extents->y_bearing /= scale_y;
-    extents->width  /= scale_x;
-    extents->height /= scale_y;
-    extents->x_advance /= scale_x;
-    extents->y_advance /= scale_y;
-
-    return status;
-}
-
-cairo_status_t
-_cairo_gstate_show_text (cairo_gstate_t *gstate, 
-			 const unsigned char *utf8)
-{
-    cairo_status_t status;
-    cairo_point_t point;
-    double x, y;
-    cairo_matrix_t saved_font_matrix;
-    cairo_pattern_t pattern;
-    cairo_box_t bbox;
-
-    status = _cairo_path_current_point (&gstate->path, &point);
-    if (status == CAIRO_STATUS_NO_CURRENT_POINT) {
-	x = 0;
-	y = 0;
-	cairo_matrix_transform_point (&gstate->ctm, &x, &y);
-    } else {
-	x = _cairo_fixed_to_double (point.x);
-	y = _cairo_fixed_to_double (point.y);
-    }
-    
-    cairo_matrix_copy (&saved_font_matrix, &gstate->font->matrix);
-    cairo_matrix_multiply (&gstate->font->matrix, &gstate->ctm, &gstate->font->matrix);
-
-    _cairo_pattern_init_copy (&pattern, gstate->pattern);
-    
-    status = _cairo_font_text_bbox (gstate->font, gstate->surface,
- 				    x, y, utf8, &bbox);
-    if (status)
-	return status;
-    
-    status = _cairo_gstate_create_pattern (gstate, &pattern, &bbox);
-    if (status)
-	return status;
-    
-    if (gstate->clip.surface)
+    for (i = 0; i < num_glyphs; ++i)
     {
-	cairo_surface_t *intermediate;
-	cairo_color_t empty_color;
-
-	_cairo_color_init (&empty_color);
-	_cairo_color_set_alpha (&empty_color, .0);
-	intermediate = _cairo_surface_create_similar_solid (gstate->clip.surface,
-							    CAIRO_FORMAT_A8,
-							    gstate->clip.width,
-							    gstate->clip.height,
-							    &empty_color);
-
-	status = _cairo_font_show_text (gstate->font,
-					CAIRO_OPERATOR_ADD, pattern.source,
-					intermediate,
-					gstate->clip.x - pattern.source_offset.x,
-					gstate->clip.y - pattern.source_offset.y,
-					x - gstate->clip.x, 
-					y - gstate->clip.y, utf8);
-
-	if (status)
-	    goto BAIL;
-	
-	status = _cairo_surface_composite (CAIRO_OPERATOR_IN,
-					   gstate->clip.surface,
-					   NULL,
-					   intermediate,
-					   0, 0, 
-					   0, 0,
-					   0, 0,
-					   gstate->clip.width, 
-					   gstate->clip.height);
-
-	if (status)
-	    goto BAIL;
-
-	status = _cairo_surface_composite (gstate->operator,
-					   pattern.source,
-					   intermediate,
-					   gstate->surface,
-					   0, 0, 
-					   0, 0,
-					   gstate->clip.x, 
-					   gstate->clip.y,
-					   gstate->clip.width, 
-					   gstate->clip.height);
-
-    BAIL:
-	cairo_surface_destroy (intermediate);
-	
+	transformed_glyphs[i] = glyphs[i];
+	cairo_matrix_transform_point (&gstate->ctm, 
+				      &transformed_glyphs[i].x, 
+				      &transformed_glyphs[i].y);
     }
-    else
-    {
-	status = _cairo_font_show_text (gstate->font,
-					gstate->operator, pattern.source,
-					gstate->surface,
-					-pattern.source_offset.x,
-					-pattern.source_offset.y,
-					x, y, utf8);
-    }
-    
-    cairo_matrix_copy (&gstate->font->matrix, &saved_font_matrix);
 
-    _cairo_pattern_fini (&pattern);
+    status = _cairo_unscaled_font_glyph_extents (gstate->font, &sc, 
+						 transformed_glyphs, num_glyphs, 
+						 extents);
+
+    /* The font responded in device space; convert to user space. */
+
+    cairo_matrix_transform_distance (&gstate->ctm_inverse, 
+				     &extents->x_bearing,
+				     &extents->y_bearing);
+
+    cairo_matrix_transform_distance (&gstate->ctm_inverse, 
+				     &extents->width,
+				     &extents->height);
+
+    cairo_matrix_transform_distance (&gstate->ctm_inverse, 
+				     &extents->x_advance,
+				     &extents->y_advance);
+
+    free (transformed_glyphs);
 
     return status;
 }
@@ -2202,11 +2313,13 @@ _cairo_gstate_show_glyphs (cairo_gstate_t *gstate,
 			   int num_glyphs)
 {
     cairo_status_t status;
-    cairo_matrix_t saved_font_matrix;
     int i;
     cairo_glyph_t *transformed_glyphs = NULL;
+    cairo_font_scale_t sc;
     cairo_pattern_t pattern;
     cairo_box_t bbox;
+
+    _build_font_scale (gstate, &sc);
 
     transformed_glyphs = malloc (num_glyphs * sizeof(cairo_glyph_t));
     if (transformed_glyphs == NULL)
@@ -2216,16 +2329,14 @@ _cairo_gstate_show_glyphs (cairo_gstate_t *gstate,
     {
 	transformed_glyphs[i] = glyphs[i];
 	cairo_matrix_transform_point (&gstate->ctm, 
-				      &(transformed_glyphs[i].x), 
-				      &(transformed_glyphs[i].y));
+				      &transformed_glyphs[i].x, 
+				      &transformed_glyphs[i].y);
     }
     
-    cairo_matrix_copy (&saved_font_matrix, &gstate->font->matrix);
-    cairo_matrix_multiply (&gstate->font->matrix, &gstate->ctm, &gstate->font->matrix);
-
     _cairo_pattern_init_copy (&pattern, gstate->pattern);
-    status = _cairo_font_glyph_bbox (gstate->font, gstate->surface,
- 				     transformed_glyphs, num_glyphs, &bbox);
+    status = _cairo_unscaled_font_glyph_bbox (gstate->font, &sc, 
+					      transformed_glyphs, num_glyphs, 
+					      &bbox);
     if (status)
 	return status;
 
@@ -2253,12 +2364,13 @@ _cairo_gstate_show_glyphs (cairo_gstate_t *gstate,
 	    transformed_glyphs[i].y -= gstate->clip.y;
 	}
 
-	status = _cairo_font_show_glyphs (gstate->font, 
-					  CAIRO_OPERATOR_ADD, 
-					  pattern.source, intermediate,
-					  gstate->clip.x - pattern.source_offset.x,
-					  gstate->clip.y - pattern.source_offset.y,
-					  transformed_glyphs, num_glyphs);
+	status = _cairo_unscaled_font_show_glyphs (gstate->font, 
+						   &sc,
+						   CAIRO_OPERATOR_ADD, 
+						   pattern.source, intermediate,
+						   gstate->clip.x - pattern.source_offset.x,
+						   gstate->clip.y - pattern.source_offset.y,
+						   transformed_glyphs, num_glyphs);
 
 	if (status)
 	    goto BAIL;
@@ -2293,56 +2405,21 @@ _cairo_gstate_show_glyphs (cairo_gstate_t *gstate,
     }
     else
     {
-	status = _cairo_font_show_glyphs (gstate->font, 
-					  gstate->operator, pattern.source,
-					  gstate->surface,
-					  -pattern.source_offset.x,
-					  -pattern.source_offset.y,
-					  transformed_glyphs, num_glyphs);
+	status = _cairo_unscaled_font_show_glyphs (gstate->font, 
+						   &sc,
+						   gstate->operator, pattern.source,
+						   gstate->surface,
+						   -pattern.source_offset.x,
+						   -pattern.source_offset.y,
+						   transformed_glyphs, num_glyphs);
     }
     
-    cairo_matrix_copy (&gstate->font->matrix, &saved_font_matrix);
-
     _cairo_pattern_fini (&pattern);
 
     free (transformed_glyphs);
     
     return status;
 }
-
-
-cairo_status_t
-_cairo_gstate_text_path (cairo_gstate_t *gstate, 
-			 const unsigned char *utf8)
-{
-    cairo_status_t status;
-    cairo_matrix_t saved_font_matrix;
-    cairo_point_t point;
-    double x, y;
-
-    status = _cairo_path_current_point (&gstate->path, &point);
-    if (status == CAIRO_STATUS_NO_CURRENT_POINT) {
-	x = 0;
-	y = 0;
-	cairo_matrix_transform_point (&gstate->ctm, &x, &y);
-    } else {
-	x = _cairo_fixed_to_double (point.x);
-	y = _cairo_fixed_to_double (point.y);
-    }
-
-    cairo_matrix_copy (&saved_font_matrix, &gstate->font->matrix);
-    cairo_matrix_multiply (&gstate->font->matrix, &gstate->ctm, &gstate->font->matrix);
-
-    status = _cairo_font_text_path (gstate->font, 
-				    x, y,
-				    utf8,
-				    &gstate->path);
-
-    cairo_matrix_copy (&gstate->font->matrix, &saved_font_matrix);
-
-    return status;
-}
-
 
 cairo_status_t
 _cairo_gstate_glyph_path (cairo_gstate_t *gstate,
@@ -2352,7 +2429,9 @@ _cairo_gstate_glyph_path (cairo_gstate_t *gstate,
     cairo_status_t status;
     int i;
     cairo_glyph_t *transformed_glyphs = NULL;
-    cairo_matrix_t saved_font_matrix;
+    cairo_font_scale_t sc;
+
+    _build_font_scale (gstate, &sc);
 
     transformed_glyphs = malloc (num_glyphs * sizeof(cairo_glyph_t));
     if (transformed_glyphs == NULL)
@@ -2366,14 +2445,9 @@ _cairo_gstate_glyph_path (cairo_gstate_t *gstate,
 				      &(transformed_glyphs[i].y));
     }
 
-    cairo_matrix_copy (&saved_font_matrix, &gstate->font->matrix);
-    cairo_matrix_multiply (&gstate->font->matrix, &gstate->ctm, &gstate->font->matrix);
-
-    status = _cairo_font_glyph_path (gstate->font, 
-				     transformed_glyphs, num_glyphs,
-				     &gstate->path);
-
-    cairo_matrix_copy (&gstate->font->matrix, &saved_font_matrix);
+    status = _cairo_unscaled_font_glyph_path (gstate->font, &sc,
+					      transformed_glyphs, num_glyphs,
+					      &gstate->path);
 
     free (transformed_glyphs);
     return status;

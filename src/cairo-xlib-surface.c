@@ -1,22 +1,37 @@
 /* cairo - a vector graphics library with display and print output
  *
- * Copyright © 2002 University of Southern California
+ * Copyright Â© 2002 University of Southern California
  *
  * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Library General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
+ * modify it either under the terms of the GNU Lesser General Public
+ * License version 2.1 as published by the Free Software Foundation
+ * (the "LGPL") or, at your option, under the terms of the Mozilla
+ * Public License Version 1.1 (the "MPL"). If you do not alter this
+ * notice, a recipient may use your version of this file under either
+ * the MPL or the LGPL.
  *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Library General Public License for more details.
+ * You should have received a copy of the LGPL along with this library
+ * in the file COPYING-LGPL-2.1; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * You should have received a copy of the MPL along with this library
+ * in the file COPYING-MPL-1.1
  *
- * You should have received a copy of the GNU Library General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * The contents of this file are subject to the Mozilla Public License
+ * Version 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
  *
- * Author: Carl D. Worth <cworth@isi.edu>
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY
+ * OF ANY KIND, either express or implied. See the LGPL or the MPL for
+ * the specific language governing rights and limitations.
+ *
+ * The Original Code is the cairo graphics library.
+ *
+ * The Initial Developer of the Original Code is University of Southern
+ * California.
+ *
+ * Contributor(s):
+ *	Carl D. Worth <cworth@isi.edu>
  */
 
 #include "cairoint.h"
@@ -130,7 +145,7 @@ _cairo_xlib_surface_create_similar (void		*abstract_src,
     scr = DefaultScreen (dpy);
 
     pix = XCreatePixmap (dpy, DefaultRootWindow (dpy),
-			 width, height,
+			 width <= 0 ? 1 : width, height <= 0 ? 1 : height,
 			 _CAIRO_FORMAT_DEPTH (format));
     
     surface = (cairo_xlib_surface_t *)
@@ -616,6 +631,8 @@ _cairo_xlib_surface_set_clip_region (void *abstract_surface,
 	xr.height = surf->height;
 	XUnionRectWithRegion (&xr, xregion, xregion);
 	rects = malloc(sizeof(XRectangle));
+	if (rects == NULL)
+	    return CAIRO_STATUS_NO_MEMORY;
 	rects[0] = xr;
 	m = 1;
 
@@ -626,6 +643,8 @@ _cairo_xlib_surface_set_clip_region (void *abstract_surface,
 	if (n == 0)
 	    return CAIRO_STATUS_SUCCESS;
 	rects = malloc(sizeof(XRectangle) * n);
+	if (rects == NULL)
+	    return CAIRO_STATUS_NO_MEMORY;
 	box = pixman_region_rects (region);
 	xregion = XCreateRegion();
 	
@@ -646,7 +665,7 @@ _cairo_xlib_surface_set_clip_region (void *abstract_surface,
     XSetClipRectangles(surf->dpy, surf->gc, 0, 0, rects, m, Unsorted);
     free(rects);
     if (surf->picture)
-    XRenderSetPictureClipRegion (surf->dpy, surf->picture, xregion);
+	XRenderSetPictureClipRegion (surf->dpy, surf->picture, xregion);
     XDestroyRegion(xregion);
     XSetGraphicsExposures(surf->dpy, surf->gc, gc_values.graphics_exposures);
     return CAIRO_STATUS_SUCCESS;
@@ -659,6 +678,17 @@ _cairo_xlib_surface_create_pattern (void *abstract_surface,
 {
     return CAIRO_INT_STATUS_UNSUPPORTED;
 }
+
+static cairo_status_t
+_cairo_xlib_surface_show_glyphs (cairo_unscaled_font_t  *font,
+				 cairo_font_scale_t	*scale,
+				 cairo_operator_t       operator,
+				 cairo_surface_t        *source,
+				 cairo_surface_t        *surface,
+				 int                    source_x,
+				 int                    source_y,
+				 const cairo_glyph_t    *glyphs,
+				 int                    num_glyphs);
 
 static const struct cairo_surface_backend cairo_xlib_surface_backend = {
     _cairo_xlib_surface_create_similar,
@@ -675,7 +705,8 @@ static const struct cairo_surface_backend cairo_xlib_surface_backend = {
     _cairo_xlib_surface_copy_page,
     _cairo_xlib_surface_show_page,
     _cairo_xlib_surface_set_clip_region,
-    _cairo_xlib_surface_create_pattern
+    _cairo_xlib_surface_create_pattern,
+    _cairo_xlib_surface_show_glyphs
 };
 
 cairo_surface_t *
@@ -746,3 +777,512 @@ cairo_xlib_surface_create (Display		*dpy,
     return (cairo_surface_t *) surface;
 }
 DEPRECATE (cairo_surface_create_for_drawable, cairo_xlib_surface_create);
+
+
+/* RENDER glyphset cache code */
+
+typedef struct glyphset_cache {
+    cairo_cache_t base;
+    struct glyphset_cache *next;
+    Display *display;
+    XRenderPictFormat *a8_pict_format;
+    GlyphSet glyphset;
+    Glyph counter;
+} glyphset_cache_t;
+
+typedef struct {
+    cairo_glyph_cache_key_t key;
+    Glyph glyph;
+    XGlyphInfo info;
+} glyphset_cache_entry_t;
+
+static Glyph
+_next_xlib_glyph (glyphset_cache_t *cache)
+{
+    return ++(cache->counter);
+}
+
+
+static cairo_status_t 
+_xlib_glyphset_cache_create_entry (void *cache,
+				   void *key,
+				   void **return_entry)
+{
+    glyphset_cache_t *g = (glyphset_cache_t *) cache;
+    cairo_glyph_cache_key_t *k = (cairo_glyph_cache_key_t *)key;
+    glyphset_cache_entry_t *v;
+
+    cairo_status_t status;
+
+    cairo_cache_t *im_cache;
+    cairo_image_glyph_cache_entry_t *im;
+
+    v = malloc (sizeof (glyphset_cache_entry_t));
+    _cairo_lock_global_image_glyph_cache ();
+    im_cache = _cairo_get_global_image_glyph_cache ();
+
+    if (g == NULL || v == NULL ||g == NULL || im_cache == NULL) {
+	_cairo_unlock_global_image_glyph_cache ();
+	return CAIRO_STATUS_NO_MEMORY;
+    }
+
+    status = _cairo_cache_lookup (im_cache, key, (void **) (&im));
+    if (status != CAIRO_STATUS_SUCCESS || im == NULL) {
+	_cairo_unlock_global_image_glyph_cache ();
+	return CAIRO_STATUS_NO_MEMORY;
+    }
+
+    v->key = *k;
+    _cairo_unscaled_font_reference (v->key.unscaled);
+
+    v->glyph = _next_xlib_glyph (g);
+
+    v->info.width = im->image ? im->image->stride : im->size.width;
+    v->info.height = im->size.height;
+    v->info.x = - im->extents.x_bearing;
+    v->info.y = im->extents.y_bearing;
+    v->info.xOff = 0;
+    v->info.yOff = 0;
+
+    XRenderAddGlyphs (g->display, g->glyphset,
+		      &(v->glyph), &(v->info), 1,
+		      im->image ? im->image->data : NULL,
+		      im->image ? v->info.height * v->info.width : 0);
+
+    v->key.base.memory = im->image ? im->image->width * im->image->stride : 0;
+    *return_entry = v;
+    _cairo_unlock_global_image_glyph_cache ();
+    return CAIRO_STATUS_SUCCESS;
+}
+
+static void 
+_xlib_glyphset_cache_destroy_cache (void *cache)
+{
+    /* FIXME: will we ever release glyphset caches? */
+}
+
+static void 
+_xlib_glyphset_cache_destroy_entry (void *cache, void *entry)
+{
+    glyphset_cache_t *g;
+    glyphset_cache_entry_t *v;
+
+    g = (glyphset_cache_t *) cache;
+    v = (glyphset_cache_entry_t *) entry;
+
+    _cairo_unscaled_font_destroy (v->key.unscaled);
+    XRenderFreeGlyphs (g->display, g->glyphset, &(v->glyph), 1);
+    free (v);	
+}
+
+const cairo_cache_backend_t _xlib_glyphset_cache_backend = {
+    _cairo_glyph_cache_hash,
+    _cairo_glyph_cache_keys_equal,
+    _xlib_glyphset_cache_create_entry,
+    _xlib_glyphset_cache_destroy_entry,
+    _xlib_glyphset_cache_destroy_cache
+};
+
+
+static glyphset_cache_t *
+_xlib_glyphset_caches = NULL;
+
+static void
+_lock_xlib_glyphset_caches (void)
+{
+    /* FIXME: implement locking */
+}
+
+static void
+_unlock_xlib_glyphset_caches (void)
+{
+    /* FIXME: implement locking */
+}
+
+static glyphset_cache_t *
+_get_glyphset_cache (Display *d)
+{
+    /* 
+     * There should usually only be one, or a very small number, of
+     * displays. So we just do a linear scan. 
+     */
+
+    glyphset_cache_t *g;
+
+    for (g = _xlib_glyphset_caches; g != NULL; g = g->next) {
+	if (g->display == d)
+	    return g;
+    }
+
+    g = malloc (sizeof (glyphset_cache_t));
+    if (g == NULL) 
+	goto ERR;
+
+    g->counter = 0;
+    g->display = d;
+    g->a8_pict_format = XRenderFindStandardFormat (d, PictStandardA8);
+    if (g->a8_pict_format == NULL)
+	goto ERR;
+    
+    if (_cairo_cache_init (&g->base,
+			   &_xlib_glyphset_cache_backend,
+			   CAIRO_XLIB_GLYPH_CACHE_MEMORY_DEFAULT))
+	goto FREE_GLYPHSET_CACHE;
+    
+    g->glyphset = XRenderCreateGlyphSet (d, g->a8_pict_format);
+    g->next = _xlib_glyphset_caches;
+    _xlib_glyphset_caches = g;
+    return g;
+    
+ FREE_GLYPHSET_CACHE:
+    free (g);
+    
+ ERR:
+    return NULL;
+}
+
+#define N_STACK_BUF 1024
+
+static cairo_status_t
+_cairo_xlib_surface_show_glyphs32 (cairo_unscaled_font_t  *font,
+				   cairo_font_scale_t	  *scale,
+				   cairo_operator_t       operator,
+				   glyphset_cache_t 	  *g,
+				   cairo_glyph_cache_key_t *key,
+				   cairo_xlib_surface_t   *src,
+				   cairo_xlib_surface_t   *self,
+				   int                    source_x,
+				   int                    source_y,
+				   const cairo_glyph_t    *glyphs,
+				   glyphset_cache_entry_t **entries,
+				   int                    num_glyphs)
+{
+    XGlyphElt32 *elts = NULL;
+    XGlyphElt32 stack_elts [N_STACK_BUF];
+
+    unsigned int *chars = NULL;
+    unsigned int stack_chars [N_STACK_BUF];
+
+    int i;    
+    int lastX = 0, lastY = 0;
+
+    /* Acquire arrays of suitable sizes. */
+    if (num_glyphs < N_STACK_BUF) {
+	elts = stack_elts;
+	chars = stack_chars;
+
+    } else {
+	elts = malloc (num_glyphs * sizeof (XGlyphElt32));
+	if (elts == NULL)
+	    goto FAIL;
+
+	chars = malloc (num_glyphs * sizeof (unsigned int));
+	if (chars == NULL)
+	    goto FREE_ELTS;
+
+    }
+
+    for (i = 0; i < num_glyphs; ++i) {
+	chars[i] = entries[i]->glyph;
+	elts[i].chars = &(chars[i]);
+	elts[i].nchars = 1;
+	elts[i].glyphset = g->glyphset;
+	elts[i].xOff = glyphs[i].x - lastX;
+	elts[i].yOff = glyphs[i].y - lastY;
+	lastX = glyphs[i].x;
+	lastY = glyphs[i].y;
+    }
+
+    XRenderCompositeText32 (self->dpy,
+			    _render_operator (operator),
+			    src->picture,
+			    self->picture,
+			    g->a8_pict_format,
+			    source_x, source_y,
+			    0, 0,
+			    elts, num_glyphs);
+
+    if (num_glyphs >= N_STACK_BUF) {
+	free (chars);
+	free (elts); 
+    }
+    
+    return CAIRO_STATUS_SUCCESS;
+    
+ FREE_ELTS:
+    if (num_glyphs >= N_STACK_BUF)
+	free (elts); 
+
+ FAIL:
+    return CAIRO_STATUS_NO_MEMORY;
+}
+
+
+static cairo_status_t
+_cairo_xlib_surface_show_glyphs16 (cairo_unscaled_font_t  *font,
+				   cairo_font_scale_t	  *scale,
+				   cairo_operator_t       operator,
+				   glyphset_cache_t 	  *g,
+				   cairo_glyph_cache_key_t *key,
+				   cairo_xlib_surface_t   *src,
+				   cairo_xlib_surface_t   *self,
+				   int                    source_x,
+				   int                    source_y,
+				   const cairo_glyph_t    *glyphs,
+				   glyphset_cache_entry_t **entries,
+				   int                    num_glyphs)
+{
+    XGlyphElt16 *elts = NULL;
+    XGlyphElt16 stack_elts [N_STACK_BUF];
+
+    unsigned short *chars = NULL;
+    unsigned short stack_chars [N_STACK_BUF];
+
+    int i;
+    int lastX = 0, lastY = 0;
+
+    /* Acquire arrays of suitable sizes. */
+    if (num_glyphs < N_STACK_BUF) {
+	elts = stack_elts;
+	chars = stack_chars;
+
+    } else {
+	elts = malloc (num_glyphs * sizeof (XGlyphElt16));
+	if (elts == NULL)
+	    goto FAIL;
+
+	chars = malloc (num_glyphs * sizeof (unsigned short));
+	if (chars == NULL)
+	    goto FREE_ELTS;
+
+    }
+
+    for (i = 0; i < num_glyphs; ++i) {
+	chars[i] = entries[i]->glyph;
+	elts[i].chars = &(chars[i]);
+	elts[i].nchars = 1;
+	elts[i].glyphset = g->glyphset;
+	elts[i].xOff = glyphs[i].x - lastX;
+	elts[i].yOff = glyphs[i].y - lastY;
+	lastX = glyphs[i].x;
+	lastY = glyphs[i].y;
+    }
+
+    XRenderCompositeText16 (self->dpy,
+			    _render_operator (operator),
+			    src->picture,
+			    self->picture,
+			    g->a8_pict_format,
+			    source_x, source_y,
+			    0, 0,
+			    elts, num_glyphs);
+
+    if (num_glyphs >= N_STACK_BUF) {
+	free (chars);
+	free (elts); 
+    }
+    
+    return CAIRO_STATUS_SUCCESS;
+
+ FREE_ELTS:
+    if (num_glyphs >= N_STACK_BUF)
+	free (elts); 
+
+ FAIL:
+    return CAIRO_STATUS_NO_MEMORY;
+}
+
+static cairo_status_t
+_cairo_xlib_surface_show_glyphs8 (cairo_unscaled_font_t  *font,
+				  cairo_font_scale_t	  *scale,
+				  cairo_operator_t       operator,
+				  glyphset_cache_t 	  *g,
+				  cairo_glyph_cache_key_t *key,
+				  cairo_xlib_surface_t   *src,
+				  cairo_xlib_surface_t   *self,
+				  int                    source_x,
+				  int                    source_y,
+				  const cairo_glyph_t    *glyphs,
+				  glyphset_cache_entry_t **entries,
+				  int                    num_glyphs)
+{
+    XGlyphElt8 *elts = NULL;
+    XGlyphElt8 stack_elts [N_STACK_BUF];
+
+    char *chars = NULL;
+    char stack_chars [N_STACK_BUF];
+
+    int i;
+    int lastX = 0, lastY = 0;
+
+    /* Acquire arrays of suitable sizes. */
+    if (num_glyphs < N_STACK_BUF) {
+	elts = stack_elts;
+	chars = stack_chars;
+
+    } else {
+	elts = malloc (num_glyphs * sizeof (XGlyphElt8));
+	if (elts == NULL)
+	    goto FAIL;
+
+	chars = malloc (num_glyphs * sizeof (char));
+	if (chars == NULL)
+	    goto FREE_ELTS;
+
+    }
+
+    for (i = 0; i < num_glyphs; ++i) {
+	chars[i] = entries[i]->glyph;
+	elts[i].chars = &(chars[i]);
+	elts[i].nchars = 1;
+	elts[i].glyphset = g->glyphset;
+	elts[i].xOff = glyphs[i].x - lastX;
+	elts[i].yOff = glyphs[i].y - lastY;
+	lastX = glyphs[i].x;
+	lastY = glyphs[i].y;
+    }
+
+    XRenderCompositeText8 (self->dpy,
+			   _render_operator (operator),
+			   src->picture,
+			   self->picture,
+			   g->a8_pict_format,
+			   source_x, source_y,
+			   0, 0,
+			   elts, num_glyphs);
+    
+    if (num_glyphs >= N_STACK_BUF) {
+	free (chars);
+	free (elts); 
+    }
+    
+    return CAIRO_STATUS_SUCCESS;
+    
+ FREE_ELTS:
+    if (num_glyphs >= N_STACK_BUF)
+	free (elts); 
+
+ FAIL:
+    return CAIRO_STATUS_NO_MEMORY;
+}
+
+
+static cairo_status_t
+_cairo_xlib_surface_show_glyphs (cairo_unscaled_font_t  *font,
+				 cairo_font_scale_t	*scale,
+				 cairo_operator_t       operator,
+				 cairo_surface_t        *source,
+				 cairo_surface_t        *surface,
+				 int                    source_x,
+				 int                    source_y,
+				 const cairo_glyph_t    *glyphs,
+				 int                    num_glyphs)
+{
+    unsigned int elt_size;
+    cairo_xlib_surface_t *self = (cairo_xlib_surface_t *) surface;
+    cairo_image_surface_t *tmp = NULL;
+    cairo_xlib_surface_t *src = NULL;
+    glyphset_cache_t *g;
+    cairo_status_t status;
+    cairo_glyph_cache_key_t key;
+    glyphset_cache_entry_t **entries;
+    glyphset_cache_entry_t *stack_entries [N_STACK_BUF];
+    int i;
+
+    /* Acquire an entry array of suitable size. */
+    if (num_glyphs < N_STACK_BUF) {
+	entries = stack_entries;
+
+    } else {
+	entries = malloc (num_glyphs * sizeof (glyphset_cache_entry_t *));
+	if (entries == NULL)
+	    goto FAIL;
+    }
+
+    /* prep the source surface. */
+    if (source->backend == surface->backend) {
+	src = (cairo_xlib_surface_t *) source;
+
+    } else {
+	tmp = _cairo_surface_get_image (source);
+	if (tmp == NULL)
+	    goto FREE_ENTRIES;
+
+	src = (cairo_xlib_surface_t *) 
+	    _cairo_surface_create_similar_scratch (surface, self->format, 1,
+						   tmp->width, tmp->height);
+
+	if (src == NULL)
+	    goto FREE_TMP;
+
+	if (_cairo_surface_set_image (&(src->base), tmp) != CAIRO_STATUS_SUCCESS)
+	    goto FREE_SRC;	    
+    }
+
+    _lock_xlib_glyphset_caches ();
+    g = _get_glyphset_cache (self->dpy);
+    if (g == NULL)
+	goto UNLOCK;
+
+    /* Work out the index size to use. */
+    elt_size = 8;
+    key.scale = *scale;
+    key.unscaled = font;
+
+    for (i = 0; i < num_glyphs; ++i) {
+	key.index = glyphs[i].index;
+	status = _cairo_cache_lookup (&g->base, &key, (void **) (&entries[i]));
+	if (status != CAIRO_STATUS_SUCCESS || entries[i] == NULL) 
+	    goto UNLOCK;
+
+	if (elt_size == 8 && entries[i]->glyph > 0xff)
+	    elt_size = 16;
+	if (elt_size == 16 && entries[i]->glyph > 0xffff) {
+	    elt_size = 32;
+	    break;
+	}
+    }
+
+    /* Call the appropriate sub-function. */
+
+    if (elt_size == 8)
+	status = _cairo_xlib_surface_show_glyphs8 (font, scale, operator, g, &key, src, self,
+						    source_x, source_y, 
+						   glyphs, entries, num_glyphs);
+    else if (elt_size == 16)
+	status = _cairo_xlib_surface_show_glyphs16 (font, scale, operator, g, &key, src, self,
+						    source_x, source_y, 
+						    glyphs, entries, num_glyphs);
+    else 
+	status = _cairo_xlib_surface_show_glyphs32 (font, scale, operator, g, &key, src, self,
+						    source_x, source_y, 
+						    glyphs, entries, num_glyphs);
+
+    _unlock_xlib_glyphset_caches ();
+
+    if (tmp != NULL) {
+	cairo_surface_destroy (&(src->base));
+	cairo_surface_destroy (&(tmp->base));
+    }
+
+    if (num_glyphs >= N_STACK_BUF)
+	free (entries); 
+
+    return status;
+
+ UNLOCK:
+    _unlock_xlib_glyphset_caches ();
+
+ FREE_SRC:
+    cairo_surface_destroy (&(src->base));
+
+ FREE_TMP:
+    cairo_surface_destroy (&(tmp->base));
+
+ FREE_ENTRIES:
+    if (num_glyphs >= N_STACK_BUF)
+	free (entries); 
+
+ FAIL:
+    return CAIRO_STATUS_NO_MEMORY;
+}

@@ -1,22 +1,37 @@
 /* cairo - a vector graphics library with display and print output
  *
- * Copyright © 2003 University of Southern California
+ * Copyright Â© 2003 University of Southern California
  *
  * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Library General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
+ * modify it either under the terms of the GNU Lesser General Public
+ * License version 2.1 as published by the Free Software Foundation
+ * (the "LGPL") or, at your option, under the terms of the Mozilla
+ * Public License Version 1.1 (the "MPL"). If you do not alter this
+ * notice, a recipient may use your version of this file under either
+ * the MPL or the LGPL.
  *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Library General Public License for more details.
+ * You should have received a copy of the LGPL along with this library
+ * in the file COPYING-LGPL-2.1; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * You should have received a copy of the MPL along with this library
+ * in the file COPYING-MPL-1.1
  *
- * You should have received a copy of the GNU Library General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * The contents of this file are subject to the Mozilla Public License
+ * Version 1.1 (the "License"); you may not use this file except in
+ * compliance with the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
  *
- * Author: Carl D. Worth <cworth@isi.edu>
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY
+ * OF ANY KIND, either express or implied. See the LGPL or the MPL for
+ * the specific language governing rights and limitations.
+ *
+ * The Original Code is the cairo graphics library.
+ *
+ * The Initial Developer of the Original Code is University of Southern
+ * California.
+ *
+ * Contributor(s):
+ *	Carl D. Worth <cworth@isi.edu>
  */
 
 #include "cairoint.h"
@@ -457,7 +472,20 @@ cairo_int_status_t
 _cairo_image_surface_set_clip_region (cairo_image_surface_t *surface,
 				      pixman_region16_t *region)
 {
-    pixman_image_set_clip_region (surface->pixman_image, region);
+    if (region) {
+        pixman_region16_t *rcopy;
+
+        rcopy = pixman_region_create();
+        /* pixman_image_set_clip_region expects to take ownership of the
+         * passed-in region, so we create a copy to give it. */
+	/* XXX: I think that's probably a bug in pixman. But its
+	 * memory management issues need auditing anyway, so a
+	 * workaround like this is fine for now. */
+        pixman_region_copy (rcopy, region);
+        pixman_image_set_clip_region (surface->pixman_image, rcopy);
+    } else {
+        pixman_image_set_clip_region (surface->pixman_image, region);
+    }
 
     return CAIRO_STATUS_SUCCESS;
 }
@@ -497,5 +525,6 @@ static const cairo_surface_backend_t cairo_image_surface_backend = {
     _cairo_image_surface_copy_page,
     _cairo_image_surface_show_page,
     _cairo_image_abstract_surface_set_clip_region,
-    _cairo_image_abstract_surface_create_pattern
+    _cairo_image_abstract_surface_create_pattern,
+    NULL /* show_glyphs */
 };
