@@ -34,6 +34,8 @@
  *	Owen Taylor <otaylor@redhat.com>
  */
 
+#include <float.h>
+
 #include "cairo-ft-private.h"
 
 #include <fontconfig/fontconfig.h>
@@ -84,10 +86,11 @@ typedef struct {
     int id;
 
     /* We temporarily scale the unscaled font as neede */
-    int have_scale;
+    cairo_bool_t have_scale;
     cairo_matrix_t current_scale;
     double x_scale;		/* Extracted X scale factor */
     double y_scale;             /* Extracted Y scale factor */
+    cairo_bool_t have_shape;	/* true if the current scale has a non-scale component*/
     
     int lock;		/* count of how many times this font has been locked */
 
@@ -124,6 +127,12 @@ _ft_unscaled_font_create_from_face (FT_Face face)
     _cairo_unscaled_font_init (&unscaled->base,
 			       &cairo_ft_unscaled_font_backend);
     return unscaled;
+}
+
+cairo_bool_t
+_cairo_unscaled_font_is_ft (cairo_unscaled_font_t *unscaled_font)
+{
+    return unscaled_font->backend == &cairo_ft_unscaled_font_backend;
 }
 
 static ft_unscaled_font_t *
@@ -271,16 +280,18 @@ static const cairo_cache_backend_t _ft_font_cache_backend = {
 
 static ft_cache_t *_global_ft_cache = NULL;
 
+CAIRO_MUTEX_DECLARE(_global_ft_cache_mutex);
+
 static void
 _lock_global_ft_cache (void)
 {
-    /* FIXME: Perform locking here. */
+    CAIRO_MUTEX_LOCK(_global_ft_cache_mutex);
 }
 
 static void
 _unlock_global_ft_cache (void)
 {
-    /* FIXME: Perform locking here. */
+    CAIRO_MUTEX_UNLOCK(_global_ft_cache_mutex);
 }
 
 static cairo_cache_t *
@@ -448,6 +459,7 @@ _ft_unscaled_font_set_scale (ft_unscaled_font_t *unscaled,
 {
     ft_font_transform_t sf;
     FT_Matrix mat;
+    FT_UInt pixel_width, pixel_height;
 
     assert (unscaled->face != NULL);
     
@@ -471,11 +483,35 @@ _ft_unscaled_font_set_scale (ft_unscaled_font_t *unscaled,
     mat.xy = - DOUBLE_TO_16_16(sf.shape[1][0]);
     mat.yy = DOUBLE_TO_16_16(sf.shape[1][1]);
 
-    FT_Set_Transform(unscaled->face, &mat, NULL);
+    unscaled->have_shape = (mat.xx != 0x10000 ||
+			    mat.yx != 0x00000 ||
+			    mat.xy != 0x00000 ||
+			    mat.yy != 0x10000);
     
-    FT_Set_Pixel_Sizes(unscaled->face,
-		       (FT_UInt) sf.x_scale,
-		       (FT_UInt) sf.y_scale);
+    FT_Set_Transform(unscaled->face, &mat, NULL);
+
+    if ((unscaled->face->face_flags & FT_FACE_FLAG_SCALABLE) != 0) {
+	pixel_width = sf.x_scale;
+	pixel_height = sf.y_scale;
+    } else {
+	double min_distance = DBL_MAX;
+	int i;
+
+	pixel_width = pixel_height = 0;
+	
+	for (i = 0; i < unscaled->face->num_fixed_sizes; i++) {
+	    double size = unscaled->face->available_sizes[i].y_ppem / 64.;
+	    double distance = fabs (size - sf.y_scale);
+	    
+	    if (distance <= min_distance) {
+		min_distance = distance;
+		pixel_width = unscaled->face->available_sizes[i].x_ppem >> 6;
+		pixel_height = unscaled->face->available_sizes[i].y_ppem >> 6;
+	    }
+	}
+    }
+
+    FT_Set_Pixel_Sizes (unscaled->face, pixel_width, pixel_height);
 }
 
 static void 
@@ -515,17 +551,318 @@ _cairo_ft_unscaled_font_destroy (void *abstract_font)
     }
 }
 
+/* Converts an outline FT_GlyphSlot into an image
+ * 
+ * This could go through _render_glyph_bitmap as well, letting
+ * FreeType convert the outline to a bitmap, but doing it ourselves
+ * has two minor advantages: first, we save a copy of the bitmap
+ * buffer: we can directly use the buffer that FreeType renders
+ * into.
+ *
+ * Second, it may help when we add support for subpixel
+ * rendering: the Xft code does it this way. (Keith thinks that
+ * it may also be possible to get the subpixel rendering with
+ * FT_Render_Glyph: something worth looking into in more detail
+ * when we add subpixel support. If so, we may want to eliminate
+ * this version of the code path entirely.
+ */
+static cairo_status_t
+_render_glyph_outline (FT_Face                          face,
+		       cairo_image_glyph_cache_entry_t *val)
+{
+    FT_GlyphSlot glyphslot = face->glyph;
+    FT_Outline *outline = &glyphslot->outline;
+    unsigned int width, height, stride;
+    FT_Bitmap bitmap;
+    FT_BBox cbox;
+    cairo_status_t status = CAIRO_STATUS_SUCCESS;
+
+    FT_Outline_Get_CBox (outline, &cbox);
+
+    cbox.xMin &= -64;
+    cbox.yMin &= -64;
+    cbox.xMax = (cbox.xMax + 63) & -64;
+    cbox.yMax = (cbox.yMax + 63) & -64;
+    
+    width = (unsigned int) ((cbox.xMax - cbox.xMin) >> 6);
+    height = (unsigned int) ((cbox.yMax - cbox.yMin) >> 6);
+    stride = (width + 3) & -4;
+    
+    if (width * height == 0) {
+	val->image = NULL;
+    } else  {
+
+	bitmap.pixel_mode = FT_PIXEL_MODE_GRAY;
+	bitmap.num_grays  = 256;
+	bitmap.width = width;
+	bitmap.rows = height;
+	bitmap.pitch = stride;   
+	bitmap.buffer = calloc (1, stride * height);
+	
+	if (bitmap.buffer == NULL) {
+	    return CAIRO_STATUS_NO_MEMORY;
+	}
+	
+	FT_Outline_Translate (outline, -cbox.xMin, -cbox.yMin);
+	
+	if (FT_Outline_Get_Bitmap (glyphslot->library, outline, &bitmap) != 0) {
+	    free (bitmap.buffer);
+	    return CAIRO_STATUS_NO_MEMORY;
+	}
+	
+	val->image = (cairo_image_surface_t *)
+	cairo_image_surface_create_for_data (bitmap.buffer,
+					     CAIRO_FORMAT_A8,
+					     width, height, stride);
+	if (val->image == NULL) {
+	    free (bitmap.buffer);
+	    return CAIRO_STATUS_NO_MEMORY;
+	}
+	
+	_cairo_image_surface_assume_ownership_of_data (val->image);
+    }
+
+    /*
+     * Note: the font's coordinate system is upside down from ours, so the
+     * Y coordinate of the control box needs to be negated.
+     */
+
+    val->size.width = (unsigned short) width;
+    val->size.height = (unsigned short) height;
+    val->size.x =   (short) (cbox.xMin >> 6);
+    val->size.y = - (short) (cbox.yMax >> 6);
+
+    return status;
+}
+
+/* Converts a bitmap (or other) FT_GlyphSlot into an image
+ * 
+ * This could go through _render_glyph_bitmap as well, letting
+ * FreeType convert the outline to a bitmap, but doing it ourselves
+ * has two minor advantages: first, we save a copy of the bitmap
+ * buffer: we can directly use the buffer that FreeType renders
+ * into.
+ *
+ * Second, it may help when we add support for subpixel
+ * rendering: the Xft code does it this way. (Keith thinks that
+ * it may also be possible to get the subpixel rendering with
+ * FT_Render_Glyph: something worth looking into in more detail
+ * when we add subpixel support. If so, we may want to eliminate
+ * this version of the code path entirely.
+ */
+static cairo_status_t
+_render_glyph_bitmap (FT_Face                          face,
+		      cairo_image_glyph_cache_entry_t *val)
+{
+    FT_GlyphSlot glyphslot = face->glyph;
+    FT_Bitmap *bitmap;
+    cairo_status_t status = CAIRO_STATUS_SUCCESS;
+    int width, height, stride;
+    unsigned char *data;
+    FT_Error error;
+    int i, j;
+
+    /* According to the FreeType docs, glyphslot->format could be
+     * something other than FT_GLYPH_FORMAT_OUTLINE or
+     * FT_GLYPH_FORMAT_BITMAP. Calling FT_Render_Glyph gives FreeType
+     * the opportunity to convert such to
+     * bitmap. FT_GLYPH_FORMAT_COMPOSITE will not be encountered since
+     * we avoid the FT_LOAD_NO_RECURSE flag.
+     */
+    error = FT_Render_Glyph (glyphslot, FT_RENDER_MODE_NORMAL);
+    if (error)
+	return CAIRO_STATUS_NO_MEMORY;
+
+    bitmap = &glyphslot->bitmap;
+
+    width = bitmap->width;
+    height = bitmap->rows;
+
+    if (width * height == 0) {
+	val->image = NULL;
+    } else {
+	switch (bitmap->pixel_mode) {
+	case FT_PIXEL_MODE_MONO:
+	    stride = (width + 3) & ~3;
+	    data = calloc (stride * height, 1);
+	    if (!data)
+		return CAIRO_STATUS_NO_MEMORY;
+	    for (j = 0; j < height; j++) {
+		const unsigned char *p = bitmap->buffer + j * bitmap->pitch;
+		unsigned char *q = data + j * stride;
+		for (i = 0; i < width; i++) {
+		    /* FreeType bitmaps are always stored MSB */
+		    unsigned char byte = p[i >> 3];
+		    unsigned char bit = 1 << (7 - (i % 8));
+
+		    if (byte & bit)
+			q[i] = 0xff;
+		}
+	    }
+	    break;
+	case FT_PIXEL_MODE_GRAY:
+	    stride = bitmap->pitch;
+	    data = malloc (stride * height);
+	    if (!data)
+		return CAIRO_STATUS_NO_MEMORY;
+	    memcpy (data, bitmap->buffer, stride * height);
+	    break;
+	case FT_PIXEL_MODE_GRAY2:
+	case FT_PIXEL_MODE_GRAY4:
+	    /* These could be triggered by very rare types of TrueType fonts */
+	case FT_PIXEL_MODE_LCD:
+	case FT_PIXEL_MODE_LCD_V:
+	    /* These should never be triggered unless we ask for them */
+	default:
+	    return CAIRO_STATUS_NO_MEMORY;
+	}
+	
+	val->image = (cairo_image_surface_t *)
+	    cairo_image_surface_create_for_data (data,
+						 CAIRO_FORMAT_A8,
+						 width, height, stride);
+	if (val->image == NULL) {
+	    free (data);
+	    return CAIRO_STATUS_NO_MEMORY;
+	}
+
+	_cairo_image_surface_assume_ownership_of_data (val->image);
+    }
+
+    val->size.width = width;
+    val->size.height = height;
+    val->size.x = - glyphslot->bitmap_left;
+    val->size.y = - glyphslot->bitmap_top;
+    
+    return status;
+}
+
+static cairo_status_t
+_transform_glyph_bitmap (cairo_image_glyph_cache_entry_t *val)
+{
+    ft_font_transform_t sf;
+    cairo_matrix_t original_to_transformed;
+    cairo_matrix_t transformed_to_original;
+    cairo_image_surface_t *old_image;
+    cairo_surface_t *image;
+    double x[4], y[4];
+    double origin_x, origin_y;
+    int i;
+    int x_min, y_min, x_max, y_max;
+    int width, height;
+    cairo_status_t status;
+    cairo_surface_pattern_t pattern;
+    
+    /* We want to compute a transform that takes the origin
+     * (val->size.x, val->size.y) to 0,0, then applies the "shape"
+     * portion of the font transform
+     */
+    _compute_transform (&sf, &val->key.scale);
+
+    cairo_matrix_init (&original_to_transformed,
+		       sf.shape[0][0], sf.shape[0][1],
+		       sf.shape[1][0], sf.shape[1][1],
+		       0, 0);
+
+    cairo_matrix_translate (&original_to_transformed,
+			    val->size.x, val->size.y);
+
+    /* Find the bounding box of the original bitmap under that
+     * transform
+     */
+    x[0] = 0;               y[0] = 0;
+    x[1] = val->size.width; y[1] = 0;
+    x[2] = val->size.width; y[2] = val->size.height;
+    x[3] = 0;               y[3] = val->size.height;
+
+    for (i = 0; i < 4; i++)
+      cairo_matrix_transform_point (&original_to_transformed,
+				    &x[i], &y[i]);
+
+    x_min = floor (x[0]);   y_min = floor (y[0]);
+    x_max =  ceil (x[0]);   y_max =  ceil (y[0]);
+    
+    for (i = 1; i < 4; i++) {
+	if (x[i] < x_min)
+	    x_min = floor (x[i]);
+	if (x[i] > x_max)
+	    x_max = ceil (x[i]);
+	if (y[i] < y_min)
+	    y_min = floor (y[i]);
+	if (y[i] > y_max)
+	    y_max = ceil (y[i]);
+    }
+
+    /* Adjust the transform so that the bounding box starts at 0,0 ...
+     * this gives our final transform from original bitmap to transformed
+     * bitmap.
+     */
+    original_to_transformed.x0 -= x_min;
+    original_to_transformed.y0 -= y_min;
+
+    /* Create the transformed bitmap
+     */
+    width = x_max - x_min;
+    height = y_max - y_min;
+
+    transformed_to_original = original_to_transformed;
+    status = cairo_matrix_invert (&transformed_to_original);
+    if (status)
+	return status;
+
+    /* We need to pad out the width to 32-bit intervals for cairo-xlib-surface.c */
+    width = (width + 3) & ~3;
+    image = cairo_image_surface_create (CAIRO_FORMAT_A8, width, height);
+    if (!image)
+	return CAIRO_STATUS_NO_MEMORY;
+
+    /* Initialize it to empty
+     */
+    _cairo_surface_fill_rectangle (image, CAIRO_OPERATOR_SOURCE,
+				   CAIRO_COLOR_TRANSPARENT,
+				   0, 0,
+				   width, height);
+
+    /* Draw the original bitmap transformed into the new bitmap
+     */
+    _cairo_pattern_init_for_surface (&pattern, &val->image->base);
+    cairo_pattern_set_matrix (&pattern.base, &transformed_to_original);
+
+    _cairo_surface_composite (CAIRO_OPERATOR_OVER,
+			      &pattern.base, NULL, image,
+			      0, 0, 0, 0, 0, 0,
+			      width,
+			      height);
+
+    _cairo_pattern_fini (&pattern.base);
+
+    /* Now update the cache entry for the new bitmap, recomputing
+     * the origin based on the final transform.
+     */
+    origin_x = - val->size.x;
+    origin_y = - val->size.y;
+    cairo_matrix_transform_point (&original_to_transformed,
+				  &origin_x, &origin_y);
+
+    old_image = val->image;
+    val->image = (cairo_image_surface_t *)image;
+    cairo_surface_destroy (&old_image->base);
+
+    val->size.width = width;
+    val->size.height = height;
+    val->size.x = - floor (origin_x + 0.5);
+    val->size.y = - floor (origin_y + 0.5);
+    
+    return status;
+}
+
 static cairo_status_t 
 _cairo_ft_unscaled_font_create_glyph (void                            *abstract_font,
 				      cairo_image_glyph_cache_entry_t *val)
 {
     ft_unscaled_font_t *unscaled = abstract_font;
     FT_GlyphSlot glyphslot;
-    unsigned int width, height, stride;
     FT_Face face;
-    FT_Outline *outline;
-    FT_BBox cbox;
-    FT_Bitmap bitmap;
     FT_Glyph_Metrics *metrics;
     cairo_status_t status = CAIRO_STATUS_SUCCESS;
 
@@ -565,70 +902,24 @@ _cairo_ft_unscaled_font_create_glyph (void                            *abstract_
 
     val->extents.x_advance = DOUBLE_FROM_26_6 (face->glyph->metrics.horiAdvance) / unscaled->x_scale;
     val->extents.y_advance = 0 / unscaled->y_scale;
+
+    if (glyphslot->format == FT_GLYPH_FORMAT_OUTLINE)
+	status = _render_glyph_outline (face, val);
+    else
+	status = _render_glyph_bitmap (face, val);
     
-    outline = &glyphslot->outline;
+    if (unscaled->have_shape &&
+	(unscaled->face->face_flags & FT_FACE_FLAG_SCALABLE) == 0)
+	status = _transform_glyph_bitmap (val);
 
-    FT_Outline_Get_CBox (outline, &cbox);
-
-    cbox.xMin &= -64;
-    cbox.yMin &= -64;
-    cbox.xMax = (cbox.xMax + 63) & -64;
-    cbox.yMax = (cbox.yMax + 63) & -64;
-    
-    width = (unsigned int) ((cbox.xMax - cbox.xMin) >> 6);
-    height = (unsigned int) ((cbox.yMax - cbox.yMin) >> 6);
-    stride = (width + 3) & -4;
-    
-    if (width * height == 0) {
-	val->image = NULL;
-    } else  {
-
-	bitmap.pixel_mode = ft_pixel_mode_grays;
-	bitmap.num_grays  = 256;
-	bitmap.width = width;
-	bitmap.rows = height;
-	bitmap.pitch = stride;   
-	bitmap.buffer = calloc (1, stride * height);
-	
-	if (bitmap.buffer == NULL) {
-	    status = CAIRO_STATUS_NO_MEMORY;
-	    goto FAIL;
-	}
-	
-	FT_Outline_Translate (outline, -cbox.xMin, -cbox.yMin);
-	
-	if (FT_Outline_Get_Bitmap (glyphslot->library, outline, &bitmap) != 0) {
-	    free (bitmap.buffer);
-	    status = CAIRO_STATUS_NO_MEMORY;
-	    goto FAIL;
-	}
-	
-	val->image = (cairo_image_surface_t *)
-	cairo_image_surface_create_for_data (bitmap.buffer,
-					     CAIRO_FORMAT_A8,
-					     width, height, stride);
-	if (val->image == NULL) {
-	    free (bitmap.buffer);
-	    status = CAIRO_STATUS_NO_MEMORY;
-	    goto FAIL;
-	}
-	
-	_cairo_image_surface_assume_ownership_of_data (val->image);
-    }
-
-    /*
-     * Note: the font's coordinate system is upside down from ours, so the
-     * Y coordinate of the control box needs to be negated.
-     */
-
-    val->size.width = (unsigned short) width;
-    val->size.height = (unsigned short) height;
-    val->size.x =   (short) (cbox.xMin >> 6);
-    val->size.y = - (short) (cbox.yMax >> 6);
-    
  FAIL:
+    if (status && val->image) {
+	cairo_surface_destroy (&val->image->base);
+	val->image = NULL;
+    }
+	    
     _ft_unscaled_font_unlock_face (unscaled);
-    
+
     return status;
 }
 
@@ -731,6 +1022,12 @@ _ft_scaled_font_create (ft_unscaled_font_t   *unscaled,
     _cairo_scaled_font_init (&f->base, font_matrix, ctm, &cairo_ft_scaled_font_backend);
 
     return (cairo_scaled_font_t *)f;
+}
+
+cairo_bool_t
+_cairo_scaled_font_is_ft (cairo_scaled_font_t *scaled_font)
+{
+    return scaled_font->backend == &cairo_ft_scaled_font_backend;
 }
 
 static cairo_status_t

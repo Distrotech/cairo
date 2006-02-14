@@ -5,7 +5,7 @@ AC_INIT(src/cairo.h)
 dnl ===========================================================================
 
 # Package version number, (as distinct from shared library version)
-CAIRO_VERSION=0.5.1
+CAIRO_VERSION=0.5.2
 
 # libtool shared library version
 
@@ -215,7 +215,7 @@ AC_ARG_ENABLE(glitz,
   [use_glitz=$enableval], [use_glitz=yes])
 
 if test "x$use_glitz" = "xyes"; then
-  PKG_CHECK_MODULES(GLITZ, glitz >= 0.4.0, [
+  PKG_CHECK_MODULES(GLITZ, glitz >= 0.4.4, [
     GLITZ_REQUIRES=glitz
     use_glitz=yes], [use_glitz="no (requires glitz http://freedesktop.org/Software/glitz)"])
 fi
@@ -233,7 +233,7 @@ AC_SUBST(GLITZ_REQUIRES)
 
 dnl ===========================================================================
 
-PKG_CHECK_MODULES(PIXMAN, libpixman >= 0.1.4)
+PKG_CHECK_MODULES(PIXMAN, libpixman >= 0.1.5)
 CAIRO_CFLAGS="$CAIRO_CFLAGS $PIXMAN_CFLAGS"
 CAIRO_LIBS="$CAIRO_LIBS $PIXMAN_LIBS"
 
@@ -304,6 +304,14 @@ if test "x$use_freetype" = "xyes"; then
   FT_FONT_FEATURE="#define CAIRO_HAS_FT_FONT 1"
 fi
 AC_SUBST(FT_FONT_FEATURE)
+
+dnl ===========================================================================
+
+#
+# The FreeType backend uses pthread locking when avaialble
+#
+
+AC_CHECK_HEADERS([pthread.h])
 
 dnl ===========================================================================
 

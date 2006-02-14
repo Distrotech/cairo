@@ -338,6 +338,7 @@ cleanup_xcb (void *closure)
 
     XCBFreePixmap (xtc->c, xtc->drawable.pixmap);
     XCBDisconnect (xtc->c);
+    free (xtc);
 }
 #endif
 
@@ -388,6 +389,7 @@ cleanup_xlib (void *closure)
 
     XFreePixmap (xtc->dpy, xtc->pixmap);
     XCloseDisplay (xtc->dpy);
+    free (xtc);
 }
 #endif
 
@@ -401,7 +403,6 @@ cairo_test_for_target (cairo_test_t *test,
     cairo_t *cr;
     char *png_name, *ref_name, *diff_name;
     char *srcdir;
-    int pixels_changed;
     cairo_test_status_t ret;
 
     /* Get the strings ready that we'll need. */
@@ -420,7 +421,8 @@ cairo_test_for_target (cairo_test_t *test,
 					       &target->closure);
     if (surface == NULL) {
 	cairo_test_log ("Error: Failed to set %s target\n", target->name);
-	return CAIRO_TEST_FAILURE;
+	ret = CAIRO_TEST_UNTESTED;
+	goto UNWIND_STRINGS;
     }
 
     cr = cairo_create (surface);
@@ -436,40 +438,39 @@ cairo_test_for_target (cairo_test_t *test,
     /* Then, check all the different ways it could fail. */
     if (status) {
 	cairo_test_log ("Error: Function under test failed\n");
-	return status;
+	ret = status;
+	goto UNWIND_CAIRO;
     }
 
     if (cairo_status (cr) != CAIRO_STATUS_SUCCESS) {
 	cairo_test_log ("Error: Function under test left cairo status in an error state: %s\n",
 			cairo_status_to_string (cairo_status (cr)));
-	return CAIRO_TEST_FAILURE;
+	ret = CAIRO_TEST_FAILURE;
+	goto UNWIND_CAIRO;
     }
 
     /* Skip image check for tests with no image (width,height == 0,0) */
-    if (test->width == 0 || test->height == 0) {
-	cairo_destroy (cr);
-	return CAIRO_TEST_SUCCESS;
+    if (test->width != 0 && test->height != 0) {
+	int pixels_changed;
+	cairo_surface_write_to_png (surface, png_name);
+	pixels_changed = image_diff (png_name, ref_name, diff_name);
+	if (pixels_changed) {
+	    if (pixels_changed > 0)
+		cairo_test_log ("Error: %d pixels differ from reference image %s\n",
+				pixels_changed, ref_name);
+	    ret = CAIRO_TEST_FAILURE;
+	    goto UNWIND_CAIRO;
+	}
     }
 
-    cairo_surface_write_to_png (surface, png_name);
+    ret = CAIRO_TEST_SUCCESS;
 
+UNWIND_CAIRO:
     cairo_destroy (cr);
-
     cairo_surface_destroy (surface);
-
     target->cleanup_target (target->closure);
 
-    pixels_changed = image_diff (png_name, ref_name, diff_name);
-
-    if (pixels_changed) {
-	ret = CAIRO_TEST_FAILURE;
-	if (pixels_changed > 0)
-	    cairo_test_log ("Error: %d pixels differ from reference image %s\n",
-		     pixels_changed, ref_name);
-    } else {
-	ret = CAIRO_TEST_SUCCESS;
-    }
-
+UNWIND_STRINGS:
     free (png_name);
     free (ref_name);
     free (diff_name);
@@ -478,7 +479,8 @@ cairo_test_for_target (cairo_test_t *test,
 }
 
 static cairo_test_status_t
-cairo_test_real (cairo_test_t *test, cairo_test_draw_function_t draw)
+cairo_test_expecting (cairo_test_t *test, cairo_test_draw_function_t draw,
+		      cairo_test_status_t expectation)
 {
     int i;
     cairo_test_status_t status, ret;
@@ -511,20 +513,46 @@ cairo_test_real (cairo_test_t *test, cairo_test_draw_function_t draw)
 	fprintf (stderr, "Error opening log file: %s\n", log_name);
 	cairo_test_log_file = stderr;
     }
+    free (log_name);
 
-    ret = CAIRO_TEST_SUCCESS;
+    /* The intended logic here is that we return overall SUCCESS
+     * iff. there is at least one tested backend and that all tested
+     * backends return SUCCESS. In other words:
+     *
+     *	if      any backend FAILURE
+     *		-> FAILURE
+     *	else if all backends UNTESTED
+     *		-> FAILURE
+     *	else    (== some backend SUCCESS)
+     *		-> SUCCESS
+     */
+    ret = CAIRO_TEST_UNTESTED;
     for (i=0; i < sizeof(targets)/sizeof(targets[0]); i++) {
 	cairo_test_target_t *target = &targets[i];
 	cairo_test_log ("Testing %s with %s target\n", test->name, target->name);
 	printf ("%s-%s:\t", test->name, target->name);
 	status = cairo_test_for_target (test, draw, target);
-	if (status) {
-	    printf ("FAIL\n");
-	    ret = status;
-	} else {
+	switch (status) {
+	case CAIRO_TEST_SUCCESS:
 	    printf ("PASS\n");
+	    if (ret == CAIRO_TEST_UNTESTED)
+		ret = CAIRO_TEST_SUCCESS;
+	    break;
+	case CAIRO_TEST_UNTESTED:
+	    printf ("UNTESTED\n");
+	    break;
+	default:
+	case CAIRO_TEST_FAILURE:
+	    if (expectation == CAIRO_TEST_FAILURE)
+		printf ("XFAIL\n");
+	    else
+		printf ("FAIL\n");
+	    ret = status;
+	    break;
 	}
     }
+    if (ret == CAIRO_TEST_UNTESTED)
+	ret = CAIRO_TEST_FAILURE;
 
     fclose (cairo_test_log_file);
 
@@ -537,43 +565,50 @@ cairo_test_expect_failure (cairo_test_t		      *test,
 			   const char		      *because)
 {
     printf ("\n%s is expected to fail:\n\t%s\n", test->name, because);
-    return cairo_test_real (test, draw);
+    return cairo_test_expecting (test, draw, CAIRO_TEST_FAILURE);
 }
 
 cairo_test_status_t
 cairo_test (cairo_test_t *test, cairo_test_draw_function_t draw)
 {
     printf ("\n");
-    return cairo_test_real (test, draw);
+    return cairo_test_expecting (test, draw, CAIRO_TEST_SUCCESS);
 }
 
-cairo_pattern_t *
-cairo_test_create_png_pattern (cairo_t *cr, const char *filename)
+cairo_surface_t *
+cairo_test_create_surface_from_png (const char *filename)
 {
     cairo_surface_t *image;
-    cairo_pattern_t *pattern;
-    unsigned char *buffer;
-    unsigned int w, h, stride;
-    read_png_status_t status;
     char *srcdir = getenv ("srcdir");
 
-    status = read_png_argb32 (filename, &buffer, &w,&h, &stride);
-    if (status != READ_PNG_SUCCESS) {
+    image = cairo_image_surface_create_from_png (filename);
+    if (image == NULL) {
 	if (srcdir) {
 	    char *srcdir_filename;
 	    xasprintf (&srcdir_filename, "%s/%s", srcdir, filename);
-	    status = read_png_argb32 (srcdir_filename, &buffer, &w,&h, &stride);
+	    image = cairo_image_surface_create_from_png (srcdir_filename);
 	    free (srcdir_filename);
 	}
+	if (image == NULL)
+	    return NULL;
     }
-    if (status != READ_PNG_SUCCESS)
-	return NULL;
 
-    image = cairo_image_surface_create_for_data (buffer, CAIRO_FORMAT_ARGB32,
-						 w, h, stride);
+    return image;
+}
+
+cairo_pattern_t *
+cairo_test_create_pattern_from_png (const char *filename)
+{
+    cairo_surface_t *image;
+    cairo_pattern_t *pattern;
+
+    image = cairo_test_create_surface_from_png (filename);
 
     pattern = cairo_pattern_create_for_surface (image);
+
     cairo_pattern_set_extend (pattern, CAIRO_EXTEND_REPEAT);
+
+    cairo_surface_destroy (image);
 
     return pattern;
 }

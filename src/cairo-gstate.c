@@ -903,7 +903,7 @@ _cairo_gstate_mask (cairo_gstate_t  *gstate,
 	cairo_surface_t *intermediate;
 
 	intermediate = cairo_surface_create_similar (gstate->clip.surface,
-						     CAIRO_FORMAT_A8,
+						     CAIRO_CONTENT_ALPHA,
 						     extents.width,
 						     extents.height);
 	if (intermediate == NULL)
@@ -952,6 +952,7 @@ _cairo_gstate_mask (cairo_gstate_t  *gstate,
 
     if (gstate->clip.surface)
 	_cairo_pattern_fini (&intermediate_pattern.base);
+    _cairo_pattern_fini (&pattern.base);
 
     return status;
 }
@@ -1242,7 +1243,7 @@ _composite_traps_intermediate_surface (cairo_gstate_t    *gstate,
     translate_traps (traps, -extents->x, -extents->y);
 
     intermediate = _cairo_surface_create_similar_solid (gstate->clip.surface,
-							CAIRO_FORMAT_A8,
+							CAIRO_CONTENT_ALPHA,
 							extents->width,
 							extents->height,
 							CAIRO_COLOR_TRANSPARENT);
@@ -1375,9 +1376,6 @@ _cairo_gstate_clip_and_composite_trapezoids (cairo_gstate_t *gstate,
     
     if (traps->num_traps == 0)
 	return CAIRO_STATUS_SUCCESS;
-
-    if (gstate->target == NULL)
-	return CAIRO_STATUS_NO_TARGET_SURFACE;
 
     status = _cairo_traps_extract_region (traps, &trap_region);
     if (status)
@@ -1515,18 +1513,12 @@ BAIL:
 cairo_status_t
 _cairo_gstate_copy_page (cairo_gstate_t *gstate)
 {
-    if (gstate->target == NULL)
-	return CAIRO_STATUS_NO_TARGET_SURFACE;
-
     return _cairo_surface_copy_page (gstate->target);
 }
 
 cairo_status_t
 _cairo_gstate_show_page (cairo_gstate_t *gstate)
 {
-    if (gstate->target == NULL)
-	return CAIRO_STATUS_NO_TARGET_SURFACE;
-
     return _cairo_surface_show_page (gstate->target);
 }
 
@@ -1727,7 +1719,7 @@ _cairo_gstate_intersect_clip_mask (cairo_gstate_t *gstate,
 	_cairo_rectangle_intersect (&surface_rect, &gstate->clip.surface_rect);
 
     surface = _cairo_surface_create_similar_solid (gstate->target,
-						   CAIRO_FORMAT_A8,
+						   CAIRO_CONTENT_ALPHA,
 						   surface_rect.width,
 						   surface_rect.height,
 						   CAIRO_COLOR_WHITE);
@@ -2138,9 +2130,9 @@ _cairo_gstate_show_glyphs (cairo_gstate_t *gstate,
 	    status = CAIRO_STATUS_SUCCESS;
 	    goto BAIL1;
 	}
-	
+
 	intermediate = _cairo_surface_create_similar_solid (gstate->clip.surface,
-							    CAIRO_FORMAT_A8,
+							    CAIRO_CONTENT_ALPHA,
 							    extents.width,
 							    extents.height,
 							    CAIRO_COLOR_TRANSPARENT);

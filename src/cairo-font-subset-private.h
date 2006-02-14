@@ -1,6 +1,6 @@
 /* cairo - a vector graphics library with display and print output
  *
- * Copyright © 2005 Red Hat, Inc
+ * Copyright © 2004 Red Hat, Inc
  *
  * This library is free software; you can redistribute it and/or
  * modify it either under the terms of the GNU Lesser General Public
@@ -30,40 +30,39 @@
  * The Initial Developer of the Original Code is Red Hat, Inc.
  *
  * Contributor(s):
- *      Graydon Hoare <graydon@redhat.com>
- *	Owen Taylor <otaylor@redhat.com>
+ *	Kristian Høgsberg <krh@redhat.com>
  */
 
-#ifndef CAIRO_FT_PRIVATE_H
-#define CAIRO_FT_PRIVATE_H
+#include "cairoint.h"
 
-#include <cairo-ft.h>
-#include <cairoint.h>
+#ifndef CAIRO_FONT_SUBSET_PRIVATE_H
+#define CAIRO_FONT_SUBSET_PRIVATE_H
 
-#if CAIRO_HAS_FT_FONT
+typedef struct cairo_font_subset_backend cairo_font_subset_backend_t;
+typedef struct cairo_font_subset cairo_font_subset_t;
+struct cairo_font_subset {
+    cairo_font_subset_backend_t *backend;
+    cairo_unscaled_font_t *unscaled_font;
+    unsigned int font_id;
+    char *base_font;
+    int num_glyphs;
+    int *widths;
+    long x_min, y_min, x_max, y_max;
+    long ascent, descent;
+};
 
-CAIRO_BEGIN_DECLS
 
-cairo_bool_t
-_cairo_unscaled_font_is_ft (cairo_unscaled_font_t *unscaled_font);
+cairo_private int
+_cairo_font_subset_use_glyph (cairo_font_subset_t *font, int glyph);
 
-cairo_bool_t
-_cairo_scaled_font_is_ft (cairo_scaled_font_t *scaled_font);
-
-/* These functions are needed by the PDF backend, which needs to keep track of the
- * the different fonts-on-disk used by a document, so it can embed them
- */
-cairo_private cairo_unscaled_font_t *
-_cairo_ft_scaled_font_get_unscaled_font (cairo_scaled_font_t *scaled_font);
-
-cairo_private FT_Face
-_cairo_ft_unscaled_font_lock_face (cairo_unscaled_font_t *unscaled_font);
+cairo_private cairo_status_t
+_cairo_font_subset_generate (cairo_font_subset_t *font,
+			    const char **data, unsigned long *length);
 
 cairo_private void
-_cairo_ft_unscaled_font_unlock_face (cairo_unscaled_font_t *unscaled_font);
+_cairo_font_subset_destroy (cairo_font_subset_t *font);
 
-CAIRO_END_DECLS
+cairo_private cairo_font_subset_t *
+_cairo_font_subset_create (cairo_unscaled_font_t *unscaled_font);
 
-#endif /* CAIRO_HAS_FT_FONT */
-
-#endif /* CAIRO_FT_PRIVATE_H */
+#endif /* CAIRO_FONT_SUBSET_PRIVATE_H */

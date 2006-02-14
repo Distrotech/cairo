@@ -1,3 +1,586 @@
+2005-07-18  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-quartz-surface.c:
+	(_cairo_quartz_surface_acquire_source_image),
+	(_cairo_quartz_surface_set_clip_region): Fix the quartz backend so
+	that it at least compiles again. This change is slipped in before
+	0.5.2 was pushed out and tagged.
+
+2005-07-18  Carl Worth  <cworth@cworth.org>
+
+	* NEWS: Added notes for snapshot 0.5.2
+
+	* configure.in: Increment CAIRO_VERSION to 0.5.2
+
+2005-07-18  Carl Worth  <cworth@cworth.org>
+
+	* test/composite-integer-translate-over-repeat.c (draw): Fix leak
+	of pattern.
+
+2005-07-18  Carl Worth  <cworth@cworth.org>
+
+	* ROADMAP: Note some progress.
+	
+	* test/cairo-test.h:
+	* test/cairo-test.c: (cairo_test_create_surface_from_png),
+	(cairo_test_create_pattern_from_png): New helper function to help
+	create an image surface from a PNG file, while taking the srcdir
+	environment variable into consideration. Rename the pattern
+	creating helper function to match.
+
+	* test/composite-integer-translate-over.c: (draw):
+	* test/composite-integer-translate-source.c: (draw): Use new
+	cairo_test_create_surface_from_png so that non-srcdir builds work.
+	
+	* test/mask.c: (set_image_pattern):
+	* test/trap-clip.c: (set_image_pattern): Track change in
+	cairo_test_create_pattern_from_png.
+
+2005-07-18  Carl Worth  <cworth@cworth.org>
+
+	* BUGS: Add note that Xlib caches need to be cleand up on close
+	of display.
+
+2005-07-15  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-font.c:
+	* src/cairo-surface.c: Remove cairo_private qualifier from .c
+	files, (we only need it in the .h files).
+
+2005-07-15  Vladimir Vukicevic  <vladimir@pobox.com>
+
+	* src/cairo-xlib-surface.c: (_cairo_xlib_surface_composite,
+	_recategorize_composite_repeat): Use XCopyArea when
+	possible, for optimization and bug workaround.
+
+	* test/composite-integer-translate-{source,over,over-repeat}.c:
+	Exercise XCopyArea, XRenderComposite, and XSetTile/XFillRectangle
+	paths for _cairo_xlib_surface_composite
+
+2005-07-15  Carl Worth  <cworth@cworth.org>
+
+	* test/Makefile.am: Add new check-valgrind target for running the
+	test suite under the influence of valgrind.
+	
+	* test/buffer-diff.c: (image_diff): Fix memory leak when reference
+	image is not found.
+
+2005-07-15  Carl Worth  <cworth@cworth.org>
+
+	* test/mask.c: (set_gradient_pattern), (set_image_pattern),
+	(draw): Fix a few memory leaks (missing cairo_pattern_destroy in 3
+	places).
+
+2005-07-15  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-gstate.c: (_cairo_gstate_mask): Fix memory leak,
+	(missing _cairo_pattern_fini).
+
+2005-07-15  Carl Worth  <cworth@cworth.org>
+
+	* test/cairo-test.c (cairo_test_for_target): Remove errant line of
+	code that was inadvertently committed recently.
+
+2005-07-14  Carl Worth  <cworth@cworth.org>
+
+	* test/surface-finish-twice.c: (draw): Fix leak of surface.
+
+2005-07-14  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-pdf-surface.c: (_cairo_pdf_surface_finish),
+	(_cairo_pdf_document_finish): Call _cairo_array_fini on the
+	several array objects to patch memory leaks.
+
+2005-07-14  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-xlib-surface.c: (_cairo_xlib_surface_composite),
+	(_cairo_xlib_surface_composite_trapezoids),
+	(_cairo_xlib_surface_show_glyphs): Eek. Yet _more_ fixups for
+	_cairo_pattern_release_surface missed earlier.
+
+2005-08-14  Stuart Parmenter  <pavlov@pavlov.net>
+
+	* src/cairo-win32-surface.c: (_cairo_win32_surface_fill_rectangles): 
+	blue and green values were swapped in the DO_SOURCE case.
+
+2005-07-14  Carl Worth  <cworth@cworth.org>
+
+	* test/cairo-test.c: (cairo_test_create_png_pattern): Rewrite to
+	use cairo_image_surface_create_from_png rather than custom
+	read_png_argb32. In addition to being simpler, this eliminates the
+	leak of the image data buffer.
+	
+	* test/trap-clip.c: (set_gradient_pattern), (set_image_pattern):
+	Add calls to cairo_pattern_destroy to close two memory leaks.
+
+2005-07-14  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-pattern.c: (_cairo_pattern_acquire_surfaces): Fix up
+	one more call to _cairo_pattern_release_surface missed in the
+	previous commit.
+
+2005-07-14  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h:
+	* src/cairo-pattern.c: (_cairo_pattern_release_surface): Fix to
+	accept a cairo_pattern_t rather than a cairo_surface_t as the
+	primary argument.
+
+	* src/cairo-image-surface.c: (_cairo_image_surface_composite),
+	(_cairo_image_surface_composite_trapezoids): Track change in
+	_cairo_pattern_release_surface and also pass the appropriate
+	pattern for each acquired surface. The previous backend mismatch
+	was causing memory leaks.
+
+	* src/cairo-xlib-surface.c: (_get_image_surface): Remove stale
+	comment.
+
+	* test/xlib-surface.c: (main): Add missing fclose to keep valgrind
+	happy about memory leaks.
+
+2005-07-14  Carl Worth  <cworth@cworth.org>
+
+	* test/cairo-test.c: (cairo_test_expecting),
+	(cairo_test_expect_failure), (cairo_test): Make the per-backend
+	test results print XFAIL rather than FAIL for expected failures.
+
+2005-07-14  Carl Worth  <cworth@cworth.org>
+
+	* test/cairo-test.c: (cairo_test_real): Fix comment describing
+	test result. It's not enough that all tested backends are
+	successful. We also require that at least one backend is actually
+	tested.
+
+2005-07-14  Carl Worth  <cworth@cworth.org>
+
+	* test/cairo-test.c: (cairo_test_for_target), (cairo_test_real):
+	* test/cairo-test.h: Don't consider a test to fail if it can't
+	create a surface at all (eg. no X server is available). Instead
+	mark this backend as untested and only consider the overall test a
+	success if all tested backend are successful.
+
+2005-07-14  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-ps-surface.c: (pattern_is_translucent): Add missing
+	(putatively unreachable) return value.
+
+2005-07-14  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-image-surface.c:
+	(_cairo_image_surface_set_clip_region): Remove the copying of the
+	region. This was a workaround for a missing copy bug in libpixman
+	that has since been fixed. So now it was just a memory leak.
+
+2005-07-14  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-png.c (read_png): Patch memory leak of png_info
+	object.
+
+2005-07-14  Carl Worth  <cworth@cworth.org>
+	
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/create-for-png-ref.png:
+	* test/create-for-png.c:
+	* test/create-from-png.c: (draw): Rename create-for-png test to
+	create-from-png to match the naming of the
+	cairo_image_surface_create_from_png function.
+
+2005-07-14  Carl Worth  <cworth@cworth.org>
+
+	* test/cairo-test.c: (cleanup_xcb), (cleanup_xlib),
+	(cairo_test_for_target), (cairo_test_real): Patch a few memory
+	leaks.
+
+2005-07-13  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo-meta-surface.c: (_cairo_meta_surface_replay): Use
+	the _cairo_surface_*() functions when replaying.
+	
+	* src/cairo-ps-surface.c: Fold the "locate fallbacks" pass into
+	the postscript output pass, and add a simple, first implementation
+	of image fallbacks.
+
+2005-07-13  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h:
+	* src/cairo-font.c: (_cairo_simple_font_face_create_font): Rename
+	CAIRO_FONT_BACKEND_DEFAULT to the more accurate
+	CAIRO_SCALED_FONT_BACKEND_DEFAULT.
+
+2005-07-13  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-ft-private.h:
+	* src/cairo-ft-font.c: (_cairo_unscaled_font_is_ft),
+	(_cairo_scaled_font_is_ft): New predicates to allow checking for
+	cairo_ft derivates of generic font type.
+
+	* src/cairo-ps-surface.c: (_cairo_ps_surface_get_font),
+	(_cairo_ps_surface_show_glyphs), (_ps_output_show_glyphs):
+	* src/cairo-pdf-surface.c: (_cairo_pdf_document_get_font),
+	(_cairo_pdf_surface_show_glyphs):
+	* src/cairo-font-subset.c: (_cairo_font_subset_create):
+	Add explicit checks for cairo_ft derivatives of generic fonts
+	rather than just blindly assuming that's what we get.
+
+2005-07-12  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-hash-private.h:
+	* src/cairo-hash.c:
+	(_cairo_hash_table_create): Remove destroy notifier. This
+	simplifies the implementation a bit, and no anticipated use of
+	cairo_hash_table_t in cairo needs the destroy notifier. Most uses
+	will be hash-backed object create/destroy functions.
+	
+	(_cairo_hash_table_destroy): Document that it is now a fatal
+	error to call _cairo_hash_table_destroy on a non-empty hash table.
+
+	(_cairo_hash_table_insert): Document that it is now a fatal
+	error to insert an entry with a key that matches an existing
+	entry.
+
+	(_cairo_hash_table_random_entry): Add predicate function so that
+	the user can select a random entry satisying the given predicate.
+
+	(_cairo_hash_table_remove): Change return type to void since
+	failure is really not possible here.
+
+2005-07-11  Carl Worth  <cworth@cworth.org>
+
+	* ROADMAP: Add cache lock deadlock problem to roadmap for 0.5.2.
+	Fix typo (cairo_ft_options_t -> cairo_font_options_t).
+	Add note that glyph measurement performance needs to improve.
+
+	* src/cairoint.h: Disable mutex locks, (making the caches
+	non-thread-safe again, just like they were in the last snapshot
+	and before).
+
+2005-07-11  Carl Worth  <cworth@cworth.org>
+
+	* ROADMAP: Note that the cairo_content_t work is done.
+	Note progress on cairo_meta_surface_t, ARGB text, and group
+	support.
+	Add recent API change proposals (cairo_ft_options_t,
+	cairo_xlib_surface_create needs to be screen aware, and
+	cairo_xlib_surface_set_drawable).
+
+	* src/cairo-arc.c (_arc_segments_needed): Note that this function
+	is computing an incorrect result.
+
+2005-07-08  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h: Give enum tags an underscore prefix to match the
+	style of the struct tags. Add new cairo_content_t and change
+	cairo_surface_create_similar to accept a cairo_content_t rather
+	than a cairo_format_t.
+
+	* src/cairoint.h:
+	* src/cairo-glitz-surface.c: (_cairo_glitz_surface_create_similar):
+	* src/cairo-image-surface.c: (_cairo_image_surface_create_similar):
+	* src/cairo-meta-surface.c: (_cairo_meta_surface_create_similar):
+	* src/cairo-pdf-surface.c: (_cairo_pdf_surface_create_similar):
+	* src/cairo-ps-surface.c: (_cairo_ps_surface_create_similar):
+	* src/cairo-quartz-surface.c: (_cairo_quartz_surface_create_similar):
+	* src/cairo-surface.c: (_cairo_surface_create_similar_scratch),
+	(cairo_surface_create_similar),
+	(_cairo_surface_create_similar_solid):
+	* src/cairo-win32-surface.c: (_cairo_win32_surface_create_similar),
+	(_cairo_win32_surface_get_subimage):
+	* src/cairo-xcb-surface.c: (_cairo_xcb_surface_create_similar),
+	(_cairo_xcb_surface_clone_similar):
+	* src/cairo-xlib-surface.c: (_cairo_xlib_surface_create_similar),
+	(_cairo_xlib_surface_clone_similar): Change surface backend
+	create_similar call to accept a cairo_content_t rather than a
+	cairo_format_t.
+	
+	* src/cairo-glitz-surface.c: (_glitz_format_from_content),
+	(_cairo_glitz_surface_clone_similar),
+	(_cairo_glitz_pattern_acquire_surface),
+	(_cairo_glitz_surface_fill_rectangles),
+	(_cairo_glitz_surface_composite_trapezoids):
+	* src/cairo-gstate.c: (_cairo_gstate_mask),
+	(_composite_traps_intermediate_surface),
+	(_cairo_gstate_intersect_clip_mask), (_cairo_gstate_show_glyphs):
+	* src/cairo-image-surface.c: (cairo_image_surface_create),
+	(cairo_image_surface_create_for_data),
+	(_cairo_format_from_content), (_cairo_content_from_format):
+	* src/cairo-pattern.c: (_cairo_pattern_acquire_surface_for_solid):
+	* src/cairo-ps-surface.c: (emit_image):
+	* test/mask.c: (mask_polygon), (draw):
+	* test/pixman-rotate.c: (draw):
+	* test/source-clip.c: (draw): Fix all calls into create_similar to
+	pass a cairo_content_t rather than a cairo_format_t.
+
+2005-07-07  Carl Worth  <cworth@cworth.org>
+
+	* CODING_STYLE: Add a missing word.
+	
+	* ROADMAP: Note that the BadMatch bug has been resolved.
+
+2005-07-06  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h:
+	* src/cairo.c: (cairo_status_to_string): Remove
+	CAIRO_STATUS_NO_TARGET_SURFAC and add CAIRO_STATUS_INVALID_STATUS.
+	
+	* src/cairo-gstate.c:
+	(_cairo_gstate_clip_and_composite_trapezoids),
+	(_cairo_gstate_copy_page), (_cairo_gstate_show_page): Don't check
+	for gstate->target == NULL anymore as the API now guarantees it
+	never occurs.
+	
+	* src/cairo.c: (cairo_append_path): Check that path->status is a
+	valid status value and cause an INVALID_STATUS error otherwise.
+
+	* test/path-data.c: (main): Test the new
+	CAIRO_STATUS_INVALID_STATUS error case in cairo_append_path.
+
+2005-07-06  Carl Worth  <cworth@cworth.org>
+
+	* configure.in: Require libpixman >= 0.1.5, (since 0.1.4 crashes
+	on some X servers).
+
+2005-07-05  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-ps-surface.c: Disable the compilation of the
+	_ps_locate_fallbacks code which, inaddition to being broken,
+	appears to not currently be used.
+
+2005-07-04  David Reveman  <davidr@novell.com>
+
+	* configure.in: Require glitz >= 0.4.4.
+
+	* src/cairo-glitz-surface.c: Use frame buffer objects instead of
+	pbuffers for accelerated offscreen drawing.
+	(_cairo_glitz_pattern_acquire_surface): Minor improvement to gradient
+	pattern creation.
+
+2005-07-01  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo-ps-surface.c: Rewrite postscript backend to generate
+	more interesting output than the current big-image implementation,
+	using meta surfaces for font subsetting and image fallbacks.
+	
+	* src/cairo-meta-surface.c: Remove obsolete comment.
+	
+	* src/cairoint.h:
+	* src/cairo-output-stream.c: Make a couple of stylistic changes
+	and add _cairo_output_stream_write_hex_string.
+	
+	* src/cairo-surface.c: Add _cairo_surface_intersect_clip_path so
+	we can replay path clipping.
+
+2005-07-01  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo-meta-surface-private.h: 
+	* src/cairo-meta-surface.c: Add meta surface implementation.
+
+	* src/Makefile.am (libcairo_la_SOURCES): Add cairo-meta-surface.c
+	and cairo-meta-surface-private.h
+	
+2005-06-29  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-hash.c (_cairo_hash_table_resize): Remove debugging
+	printfs.
+
+2005-06-29  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-hash-private.h:
+	* src/cairo-hash.c (_cairo_hash_table_random_entry): Add
+	_cairo_hash_table_random_entry.
+
+	* src/cairo-hash.c: (_destroy_entry): Fix to update live_entries.
+
+	* src/cairo-hash.c: (_cairo_hash_table_lookup_internal): style
+	changes.
+
+	* src/cairo-hash.c (_cairo_hash_table_resize): Add code to shrink
+	table as well as to grow it.
+	
+	* src/cairo-hash.c (_cairo_hash_table_insert),
+	(_cairo_hash_table_remove): Call new version of resize so that
+	table will grow or shrink as needed on insert and remove.
+
+2005-06-29  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-hash-private.h:
+	* src/cairo-hash.c: (_cairo_hash_table_create), (_destroy_entry),
+	(_cairo_hash_table_destroy), (_cairo_hash_table_lookup_internal),
+	(_cairo_hash_table_resize), (_cairo_hash_table_lookup),
+	(_cairo_hash_table_insert), (_cairo_hash_table_remove),
+	(_cairo_hash_table_foreach): Rewrite hash table to use a single
+	cairo_hash_entry_t* rather than void *key and void *value. This is
+	slightly more painful to use, but lends itself to a more
+	memory-efficient implementation. Add documentation.
+
+2005-06-29  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-hash-private.h:
+	* src/cairo-hash.c: (_cairo_hash_table_create),
+	(_cairo_hash_table_destroy_entry), (_cairo_hash_table_destroy),
+	(_cairo_hash_table_lookup_internal), (_cairo_hash_table_resize),
+	(_cairo_hash_table_lookup), (_cairo_hash_table_insert),
+	(_cairo_hash_table_remove), (_cairo_hash_table_foreach): Rework
+	the cache code as a hast table with a much simpler interface, (no
+	object derviation is required to use it).
+	
+	* src/cairoint.h: Remove extraneous prototype for non-existent
+	_cairo_cache_reference.
+
+2005-06-28  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo-pattern.c (cairo_pattern_create_rgb)
+	(cairo_pattern_create_rgba): New functions to create a
+	cairo_pattern_t corresponding to a solid color and a translucent
+	color respectively.  Document a few pattern functions.
+
+2005-06-28  T Rowley  <tim.rowley@gmail.com>
+
+	reviewed by: otaylor
+	
+	* src/cairo-win32-font.c (_cairo_win32_scaled_font_glyph_path):
+	Implement.
+
+2005-06-28  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-xlib-surface.c (_cairo_xlib_surface_create_internal): Also
+	flag older XFree86 servers as buggy-repeat.
+
+2005-06-28  T Rowley  <tim.rowley@gmail.com>
+
+	* src/cairo-atsui-font.c (_cairo_atsui_font_text_to_glyphs):
+	Prevent crash on empty string.
+
+2005-06-25  Keith Packard  <keithp@keithp.com>
+
+	reviewed by: cworth
+
+	* configure.in:
+	* src/cairo-cache.c: (_cairo_cache_shrink_to),
+	(_cairo_cache_lookup):
+	* src/cairo-font.c: (_lock_global_simple_cache),
+	(_unlock_global_simple_cache), (_lock_global_font_cache),
+	(_unlock_global_font_cache),
+	(_cairo_lock_global_image_glyph_cache),
+	(_cairo_unlock_global_image_glyph_cache),
+	(_cairo_get_global_image_glyph_cache):
+	* src/cairo-ft-font.c: (_lock_global_ft_cache),
+	(_unlock_global_ft_cache):
+	* src/cairo-xlib-surface.c: (_xlib_glyphset_cache_create_entry),
+	(_xlib_glyphset_cache_destroy_entry), (_lock_xlib_glyphset_caches),
+	(_unlock_xlib_glyphset_caches), (_get_glyphset_cache),
+	(_cairo_xlib_surface_show_glyphs):
+	* src/cairoint.h:
+	Provide locking macros, implement with pthreads.
+	
+	Add _cairo_cache_shrink_to which reduces cache memory usage
+	to a specified level.
+
+	Change global glyph and xlib glyphset caches behaviour to only
+	shrink cache on unlock.  This is done by telling the cache code to
+	never shrink (max_memory == 0), and then manually shrinking using
+	_cairo_cache_shrink_to from the unlock function.
+
+	Fix Carl's variable renaming mixing (cache = cache).
+
+2005-06-24  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-ft-font.c (_transform_glyph_bitmap): Add mostly
+	useless (other than perhaps 90-degree rotation) code for
+	transforming bitmap glyphs.
+
+2005-06-25  Carl Worth  <cworth@cworth.org>
+
+	From:		J. Ali Harlow" <ali@avrc.city.ac.uk>
+	Reviewed by:	Vladimir Vukicevic <vladimirv@gmail.com>
+
+	* test/Makefile.am:
+	* src/cairo-win32-surface.c: (_cairo_win32_surface_create_for_dc),
+	(_cairo_win32_surface_create_similar),
+	(_cairo_win32_surface_create_dib),
+	(_cairo_win32_surface_composite), (categorize_solid_dest_operator),
+	(_cairo_win32_surface_set_clip_region): Update win32 backend to
+	match current API, so it actually builds once again.
+
+2005-06-25  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-win32-surface.c: (_cairo_win32_surface_create_for_dc),
+	(_cairo_win32_surface_create_similar),
+	(_cairo_win32_surface_create_dib),
+	(_cairo_win32_surface_composite), (categorize_solid_dest_operator),
+	(_cairo_win32_surface_set_clip_region):
+	* test/Makefile.am:
+
+2005-06-24  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-ft-font.c: (_cairo_ft_unscaled_font_create_glyph):
+	Remove stray character.
+
+2005-06-24  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-xlib-surface.c: (_xlib_glyphset_cache_create_entry),
+	(_glyphset_cache_entry_reference),
+	(_xlib_glyphset_cache_destroy_entry), (_get_glyphset_cache),
+	(_cairo_xlib_surface_show_glyphs32),
+	(_cairo_xlib_surface_show_glyphs16),
+	(_cairo_xlib_surface_show_glyphs8),
+	(_cairo_xlib_surface_show_glyphs): Prefer descriptive variable
+	names over single-character names. Remove unneeded XGlpyhInfo
+	field from glyphset_cache_entry_t.
+
+2005-06-24  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-ft-font.c (_render_glyph_bitmap): Handle rendering
+	bitmap glyphslots as well as outline glyphslots.
+
+	* src/cairo-ft-font.c (_ft_unscaled_font_set_scale): When setting
+	the scale for a non-scalable font, use the nearest available
+	size (FreeType won't set the glyph metrics otherwise.)
+
+2005-06-23  Carl Worth  <cworth@cworth.org>
+
+	* ROADMAP: Add ARGB text to 1.0 roadmap.
+
+2005-05-17  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-png.c (write_png): Only unpremultiply ARGB32 data, 
+	do a simpler conversion for RGB24 data (fixes #2297)
+	Call png_write_info() *before* we set up the write conversion...
+	it doesn't work after.
+
+2005-06-23  Carl Worth  <cworth@cworth.org>
+
+	* ROADMAP: Add workaround for Render's overlapping source/dest bug
+	to the 0.5.2 roadmap.
+
+2005-06-22  Carl Worth  <cworth@cworth.org>
+
+	* ROADMAP: Update ROADMAP with some comments on 0.5.2.
+	Add link to BadMatch bug.
+
+	* src/cairo.c: Add documentation for cairo_set_source_surface and
+	fix some typos in other documentation blocks.
+
+2005-06-22  Øyvind Kolås  <pippin@freedesktop.org>
+
+	* doc/public/language-bindings.xml: spelling and whitespace fix.
+
+2005-06-21  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo-pdf-surface.c: Split out font subsetting code from here,
+
+	* src/cairo-font-subset-private.h: 
+	* src/cairo-font-subset.c: and put it here.
+	
+2005-06-21  T Rowley  <tim.rowley@gmail.com>
+
+	* src/cairo-atsui-font.c: allow building against < 10.3 SDK.
+
+2005-06-20  Carl Worth  <cworth@cworth.org>
+
+	* configure.in: Add -head to CAIRO_VERSION after tagging with
+	SNAPSHOT_0_5_1.
+
 2005-06-20  Carl Worth  <cworth@cworth.org>
 
 	* Makefile.am: Force distcheck to enable gtk-doc.

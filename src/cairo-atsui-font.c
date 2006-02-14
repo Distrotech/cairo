@@ -38,7 +38,19 @@
 #include "cairo-atsui.h"
 #include "cairoint.h"
 #include "cairo.h"
+#if 0
 #include <iconv.h>
+#endif
+
+/*
+ * FixedToFloat/FloatToFixed are 10.3+ SDK items - include definitions
+ * here so we can use older SDKs.
+ */
+#ifndef FixedToFloat
+#define fixed1              ((Fixed) 0x00010000L)
+#define FixedToFloat(a)     ((float)(a) / fixed1)
+#define FloatToFixed(a)     ((Fixed)((float)(a) * fixed1))
+#endif
 
 typedef struct {
     cairo_scaled_font_t base;
@@ -240,28 +252,31 @@ _cairo_atsui_font_text_to_glyphs(void		*abstract_font,
     ItemCount glyphCount, charCount;
     UniChar *theText;
 
-    err = ATSUCreateTextLayout(&textLayout);
-
-#if 1
+    // liberal estimate of size
     charCount = strlen(utf8);
+
+    if (charCount == 0) {
+       *glyphs = NULL;
+       *num_glyphs = 0;
+       return CAIRO_STATUS_SUCCESS;
+    }
 
     // Set the text in the text layout object, so we can measure it
     theText = (UniChar *) malloc(charCount * sizeof(UniChar));
 
+#if 1
     for (i = 0; i < charCount; i++) {
         theText[i] = utf8[i];
     }
 #endif
 
 #if 0
-    // Set the text in the text layout object, so we can measure it
-    charCount = strlen(utf8);
-    theText = (UniChar *) malloc(charCount * sizeof(UniChar));
-
     size_t inBytes = charCount, outBytes = charCount;
     iconv_t converter = iconv_open("UTF-8", "UTF-16");
     charCount = iconv(converter, utf8, &inBytes, theText, &outBytes);
 #endif
+
+    err = ATSUCreateTextLayout(&textLayout);
 
     err = ATSUSetTextPointerLocation(textLayout,
                                      theText, 0, charCount, charCount);

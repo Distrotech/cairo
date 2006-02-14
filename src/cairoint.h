@@ -55,6 +55,10 @@
 #include <string.h>
 #include <stdarg.h>
 
+#if HAVE_PTHREAD_H
+#include <pthread.h>
+#endif
+
 #ifdef _MSC_VER
 #define _USE_MATH_DEFINES
 #endif
@@ -114,6 +118,45 @@
 
 #ifndef __GNUC__
 #define __attribute__(x)
+#endif
+
+/* XXX: There's a bad bug in the cache locking code that attempts to
+ * recursively lock a mutex, (which we shouldn't actually need to ever
+ * do). This leads to deadlocks in even single-threaded applications,
+ * (if they link with -lpthread).
+ *
+ * For now, we're removing all mutex locking, which leaves things at
+ * the same level of non-thread-safeness that we've had in every
+ * snapshot since the cache code first landed.
+ *
+ * I'm rewriting the cache code now and plan to have thread-safe,
+ * locking caches working before the next snapshot. CDW.
+ */
+
+#if CAIRO_CACHE_CODE_IS_FIXED_TO_NOT_DEADLOCK_SINGLE_THREADED_APPLICATIONS
+
+# if HAVE_PTHREAD_H
+#  define CAIRO_MUTEX_DECLARE(name) static pthread_mutex_t name = PTHREAD_MUTEX_INITIALIZER
+# define CAIRO_MUTEX_DECLARE_GLOBAL(name) pthread_mutex_t name = PTHREAD_MUTEX_INITIALIZER
+#  define CAIRO_MUTEX_LOCK(name) pthread_mutex_lock (&name)
+#  define CAIRO_MUTEX_UNLOCK(name) pthread_mutex_unlock (&name)
+# endif
+
+# ifndef CAIRO_MUTEX_DECLARE
+#  warning "No mutex declarations, assuming single-threaded code"
+#  define CAIRO_MUTEX_DECLARE(name)
+#  define CAIRO_MUTEX_DECLARE_GLOBAL(name)
+#  define CAIRO_MUTEX_LOCK(name)
+#  define CAIRO_MUTEX_UNLOCK(name)
+# endif
+
+#else
+
+# define CAIRO_MUTEX_DECLARE(name)
+# define CAIRO_MUTEX_DECLARE_GLOBAL(name)
+# define CAIRO_MUTEX_LOCK(name)
+# define CAIRO_MUTEX_UNLOCK(name)
+
 #endif
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -377,10 +420,11 @@ _cairo_cache_init (cairo_cache_t *cache,
 		   unsigned long max_memory);
 
 cairo_private void
-_cairo_cache_reference (cairo_cache_t *cache);
+_cairo_cache_destroy (cairo_cache_t *cache);
 
 cairo_private void
-_cairo_cache_destroy (cairo_cache_t *cache);
+_cairo_cache_shrink_to (cairo_cache_t *cache,
+			unsigned long max_memory);
 
 cairo_private cairo_status_t
 _cairo_cache_lookup (cairo_cache_t *cache,
@@ -566,7 +610,7 @@ extern const cairo_private struct _cairo_scaled_font_backend cairo_atsui_scaled_
 typedef struct _cairo_surface_backend {
     cairo_surface_t *
     (*create_similar)		(void			*surface,
-				 cairo_format_t		 format,
+				 cairo_content_t	 content,
 				 int			 width,
 				 int			 height);
 
@@ -905,17 +949,17 @@ typedef struct _cairo_traps {
 #if   CAIRO_HAS_WIN32_FONT
 
 #define CAIRO_FONT_FAMILY_DEFAULT CAIRO_WIN32_FONT_FAMILY_DEFAULT
-#define CAIRO_FONT_BACKEND_DEFAULT &cairo_win32_scaled_font_backend
+#define CAIRO_SCALED_FONT_BACKEND_DEFAULT &cairo_win32_scaled_font_backend
 
 #elif CAIRO_HAS_ATSUI_FONT
 
 #define CAIRO_FONT_FAMILY_DEFAULT CAIRO_ATSUI_FONT_FAMILY_DEFAULT
-#define CAIRO_FONT_BACKEND_DEFAULT &cairo_atsui_scaled_font_backend
+#define CAIRO_SCALED_FONT_BACKEND_DEFAULT &cairo_atsui_scaled_font_backend
 
 #elif CAIRO_HAS_FT_FONT
 
 #define CAIRO_FONT_FAMILY_DEFAULT CAIRO_FT_FONT_FAMILY_DEFAULT
-#define CAIRO_FONT_BACKEND_DEFAULT &cairo_ft_scaled_font_backend
+#define CAIRO_SCALED_FONT_BACKEND_DEFAULT &cairo_ft_scaled_font_backend
 
 #endif
 
@@ -1404,14 +1448,14 @@ _cairo_path_fixed_stroke_to_traps (cairo_path_fixed_t *path,
 
 /* cairo-surface.c */
 cairo_private cairo_surface_t *
-_cairo_surface_create_similar_scratch (cairo_surface_t	*other,
-				       cairo_format_t	format,
+_cairo_surface_create_similar_scratch (cairo_surface_t *other,
+				       cairo_content_t	content,
 				       int		width,
 				       int		height);
 
 cairo_private cairo_surface_t *
 _cairo_surface_create_similar_solid (cairo_surface_t	 *other,
-				     cairo_format_t	  format,
+				     cairo_content_t	  content,
 				     int		  width,
 				     int		  height,
 				     const cairo_color_t *color);
@@ -1523,6 +1567,12 @@ _cairo_surface_set_clip_region (cairo_surface_t	    *surface,
 				pixman_region16_t   *region,
 				unsigned int	    serial);
 
+cairo_private cairo_int_status_t
+_cairo_surface_intersect_clip_path (cairo_surface_t    *surface,
+				    cairo_path_fixed_t *path,
+				    cairo_fill_rule_t   fill_rule,
+				    double		tolerance);
+
 typedef struct _cairo_clip_path cairo_clip_path_t;
 
 cairo_private cairo_status_t
@@ -1549,6 +1599,12 @@ _cairo_surface_show_glyphs (cairo_scaled_font_t	        *scaled_font,
 			    int				num_glyphs);
 
 /* cairo_image_surface.c */
+
+cairo_private cairo_format_t
+_cairo_format_from_content (cairo_content_t content);
+
+cairo_private cairo_content_t
+_cairo_content_from_format (cairo_format_t format);
 
 cairo_private cairo_image_surface_t *
 _cairo_image_surface_create_with_masks (unsigned char	       *data,
@@ -1761,7 +1817,7 @@ _cairo_pattern_acquire_surface (cairo_pattern_t		   *pattern,
 				cairo_surface_attributes_t *attributes);
 
 cairo_private void
-_cairo_pattern_release_surface (cairo_surface_t		   *dst,
+_cairo_pattern_release_surface (cairo_pattern_t		   *pattern,
 				cairo_surface_t		   *surface,
 				cairo_surface_attributes_t *attributes);
 
@@ -1809,6 +1865,11 @@ _cairo_output_stream_destroy (cairo_output_stream_t *stream);
 cairo_private cairo_status_t
 _cairo_output_stream_write (cairo_output_stream_t *stream,
 			    const void *data, size_t length);
+
+cairo_private void
+_cairo_output_stream_write_hex_string (cairo_output_stream_t *stream,
+				       const char *data,
+				       size_t length);
 
 cairo_private cairo_status_t
 _cairo_output_stream_vprintf (cairo_output_stream_t *stream,

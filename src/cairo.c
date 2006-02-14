@@ -62,7 +62,7 @@ static const cairo_t cairo_nil = {
  * a bit of a pain, but it should be easy to always catch as long as
  * one adds a new test case to test a trigger of the new status value.
  */
-#define CAIRO_STATUS_LAST_STATUS CAIRO_STATUS_SURFACE_TYPE_MISMATCH
+#define CAIRO_STATUS_LAST_STATUS CAIRO_STATUS_PATTERN_TYPE_MISMATCH
 
 /**
  * _cairo_error:
@@ -320,18 +320,6 @@ cairo_set_operator (cairo_t *cr, cairo_operator_t op)
 	_cairo_error (cr, cr->status);
 }
 
-static void
-_cairo_set_source_solid (cairo_t *cr, const cairo_color_t *color)
-{
-    cairo_pattern_t *source;
-
-    source = _cairo_pattern_create_solid (color);
-
-    cairo_set_source (cr, source);
-
-    cairo_pattern_destroy (source);
-}
-
 /**
  * cairo_set_source_rgb
  * @cr: a cairo context
@@ -350,20 +338,16 @@ _cairo_set_source_solid (cairo_t *cr, const cairo_color_t *color)
 void
 cairo_set_source_rgb (cairo_t *cr, double red, double green, double blue)
 {
-    cairo_color_t color;
+    cairo_pattern_t *pattern;
 
     if (cr->status) {
 	_cairo_error (cr, cr->status);
 	return;
     }
 
-    _cairo_restrict_value (&red, 0.0, 1.0);
-    _cairo_restrict_value (&green, 0.0, 1.0);
-    _cairo_restrict_value (&blue, 0.0, 1.0);
-
-    _cairo_color_init_rgb (&color, red, green, blue);
-
-    _cairo_set_source_solid (cr, &color);
+    pattern = cairo_pattern_create_rgb (red, green, blue);
+    cairo_set_source (cr, pattern);
+    cairo_pattern_destroy (pattern);
 }
 
 /**
@@ -387,23 +371,41 @@ cairo_set_source_rgba (cairo_t *cr,
 		       double red, double green, double blue,
 		       double alpha)
 {
-    cairo_color_t color;
+    cairo_pattern_t *pattern;
 
     if (cr->status) {
 	_cairo_error (cr, cr->status);
 	return;
     }
 
-    _cairo_restrict_value (&red,   0.0, 1.0);
-    _cairo_restrict_value (&green, 0.0, 1.0);
-    _cairo_restrict_value (&blue,  0.0, 1.0);
-    _cairo_restrict_value (&alpha, 0.0, 1.0);
-
-    _cairo_color_init_rgba (&color, red, green, blue, alpha);
-
-    _cairo_set_source_solid (cr, &color);
+    pattern = cairo_pattern_create_rgba (red, green, blue, alpha);
+    cairo_set_source (cr, pattern);
+    cairo_pattern_destroy (pattern);
 }
 
+/**
+ * cairo_set_source_surface:
+ * @cr: a cairo context
+ * @surface: a surface to be used to set the source pattern
+ * @x: User-space X coordinate for surface origin
+ * @y: User-space Y coordinate for surface origin
+ * 
+ * This is a convenience function for creating a pattern from @surface
+ * and setting it as the source in @cr with cairo_set_source().
+ *
+ * The @x and @y parameters give the user-space coordinate at which
+ * the surface origin should appear. (The surface origin is its
+ * upper-left corner before any transformation has been applied.) The
+ * @x and @y patterns are negated and then set as translation values
+ * in the pattern matrix.
+ *
+ * Other than the initial translation pattern matrix, as described
+ * above, all other pattern attributes, (such as its extend mode), are
+ * set to the default values as in cairo_pattern_create_for_surface.
+ * The resulting pattern can be queried with cairo_get_source() so
+ * that these attributes can be modified if desired, (eg. to create a
+ * repeating pattern with cairo_pattern_set_extend()).
+ **/
 void
 cairo_set_source_surface (cairo_t	  *cr,
 			  cairo_surface_t *surface,
@@ -655,7 +657,7 @@ cairo_set_miter_limit (cairo_t *cr, double limit)
  * @tx: amount to translate in the X direction
  * @ty: amount to translate in the Y direction
  * 
- * Modifies the current transformation matrix (CTM) by tanslating the
+ * Modifies the current transformation matrix (CTM) by translating the
  * user-space origin by (@tx, @ty). This offset is interpreted as a
  * user-space coordinate according to the CTM in place before the new
  * call to cairo_translate. In other words, the translation of the
@@ -1538,7 +1540,7 @@ cairo_fill_extents (cairo_t *cr,
  *
  * Calling cairo_clip() can only make the clip region smaller, never
  * larger. But the current clip is part of the graphics state, so a
- * tempoarary restriction of the clip region can be achieved by
+ * temporary restriction of the clip region can be achieved by
  * calling cairo_clip() within a cairo_save()/cairo_restore()
  * pair. The only other means of increasing the size of the clip
  * region is cairo_reset_clip().
@@ -1568,7 +1570,7 @@ cairo_clip (cairo_t *cr)
  *
  * Calling cairo_clip() can only make the clip region smaller, never
  * larger. But the current clip is part of the graphics state, so a
- * tempoarary restriction of the clip region can be achieved by
+ * temporary restriction of the clip region can be achieved by
  * calling cairo_clip() within a cairo_save()/cairo_restore()
  * pair. The only other means of increasing the size of the clip
  * region is cairo_reset_clip().
@@ -2266,13 +2268,21 @@ cairo_append_path (cairo_t	*cr,
 	return;
     }
 
-    if (path == NULL || path->data == NULL) {
+    if (path == NULL) {
 	_cairo_error (cr, CAIRO_STATUS_NULL_POINTER);
 	return;
     }
 
     if (path->status) {
-	_cairo_error (cr, path->status);
+	if (path->status <= CAIRO_STATUS_LAST_STATUS)
+	    _cairo_error (cr, path->status);
+	else
+	    _cairo_error (cr, CAIRO_STATUS_INVALID_STATUS);
+	return;
+    }
+
+    if (path->data == NULL) {
+	_cairo_error (cr, CAIRO_STATUS_NULL_POINTER);
 	return;
     }
 
@@ -2303,8 +2313,8 @@ cairo_status_to_string (cairo_status_t status)
 	return "no current point defined";
     case CAIRO_STATUS_INVALID_MATRIX:
 	return "invalid matrix (not invertible)";
-    case CAIRO_STATUS_NO_TARGET_SURFACE:
-	return "no target surface has been set";
+    case CAIRO_STATUS_INVALID_STATUS:
+	return " invalid value for an input cairo_status_t";
     case CAIRO_STATUS_NULL_POINTER:
 	return "NULL pointer";
     case CAIRO_STATUS_INVALID_STRING:

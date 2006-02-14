@@ -156,6 +156,10 @@ cairo_image_surface_create (cairo_format_t	format,
     pixman_format_t *pixman_format;
     pixman_image_t *pixman_image;
 
+    /* XXX: Really need to make this kind of thing pass through _cairo_error. */
+    if (! CAIRO_FORMAT_VALID (format))
+	return NULL;
+
     pixman_format = _create_pixman_format (format);
     if (pixman_format == NULL)
 	return NULL;
@@ -204,6 +208,10 @@ cairo_image_surface_create_for_data (unsigned char     *data,
     cairo_image_surface_t *surface;
     pixman_format_t *pixman_format;
     pixman_image_t *pixman_image;
+
+    /* XXX: Really need to make this kind of thing pass through _cairo_error. */
+    if (! CAIRO_FORMAT_VALID (format))
+	return NULL;
 
     pixman_format = _create_pixman_format (format);
     if (pixman_format == NULL)
@@ -256,13 +264,51 @@ cairo_image_surface_get_height (cairo_surface_t *surface)
     return image_surface->height;
 }
 
+cairo_format_t
+_cairo_format_from_content (cairo_content_t content)
+{
+    switch (content) {
+    case CAIRO_CONTENT_COLOR:
+	return CAIRO_FORMAT_RGB24;
+    case CAIRO_CONTENT_ALPHA:
+	return CAIRO_FORMAT_A8;
+    case CAIRO_CONTENT_COLOR_ALPHA:
+	return CAIRO_FORMAT_ARGB32;
+    }
+
+    ASSERT_NOT_REACHED;
+    return CAIRO_FORMAT_ARGB32;
+}
+
+cairo_content_t
+_cairo_content_from_format (cairo_format_t format)
+{
+    switch (format) {
+    case CAIRO_FORMAT_ARGB32:
+	return CAIRO_CONTENT_COLOR_ALPHA;
+    case CAIRO_FORMAT_RGB24:
+	return CAIRO_CONTENT_COLOR;
+    case CAIRO_FORMAT_A8:
+    case CAIRO_FORMAT_A1:
+	return CAIRO_CONTENT_ALPHA;
+    }
+
+    ASSERT_NOT_REACHED;
+    return CAIRO_CONTENT_COLOR_ALPHA;
+}
+
 static cairo_surface_t *
-_cairo_image_surface_create_similar (void		*abstract_src,
-				     cairo_format_t	format,
+_cairo_image_surface_create_similar (void	       *abstract_src,
+				     cairo_content_t	content,
 				     int		width,
 				     int		height)
 {
-    return cairo_image_surface_create (format, width, height);
+    /* XXX: Really need to make this kind of thing pass through _cairo_error. */
+    if (! CAIRO_CONTENT_VALID (content))
+	return NULL;
+
+    return cairo_image_surface_create (_cairo_format_from_content (content),
+				       width, height);
 }
 
 static cairo_status_t
@@ -549,9 +595,9 @@ _cairo_image_surface_composite (cairo_operator_t	operator,
     }
 
     if (mask)
-	_cairo_pattern_release_surface (&dst->base, &mask->base, &mask_attr);
+	_cairo_pattern_release_surface (mask_pattern, &mask->base, &mask_attr);
     
-    _cairo_pattern_release_surface (&dst->base, &src->base, &src_attr);
+    _cairo_pattern_release_surface (src_pattern, &src->base, &src_attr);
     
     return status;
 }
@@ -628,7 +674,7 @@ _cairo_image_surface_composite_trapezoids (cairo_operator_t	operator,
 				     render_src_y + attributes.y_offset,
 				     (pixman_trapezoid_t *) traps, num_traps);
 
-    _cairo_pattern_release_surface (&dst->base, &src->base, &attributes);
+    _cairo_pattern_release_surface (pattern, &src->base, &attributes);
 
     return status;
 }
@@ -646,20 +692,7 @@ cairo_int_status_t
 _cairo_image_surface_set_clip_region (cairo_image_surface_t *surface,
 				      pixman_region16_t *region)
 {
-    if (region) {
-        pixman_region16_t *rcopy;
-
-        rcopy = pixman_region_create();
-        /* pixman_image_set_clip_region expects to take ownership of the
-         * passed-in region, so we create a copy to give it. */
-	/* XXX: I think that's probably a bug in pixman. But its
-	 * memory management issues need auditing anyway, so a
-	 * workaround like this is fine for now. */
-        pixman_region_copy (rcopy, region);
-        pixman_image_set_clip_region (surface->pixman_image, rcopy);
-    } else {
-        pixman_image_set_clip_region (surface->pixman_image, region);
-    }
+    pixman_image_set_clip_region (surface->pixman_image, region);
 
     return CAIRO_STATUS_SUCCESS;
 }

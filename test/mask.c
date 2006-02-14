@@ -56,6 +56,7 @@ set_gradient_pattern (cairo_t *cr, int x, int y)
     cairo_pattern_add_color_stop_rgba (pattern, 0, 1, 1, 1, 1);
     cairo_pattern_add_color_stop_rgba (pattern, 1, 0, 0, 0.4, 1);
     cairo_set_source (cr, pattern);
+    cairo_pattern_destroy (pattern);
 }
 
 static void
@@ -63,8 +64,9 @@ set_image_pattern (cairo_t *cr, int x, int y)
 {
     cairo_pattern_t *pattern;
 
-    pattern = cairo_test_create_png_pattern (cr, png_filename);
+    pattern = cairo_test_create_pattern_from_png (png_filename);
     cairo_set_source (cr, pattern);
+    cairo_pattern_destroy (pattern);
 }
 
 static void
@@ -74,7 +76,7 @@ mask_polygon (cairo_t *cr, int x, int y)
     cairo_t *cr2;
 
     mask_surface = cairo_surface_create_similar (cairo_get_target (cr),
-						 CAIRO_FORMAT_A8,
+						 CAIRO_CONTENT_ALPHA,
 						 WIDTH, HEIGHT);
     cr2 = cairo_create (mask_surface);
 
@@ -196,12 +198,14 @@ draw (cairo_t *cr, int width, int height)
      * a temporary surface and copy over.
      */
     tmp_surface = cairo_surface_create_similar (cairo_get_target (cr),
-						CAIRO_FORMAT_ARGB32,
+						CAIRO_CONTENT_COLOR_ALPHA,
 						IMAGE_WIDTH, IMAGE_HEIGHT);
     cr2 = cairo_create (tmp_surface);
 
     tmp_pattern = cairo_pattern_create_for_surface (tmp_surface);
     cairo_set_source (cr, tmp_pattern);
+    cairo_pattern_destroy (tmp_pattern);
+    cairo_surface_destroy (tmp_surface);
 
     for (k = 0; k < ARRAY_SIZE (clip_funcs); k++) {
 	for (j = 0; j < ARRAY_SIZE (mask_funcs); j++) {
@@ -234,7 +238,6 @@ draw (cairo_t *cr, int width, int height)
     }
 
     cairo_destroy (cr2);
-    cairo_surface_destroy (tmp_surface);
 
     return CAIRO_TEST_SUCCESS;
 }
