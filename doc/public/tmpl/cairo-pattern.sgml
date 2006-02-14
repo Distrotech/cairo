@@ -74,6 +74,15 @@ cairo_pattern_t
 @pattern: 
 
 
+<!-- ##### FUNCTION cairo_pattern_status ##### -->
+<para>
+
+</para>
+
+@pattern: 
+@Returns: 
+
+
 <!-- ##### FUNCTION cairo_pattern_add_color_stop_rgb ##### -->
 <para>
 
@@ -84,7 +93,6 @@ cairo_pattern_t
 @red: 
 @green: 
 @blue: 
-@Returns: 
 
 
 <!-- ##### FUNCTION cairo_pattern_add_color_stop_rgba ##### -->
@@ -98,7 +106,6 @@ cairo_pattern_t
 @green: 
 @blue: 
 @alpha: 
-@Returns: 
 
 
 <!-- ##### FUNCTION cairo_pattern_set_matrix ##### -->
@@ -108,7 +115,6 @@ cairo_pattern_t
 
 @pattern: 
 @matrix: 
-@Returns: 
 
 
 <!-- ##### FUNCTION cairo_pattern_get_matrix ##### -->
@@ -118,6 +124,7 @@ cairo_pattern_t
 
 @pattern: 
 @matrix: 
+<!-- # Unused Parameters # -->
 @Returns: 
 
 
@@ -137,7 +144,6 @@ cairo_pattern_t
 
 @pattern: 
 @extend: 
-@Returns: 
 
 
 <!-- ##### FUNCTION cairo_pattern_get_extend ##### -->
@@ -156,7 +162,6 @@ cairo_pattern_t
 
 @pattern: 
 @filter: 
-@Returns: 
 
 
 <!-- ##### FUNCTION cairo_pattern_get_filter ##### -->

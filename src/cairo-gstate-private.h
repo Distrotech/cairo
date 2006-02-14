@@ -36,6 +36,47 @@
 #ifndef CAIRO_GSTATE_PRIVATE_H
 #define CAIRO_GSTATE_PRIVATE_H
 
+#include "cairo-path-fixed-private.h"
+
+struct _cairo_clip_path {
+    unsigned int	ref_count;
+    cairo_path_fixed_t	path;
+    cairo_fill_rule_t	fill_rule;
+    double		tolerance;
+    cairo_clip_path_t	*prev;
+};
+
+typedef struct _cairo_clip {
+    cairo_clip_mode_t mode;
+
+    /*
+     * Mask-based clipping for cases where the backend 
+     * clipping isn't sufficiently able.
+     *
+     * The rectangle here represents the
+     * portion of the destination surface that this
+     * clip surface maps to, it does not
+     * represent the extents of the clip region or
+     * clip paths
+     */
+    cairo_surface_t *surface;
+    cairo_rectangle_t surface_rect;
+    /*
+     * Surface clip serial number to store
+     * in the surface when this clip is set
+     */
+    unsigned int serial;
+    /*
+     * A clip region that can be placed in the surface
+     */
+    pixman_region16_t *region;
+    /*
+     * If the surface supports path clipping, we store the list of
+     * clipping paths that has been set here as a linked list.
+     */
+    cairo_clip_path_t *path;
+} cairo_clip_t;
+
 struct _cairo_gstate {
     cairo_operator_t operator;
     
@@ -53,26 +94,20 @@ struct _cairo_gstate {
     int num_dashes;
     double dash_offset;
 
-    char *font_family; /* NULL means CAIRO_FONT_FAMILY_DEFAULT; */
-    cairo_font_slant_t font_slant; 
-    cairo_font_weight_t font_weight;
-
     cairo_font_face_t *font_face;
     cairo_scaled_font_t *scaled_font;	/* Specific to the current CTM */
-
-    cairo_surface_t *surface;
-    int surface_level;		/* Used to detect bad nested use */
-
-    cairo_pattern_t *source;
-
-    cairo_clip_rec_t clip;
-
     cairo_matrix_t font_matrix;
+
+    cairo_clip_t clip;
 
     cairo_matrix_t ctm;
     cairo_matrix_t ctm_inverse;
 
     cairo_pen_t pen_regular;
+
+    cairo_surface_t *target;
+
+    cairo_pattern_t *source;
 
     struct _cairo_gstate *next;
 };

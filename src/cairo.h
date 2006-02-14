@@ -130,6 +130,7 @@ typedef struct _cairo_user_data_key {
  * @CAIRO_STATUS_NO_MEMORY: 
  * @CAIRO_STATUS_INVALID_RESTORE:
  * @CAIRO_STATUS_INVALID_POP_GROUP:
+ * @CAIRO_STATUS_NO_CURRENT_POINT:
  * @CAIRO_STATUS_INVALID_MATRIX:
  * @CAIRO_STATUS_NO_TARGET_SURFACE:
  * @CAIRO_STATUS_NULL_POINTER:
@@ -139,11 +140,6 @@ typedef struct _cairo_user_data_key {
  * @CAIRO_STATUS_WRITE_ERROR:
  * @CAIRO_STATUS_SURFACE_FINISHED:
  * @CAIRO_STATUS_SURFACE_TYPE_MISMATCH:
- * @CAIRO_STATUS_BAD_NESTING: the same surface was used as the
- *  target surface for two different cairo contexts at once,
- *  and more drawing was done on the first context before the
- *  surface was unset as the target for the second context.
- *  See the documentation for cairo_create().
  *
  * #cairo_status_t is used to indicate errors that can occur when
  * using Cairo. In some cases it is returned directly by functions.
@@ -165,7 +161,7 @@ typedef enum cairo_status {
     CAIRO_STATUS_WRITE_ERROR,
     CAIRO_STATUS_SURFACE_FINISHED,
     CAIRO_STATUS_SURFACE_TYPE_MISMATCH,
-    CAIRO_STATUS_BAD_NESTING
+    CAIRO_STATUS_PATTERN_TYPE_MISMATCH
 } cairo_status_t;
 
 /**
@@ -767,8 +763,6 @@ cairo_get_miter_limit (cairo_t *cr);
 void
 cairo_get_matrix (cairo_t *cr, cairo_matrix_t *matrix);
 
-/* XXX: Need to decide the memory management semantics of this
-   function. Should it reference the surface again? */
 cairo_surface_t *
 cairo_get_target (cairo_t *cr);
 
@@ -830,14 +824,16 @@ cairo_get_target (cairo_t *cr);
  *	cairo_path_destroy (path);
  * </programlisting></informalexample>
  */
+typedef enum cairo_path_data_type {
+    CAIRO_PATH_MOVE_TO,
+    CAIRO_PATH_LINE_TO,
+    CAIRO_PATH_CURVE_TO,
+    CAIRO_PATH_CLOSE_PATH
+} cairo_path_data_type_t;
+
 typedef union {
     struct {
-	enum {
-	    CAIRO_PATH_MOVE_TO,
-	    CAIRO_PATH_LINE_TO,
-	    CAIRO_PATH_CURVE_TO,
-	    CAIRO_PATH_CLOSE_PATH
-	} type;
+	cairo_path_data_type_t type;
 	int length;
     } header;
     struct {
@@ -862,6 +858,7 @@ typedef union {
  * includes both headers and coordinates for each portion.
  **/
 typedef struct cairo_path {
+    cairo_status_t status;
     cairo_path_data_t *data;
     int num_data;
 } cairo_path_t;
@@ -885,7 +882,7 @@ cairo_status_t
 cairo_status (cairo_t *cr);
 
 const char *
-cairo_status_string (cairo_t *cr);
+cairo_status_to_string (cairo_status_t status);
 
 /* Surface manipulation */
 
@@ -1013,21 +1010,24 @@ void
 cairo_pattern_destroy (cairo_pattern_t *pattern);
   
 cairo_status_t
+cairo_pattern_status (cairo_pattern_t *pattern);
+
+void
 cairo_pattern_add_color_stop_rgb (cairo_pattern_t *pattern,
 				  double offset,
 				  double red, double green, double blue);
 
-cairo_status_t
+void
 cairo_pattern_add_color_stop_rgba (cairo_pattern_t *pattern,
 				   double offset,
 				   double red, double green, double blue,
 				   double alpha);
 
-cairo_status_t
+void
 cairo_pattern_set_matrix (cairo_pattern_t      *pattern,
 			  const cairo_matrix_t *matrix);
 
-cairo_status_t
+void
 cairo_pattern_get_matrix (cairo_pattern_t *pattern,
 			  cairo_matrix_t  *matrix);
 
@@ -1037,7 +1037,7 @@ typedef enum {
     CAIRO_EXTEND_REFLECT
 } cairo_extend_t;
 
-cairo_status_t
+void
 cairo_pattern_set_extend (cairo_pattern_t *pattern, cairo_extend_t extend);
 
 cairo_extend_t
@@ -1052,7 +1052,7 @@ typedef enum {
     CAIRO_FILTER_GAUSSIAN
 } cairo_filter_t;
   
-cairo_status_t
+void
 cairo_pattern_set_filter (cairo_pattern_t *pattern, cairo_filter_t filter);
 
 cairo_filter_t
@@ -1139,7 +1139,6 @@ cairo_matrix_transform_point (const cairo_matrix_t *matrix,
 #define cairo_current_matrix         cairo_current_matrix_REPLACED_BY_cairo_get_matrix
 #define cairo_current_target_surface cairo_current_target_surface_REPLACED_BY_cairo_get_target
 #define cairo_get_status             cairo_get_status_REPLACED_BY_cairo_status
-#define cairo_get_status_string	     cairo_get_status_string_REPLACED_BY_cairo_status_string
 #define cairo_concat_matrix		 cairo_concat_matrix_REPLACED_BY_cairo_transform
 #define cairo_scale_font                 cairo_scale_font_REPLACED_BY_cairo_set_font_size
 #define cairo_select_font                cairo_select_font_REPLACED_BY_cairo_select_font_face
@@ -1188,6 +1187,8 @@ cairo_matrix_transform_point (const cairo_matrix_t *matrix,
 #define cairo_set_target_win32		cairo_set_target_win32_DEPRECATED_BY_cairo_win32_surface_create
 #define cairo_set_target_xcb		cairo_set_target_xcb_DEPRECATED_BY_cairo_xcb_surface_create
 #define cairo_set_target_drawable	cairo_set_target_drawable_DEPRECATED_BY_cairo_xlib_surface_create
+#define cairo_get_status_string		cairo_get_status_string_DEPRECATED_BY_cairo_status_AND_cairo_status_to_string
+#define cairo_status_string		cairo_status_string_DEPRECATED_BY_cairo_status_AND_cairo_status_to_string
 
 #endif
 

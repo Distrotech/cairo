@@ -74,16 +74,6 @@ Drawing contexts.
 @cr: 
 
 
-<!-- ##### MACRO cairo_copy ##### -->
-<para>
-
-</para>
-
-<!-- # Unused Parameters # -->
-@dest: 
-@src: 
-
-
 <!-- ##### ENUM cairo_format_t ##### -->
 <para>
 
@@ -153,8 +143,6 @@ Drawing contexts.
 
 @cr: 
 @source: 
-<!-- # Unused Parameters # -->
-@pattern: 
 
 
 <!-- ##### FUNCTION cairo_set_source_surface ##### -->
@@ -166,16 +154,6 @@ Drawing contexts.
 @surface: 
 @x: 
 @y: 
-
-
-<!-- ##### MACRO cairo_set_alpha ##### -->
-<para>
-
-</para>
-
-<!-- # Unused Parameters # -->
-@cr: 
-@alpha: 
 
 
 <!-- ##### FUNCTION cairo_set_tolerance ##### -->
@@ -314,15 +292,6 @@ Drawing contexts.
 
 @cr: 
 @matrix: 
-
-
-<!-- ##### MACRO cairo_default_matrix ##### -->
-<para>
-
-</para>
-
-<!-- # Unused Parameters # -->
-@cr: 
 
 
 <!-- ##### FUNCTION cairo_identity_matrix ##### -->
@@ -718,7 +687,6 @@ Drawing contexts.
 
 @cr: 
 @matrix: 
-@Returns: 
 
 
 <!-- ##### FUNCTION cairo_show_text ##### -->
@@ -756,10 +724,6 @@ Drawing contexts.
 
 @cr: 
 @extents: 
-<!-- # Unused Parameters # -->
-@font: 
-@Returns: 
-@font_matrix: 
 
 
 <!-- ##### FUNCTION cairo_set_font_face ##### -->
@@ -809,18 +773,6 @@ Drawing contexts.
 @cr: 
 @glyphs: 
 @num_glyphs: 
-
-
-<!-- ##### MACRO cairo_show_surface ##### -->
-<para>
-
-</para>
-
-<!-- # Unused Parameters # -->
-@cr: 
-@surface: 
-@width: 
-@height: 
 
 
 <!-- ##### FUNCTION cairo_get_operator ##### -->
@@ -925,33 +877,6 @@ Drawing contexts.
 @Returns: 
 
 
-<!-- ##### MACRO cairo_get_path ##### -->
-<para>
-
-</para>
-
-<!-- # Unused Parameters # -->
-@cr: 
-@move_to: 
-@line_to: 
-@curve_to: 
-@close_path: 
-@closure: 
-
-
-<!-- ##### MACRO cairo_get_path_flat ##### -->
-<para>
-
-</para>
-
-<!-- # Unused Parameters # -->
-@cr: 
-@move_to: 
-@line_to: 
-@close_path: 
-@closure: 
-
-
 <!-- ##### FUNCTION cairo_copy_path ##### -->
 <para>
 
@@ -979,11 +904,22 @@ Drawing contexts.
 @path: 
 
 
+<!-- ##### ENUM cairo_path_data_type_t ##### -->
+<para>
+
+</para>
+
+@CAIRO_PATH_MOVE_TO: 
+@CAIRO_PATH_LINE_TO: 
+@CAIRO_PATH_CURVE_TO: 
+@CAIRO_PATH_CLOSE_PATH: 
+
 <!-- ##### STRUCT cairo_path_t ##### -->
 <para>
 
 </para>
 
+@status: 
 @data: 
 @num_data: 
 
@@ -1014,7 +950,7 @@ Drawing contexts.
 @CAIRO_STATUS_WRITE_ERROR: 
 @CAIRO_STATUS_SURFACE_FINISHED: 
 @CAIRO_STATUS_SURFACE_TYPE_MISMATCH: 
-@CAIRO_STATUS_BAD_NESTING: 
+@CAIRO_STATUS_PATTERN_TYPE_MISMATCH: 
 
 <!-- ##### FUNCTION cairo_status ##### -->
 <para>
@@ -1025,12 +961,19 @@ Drawing contexts.
 @Returns: 
 
 
-<!-- ##### FUNCTION cairo_status_string ##### -->
+<!-- ##### MACRO cairo_status_string ##### -->
 <para>
 
 </para>
 
-@cr: 
+
+
+<!-- ##### FUNCTION cairo_status_to_string ##### -->
+<para>
+
+</para>
+
+@status: 
 @Returns: 
 
 
@@ -1068,15 +1011,6 @@ Drawing contexts.
 @height: 
 @stride: 
 @Returns: 
-
-
-
-<!--
-Local variables:
-mode: sgml
-sgml-parent-document: ("../cairo-docs.xml" "book" "refsect2" "")
-End:
--->
 
 
 <!-- ##### FUNCTION cairo_image_surface_get_width ##### -->

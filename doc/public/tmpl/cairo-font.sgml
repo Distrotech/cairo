@@ -84,8 +84,6 @@ Font Handling
 </para>
 
 @scaled_font: 
-<!-- # Unused Parameters # -->
-@font: 
 
 
 <!-- ##### FUNCTION cairo_scaled_font_destroy ##### -->
@@ -94,8 +92,6 @@ Font Handling
 </para>
 
 @scaled_font: 
-<!-- # Unused Parameters # -->
-@font: 
 
 
 <!-- ##### STRUCT cairo_font_extents_t ##### -->
@@ -117,8 +113,6 @@ Font Handling
 @scaled_font: 
 @extents: 
 @Returns: 
-<!-- # Unused Parameters # -->
-@font: 
 
 
 <!-- ##### STRUCT cairo_text_extents_t ##### -->
@@ -142,7 +136,5 @@ Font Handling
 @glyphs: 
 @num_glyphs: 
 @extents: 
-<!-- # Unused Parameters # -->
-@font: 
 
 

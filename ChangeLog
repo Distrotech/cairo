@@ -1,3 +1,752 @@
+2005-06-20  Carl Worth  <cworth@cworth.org>
+
+	* Makefile.am: Force distcheck to enable gtk-doc.
+
+2005-06-20  Carl Worth  <cworth@cworth.org>
+
+	* NEWS: Added notes for snapshot 0.5.1
+
+	* configure.in: Increment CAIRO_VERSION to 0.5.1
+
+2005-06-20  Owen Taylor  <otaylor@redhat.com>
+
+	Workaround for https://bugs.freedesktop.org/show_bug.cgi?id=3566
+
+	* src/cairo-xlib-surface.c: Detect servers with a bug in 
+	repeating surfaces by checking vendor string and version.
+
+	* src/cairo-xlib-surface.c: For such surfaces either fall back to
+	an implementation with the core protocol or fall back to the image
+	backend.
+
+	* src/cairo-xlib-surface.c: Save clip rects when setting a
+	clip region on a surface so that we set the right clip for the
+	surface's GC if we create it later.
+
+2005-06-20  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-matrix.c: (_cairo_matrix_is_integer_translation):
+	Make out parameters optional. Style cleanup.
+
+2005-06-20  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h:
+	* src/cairo-pattern.c: (_cairo_pattern_is_opaque_solid): Abstract
+	CAIRO_ALPHA_IS_OPAQUE out for general internal use.
+
+	* src/cairo.c: (cairo_paint_with_alpha): Optimize to defer to
+	cairo_paint if the alpha value is actually opaque.
+
+2005-06-20  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h:
+	* src/cairo-private.h:
+	* src/cairo.c: (_cairo_error), (cairo_create): Rip out
+	cairo_set_error_notfiy function as it is clear that it is not the
+	right approach.
+
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/error-notify.c: Remove error-notify test.
+
+2005-06-17  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-xcb-surface.c (_get_image_surface): Remove references
+	to repeat and matrix fields that no longer exist.
+
+2005-06-17  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-xcb-surface.c (_get_image_surface)
+	* src/cairo-xlib-surface.c (_get_image_surface): Fix 
+	width/height typo.
+
+2005-06-17  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo-glitz-surface.c: (_cairo_glitz_surface_get_image):
+	* src/cairo-pattern.c: (cairo_pattern_create_for_surface):
+	* src/cairo-pdf-surface.c: (_cairo_pdf_surface_composite_pdf):
+	* src/cairo-surface.c: (_cairo_surface_init):
+	* src/cairo-xlib-surface.c: (_get_image_surface):
+	* src/cairoint.h: Remove matrix, filter and repeat from the
+	cairo_surface_t struct.
+
+2005-06-17  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.c: (cairo_reference), (cairo_destroy): cairo_reference
+	and cairo_destroy shouldn't behave differently when cr->status
+	indicates an error. Fix this bug that just slipped back in.
+
+	* src/cairo.c: (cairo_restore): Remove useless conditional return
+	at the end of a void function.
+
+	* src/cairo.c: (cairo_get_source), (cairo_get_font_face),
+	(cairo_text_extents), (cairo_show_text), (cairo_text_path):
+	Fix so that after calling _cairo_error the most that any cairo
+	entry function ever does is return a previously computed value.
+
+2005-06-17  Kristian Høgsberg  <krh@redhat.com>
+
+	* TODO: Remove the path clipping entry from the list.
+
+2005-06-16  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-private.h: Reorder fields of cairo_private_t to match
+	initialization order.
+
+	* src/cairo.c: (_cairo_error): Call error_notify callback if set.
+	(cairo_create): Initialize error_notify callback to NULL.
+	(cairo_set_error_notify): New function to allow the user to set
+	an error notify callback.
+	
+	* src/cairo.h: New cairo_set_error_notify prototye.
+	
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/error-notify.c: (toggle_status), (do_test), (main): New
+	test for cairo_set_error_notify.
+
+2005-06-15  Carl Worth  <cworth@cworth.org>
+
+	* TODO: Add CAIRO_STATUS_DESTROYED to TODO list.
+	
+	* ROADMAP: Note progress on consistent error handling.
+	
+	* src/cairo-surface.c: Fix typo in documentation comment for
+	_cairo_surface_get_current_clip_serial.
+
+2005-06-15  Owen Taylor  <otaylor@redhat.com>
+
+	* doc/public/Makefile.am (MKTMPL_OPTIONS): Remove --only-section-tmpl;
+	it doesn't really work currently :-(.
+
+2005-06-15  Owen Taylor  <otaylor@redhat.com>
+
+	* src/cairo-gstate.c (_cairo_gstate_clip_and_composite_trapezoids):
+	Use a clip region when rendering a non-solid pattern through
+	a rectangular path ... trapezoid rasterization is just too slow
+	to use that path when we aren't forced to do so.
+
+2005-06-15  Carl Worth  <cworth@cworth.org>
+
+	* test/cairo-test.c: Track removal of cairo_status_string.
+	(cairo_test_for_target): And add missing parenthesis.
+
+2005-06-15  Carl Worth  <cworth@cworth.org>
+
+	* TODO: Add cairo_finish to TODO list. Note that
+	cairo_satus_string has now been removed.
+
+2005-06-15  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h:
+	* src/cairo.c: Remove cairo_status_string function which can now
+	be replaced by:
+
+		cairo_status_to_string (cairo_status (cr));
+
+	This allows consistent handling of status values for things like
+	cairo_pattern_status where there is now
+	cairo_pattern_status_string function.
+
+2005-06-13  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.c: (_cairo_error): Add _cairo_error so we have a
+	single function which all errors can pass through. This allows the
+	user to set a breakpoint on error and will allow us to augment
+	error handling later as necessary.
+
+	* src/cairo.c: (cairo_create), (cairo_reference),
+	(cairo_destroy), (cairo_save), (cairo_restore),
+	(cairo_set_operator), (cairo_set_source_rgb),
+	(cairo_set_source_rgba), (cairo_set_source_surface),
+	(cairo_set_source), (cairo_get_source), (cairo_set_tolerance),
+	(cairo_set_fill_rule), (cairo_set_line_width),
+	(cairo_set_line_cap), (cairo_set_line_join), (cairo_set_dash),
+	(cairo_set_miter_limit), (cairo_translate), (cairo_scale),
+	(cairo_rotate), (cairo_transform), (cairo_set_matrix),
+	(cairo_identity_matrix), (cairo_user_to_device),
+	(cairo_user_to_device_distance), (cairo_device_to_user),
+	(cairo_device_to_user_distance), (cairo_new_path), (cairo_move_to),
+	(cairo_line_to), (cairo_curve_to), (cairo_arc),
+	(cairo_arc_negative), (cairo_rel_move_to), (cairo_rel_line_to),
+	(cairo_rel_curve_to), (cairo_rectangle), (cairo_close_path),
+	(cairo_paint), (cairo_paint_with_alpha), (cairo_mask),
+	(cairo_mask_surface), (cairo_stroke_preserve),
+	(cairo_fill_preserve), (cairo_copy_page), (cairo_show_page),
+	(cairo_in_stroke), (cairo_in_fill), (cairo_stroke_extents),
+	(cairo_fill_extents), (cairo_clip_preserve), (cairo_reset_clip),
+	(cairo_select_font_face), (cairo_get_font_face),
+	(cairo_font_extents), (cairo_set_font_face), (cairo_set_font_size),
+	(cairo_set_font_matrix), (cairo_get_font_matrix),
+	(cairo_text_extents), (cairo_glyph_extents), (cairo_show_text),
+	(cairo_show_glyphs), (cairo_text_path), (cairo_glyph_path),
+	(cairo_get_operator), (cairo_get_tolerance),
+	(cairo_get_current_point), (cairo_get_fill_rule),
+	(cairo_get_line_width), (cairo_get_line_cap),
+	(cairo_get_line_join), (cairo_get_miter_limit), (cairo_get_matrix),
+	(cairo_get_target), (cairo_copy_path), (cairo_copy_path_flat),
+	(cairo_append_path), (cairo_status): Make all assignements to
+	cr->status go through the new _cairo_error function. Remove
+	CAIRO_CHECK_SANITY macro.
+
+2005-06-15  Carl Worth  <cworth@cworth.org>
+
+	* doc/public/cairo-sections.txt: Remove cairo-atsui section since
+	cairo-atsui.h is currently empty.
+	Add cairo_path_data_type_t and cairo_path_data_t.
+
+	* test/.cvsignore: Add pdf-clip and pdf-clip.pdf.
+
+2005-06-14  Kristian Høgsberg  <krh@redhat.com>
+
+	* src/cairo-gstate-private.h:
+	* src/cairo-gstate.c: (_cairo_gstate_init),
+	(_cairo_gstate_init_copy), (_cairo_gstate_fini),
+	(_cairo_gstate_set_clip), (_composite_trap_region),
+	(_cairo_gstate_fill), (_cairo_gstate_reset_clip),
+	(_cairo_gstate_intersect_clip_path), (_cairo_clip_path_reference),
+	(_cairo_clip_path_destroy), (_cairo_gstate_intersect_clip_region),
+	(_cairo_gstate_intersect_clip_mask), (_cairo_gstate_clip):
+	* src/cairo-pdf-surface.c:
+	(_cairo_pdf_surface_create_for_document),
+	(_cairo_pdf_path_move_to), (_cairo_pdf_path_line_to),
+	(_cairo_pdf_path_close_path), (_cairo_pdf_surface_fill_path),
+	(_cairo_pdf_surface_intersect_clip_path),
+	(_cairo_pdf_document_add_page):
+	* src/cairo-surface.c: (_cairo_surface_get_clip_mode),
+	(_cairo_surface_fill_path), (_cairo_surface_reset_clip),
+	(_cairo_surface_set_clip_path_recursive),
+	(_cairo_surface_set_clip_path):
+	* src/cairoint.h: Implement path clipping and refactor
+	_cairo_gstate_clip() out in three different functions
+	corresponding to the three different clipping modes.
+	
+	* src/cairo-glitz-surface.c:
+	* src/cairo-ps-surface.c:
+	* src/cairo-win32-surface.c:
+	* src/cairo-xcb-surface.c:
+	* src/cairo-xlib-surface.c:
+	* src/cairo-image-surface.c:
+	* src/cairo-quartz-surface.c: Add NULL pointers for
+	intersect_clip_path.
+	
+	* test/Makefile.am:
+	* test/pdf-clip.c: New test case to exercise PDF clipping code.
+
+2005-06-14  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-glitz-surface.c: (_cairo_glitz_surface_create_similar),
+	(_cairo_glitz_surface_clone_similar),
+	(_cairo_glitz_pattern_acquire_surface),
+	(_cairo_glitz_surface_composite_trapezoids):
+	* src/cairo-image-surface.c: (_cairo_image_surface_create_similar):
+	* src/cairo-pdf-surface.c: (_cairo_pdf_surface_create_similar):
+	* src/cairo-ps-surface.c: (_cairo_ps_surface_create_similar):
+	* src/cairo-quartz-surface.c:
+	(_cairo_quartz_surface_create_similar):
+	* src/cairo-surface.c: (_cairo_surface_create_similar_scratch),
+	(_cairo_surface_create_similar_solid):
+	* src/cairo-win32-surface.c: (_cairo_win32_surface_create_similar),
+	(_cairo_win32_surface_get_subimage):
+	* src/cairo-xcb-surface.c: (_cairo_xcb_surface_create_similar),
+	(_cairo_xcb_surface_clone_similar):
+	* src/cairo-xlib-surface.c: (_cairo_xlib_surface_create_similar),
+	(_cairo_xlib_surface_clone_similar):
+	* src/cairoint.h: Remove Boolean 'drawable' parameter from the
+	create_similar surface backend function since nothing anywhere is
+	actually using this parameter.
+
+2005-06-14  T Rowley  <tim.rowley@gmail.com>
+
+	* src/cairo-win32-font.c: Correct extents for text with a general
+	tranform.
+
+2005-06-14  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h: Remove comment suggesting ambiguity of whether
+	cairo_get_target references the surface, (we decided as part of
+	the API shakeup that cairo functions returning pointers to
+	internal objects do not automatically take a reference).
+
+2005-06-13  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h:
+	* src/cairo-pattern.c: (_cairo_pattern_create_in_error): Add new
+	_cairo_pattern_create_in_error.
+
+	* src/cairo.c: (cairo_get_source): Propagate error values from
+	cr->status to pattern->status.
+
+2005-06-13  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.c (_cairo_set_source_solid),
+	(cairo_set_source_surface), (cairo_mask_surface): No longer need
+	to check for NULL after creating a pattern.
+
+	* src/cairo.c (cairo_set_source), (cairo_mask): Propagate status
+	errors from pattern->status to cr->status.
+	
+	Originally 2005-05-08  Owen Taylor  <otaylor@redhat.com>:
+	
+	* src/cairo-pattern.c src/cairoint.h: If allocation of pattern
+	objects fails, return special static nil pattern objects.
+	
+	* src/cairo-pattern.c: If adding a color stop fails to allocate
+	memory, set pattern->status. (And fix a memory leak.) Make public
+	functions return when pattern->status is set, (and no longer
+	return a cairo_status_t).
+
+	* src/cairo-pattern.c src/cairo.h doc/public/cairo-sections.txt:
+	Add cairo_pattern_status()
+
+	* src/cairo-gstate.c: Check the status of gstate->source and
+	of mask patterns passed in.
+
+2005-06-13  Carl Worth  <cworth@cworth.org>
+
+	Originally 2005-05-08  Owen Taylor  <otaylor@redhat.com>:
+
+	* src/cairo.c (cairo_create): If cairo_create() fails, return
+	a special static object, cairo_nil.
+
+	* src/cairo.c (cairo_reference): Don't return early if 
+	cr->status is set. cr->status should not affect reference
+	counting.
+
+	* src/cairo.c: (cairo_reference), (cairo_destroy): Ignore any
+	magic object with a reference count of -1.
+
+2005-06-13  Carl Worth  <cworth@cworth.org>
+
+	Originally 2005-06-02  Carl Worth  <cworth@cworth.org>:
+
+	* src/cairo.h: Add a status field to cairo_path_t.
+
+	* src/cairo.c:
+	(cairo_copy_path), (cairo_copy_path_flat): Add documentation for
+	the new approach for handling errors in these functions---always
+	returning a valid pointer with at least a status.
+	(cairo_append_path): Propagate path status errors to the
+	context. Add note to documentation on initializing path->status.
+
+	* src/cairo-path-data-private.h: Add missing cairo_private
+	qualifier to a couple functions.
+	
+	* src/cairo-path-data.c: (_cairo_path_data_create_real): Track new
+	status field in cairo_path_t.
+	(cairo_path_destroy): Don't destroy cairo_path_nil. Add
+	documentation.
+	(_cairo_path_data_create):
+	(_cairo_path_data_create_flat):
+	(_cairo_path_data_append_to_context): Add documentation.
+	(_cairo_path_data_create_in_error): New function to create a
+	placeholder cairo_path_t just to propagate a cairo_status_t error.
+
+2005-06-11  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h:
+	* src/cairo-gstate.c: (_cairo_gstate_init,
+	_cairo_gstate_init_copy, _cairo_gstate_fini): Make these functions
+	static, which allows slightly less awkward error handling within
+	them.
+
+2005-06-10  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h: Provide font-backend-specific macros for
+	FONT_FAMILY_DEFAULT. Change CAIRO_FT_FONT_FAMILY_DEFAULT from
+	"serif" to "" to allow the actual default to come from the
+	system/user configuration.
+
+2005-06-10  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h: Pull the enum out from inside cairo_path_data_t and
+	give it a name of cairo_path_data_type_t. This allows C++ programs
+	to see the enum values. It also allows variables to be declared of
+	this type for manually constructing a cairo_path_t.
+
+2005-06-10  Carl Worth  <cworth@cworth.org>
+
+	* ROADMAP: Add 'consistent error handling' to 1.0 roadmap. (This
+	isn't new, we just forgot to list it here before).
+
+	* TODO: Big cleanup to remove finished items. Also, split the file
+	up to separate TODO items that affect the API from items that do
+	not.
+
+2005-06-10  Carl Worth  <cworth@cworth.org>
+
+	Originally: 2005-06-09  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-pdf-surface.c: (_cairo_pdf_surface_show_page):
+	* src/cairo-xcb-surface.c:
+	(_cairo_xcb_surface_acquire_source_image),
+	(_cairo_xcb_surface_acquire_dest_image):
+	* src/cairo-xlib-surface.c:
+	(_cairo_xlib_surface_acquire_source_image),
+	(_cairo_xlib_surface_acquire_dest_image): Rework occurrences
+	of 'if (status == CAIRO_STATUS_SUCCESS)' to use 'if (status)'
+	instead where trivial.
+
+2005-06-10  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h:
+	* src/cairo-font.c:
+	* src/cairo-ft-font.c:
+	* src/cairo-glitz-surface.c:
+	* src/cairo-gstate.c:
+	* src/cairo-image-surface.c:
+	* src/cairo-pattern.c:
+	* src/cairo-pdf-surface.c:
+	* src/cairo-png.c:
+	* src/cairo-surface.c:
+	* src/cairo-win32-font.c:
+	* src/cairo-win32-surface.c:
+	* src/cairo-xcb-surface.c:
+	* src/cairo-xlib-surface.c: Remove STATUS_OK macro which was not
+	being used universally.
+
+2005-06-09  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h: Remove trailing comma from enum values which gcc
+	4.0 does not want to see (Luis Villa). Closes bug #3502.
+
+2005-06-09  Owen Taylor  <otaylor@redhat.com>
+
+	* test/Makefile.am (INCLUDES): Add 
+	-I$(top_builddir)/src for cairo-features.h (Tomasz Cholewo)
+	
+2005-06-07  Keith Packard  <keithp@keithp.com>
+
+	* src/cairo-pdf-surface.c: (_cairo_pdf_surface_show_glyphs):
+	Font matrix was output incorrectly; the implicit mirror-in-y
+	transformation was not computed correctly, missing a negation
+	of the 'xy' component.
+
+2005-06-02  Kristian Høgsberg  <krh@redhat.com>
+ 
+	* src/cairo-gstate.c (_cairo_gstate_clip): When clipping, update
+	the clip surface to a new surface the size of the intersection of
+	the old clip surface and the extents of the new clip path.
+
+2005-06-03  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-font.c: (cairo_font_face_reference),
+	(cairo_font_face_destroy), (_cairo_simple_font_face_destroy),
+	(_cairo_unscaled_font_reference), (_cairo_unscaled_font_destroy),
+	(cairo_scaled_font_reference), (cairo_scaled_font_destroy):
+	* src/cairo-ft-font.c: (_ft_font_cache_destroy_cache),
+	(_cairo_ft_unscaled_font_destroy), (_ft_font_face_destroy):
+	* src/cairo-glitz-surface.c: (_cairo_glitz_area_destroy):
+	* src/cairo-path-data.c: (cairo_path_destroy):
+	* src/cairo-pdf-surface.c: (cairo_pdf_font_destroy),
+	(cairo_pdf_ft_font_destroy):
+	* src/cairo-win32-font.c: (_cairo_win32_scaled_font_destroy):
+	Allow NULL as a valid value for several objects. That is, calling
+	reference or destroy on these objects will simply do nothing,
+	successfully.
+
+	* src/cairo-atsui-font.c: (_cairo_atsui_font_destroy_font): Remove
+	extra whitespace.
+
+2005-06-03  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h:
+	* src/cairo-cache.c: (_cairo_cache_init), (_cairo_cache_destroy):
+	Remove unused cache->refcount and _cairo_cache_reference().
+
+	* src/cairo-cache.c: (_cairo_cache_destroy): Remove gratuitous
+	nesting as recommended in CODING_STYLE.
+
+2005-06-03  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h:	
+	* src/cairo-array.c: (_cairo_user_data_array_fini):
+	* src/cairo-font.c: (cairo_font_face_destroy):
+	* src/cairo-surface.c: (cairo_surface_destroy): Fix name of
+	_cairo_user_data_array_destroy to be _cairo_user_data_array_fini.
+
+2005-06-03  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-glitz-surface.c:
+	(_cairo_glitz_glyph_cache_create_entry),
+	(_cairo_glitz_glyph_cache_destroy_entry),
+	(_cairo_glitz_glyph_cache_destroy_cache),
+	(_cairo_glitz_surface_show_glyphs): Rename functions to match the
+	naming scheme used by cairo-cache.c and all other users of
+	it. Though it's quite likely that glitz had this right and now
+	everything could be changed to match it instead. I'll save that
+	for some day when we're cleaning up the cache code.
+
+2005-06-03  Carl Worth  <cworth@cworth.org>
+
+	* CODING_STYLE: Fix spelling errors.
+
+2005-06-03  Carl Worth  <cworth@cworth.org>
+
+	* CODING_STYLE: Fix Freudian unwrapped line in paragraph
+	describing why long lines should be wrapped.
+
+2005-06-03  Carl Worth  <cworth@cworth.org>
+
+	* CODING_STYLE: Add CODING_STYLE document to standardize on some
+	style issues.
+
+	* src/cairo-atsui-font.c:
+	* src/cairo-cache.c:
+	* src/cairo-ft-font.c:
+	* src/cairo-glitz-surface.c:
+	* src/cairo-gstate.c:
+	* src/cairo-matrix.c:
+	* src/cairo-pattern.c:
+	* src/cairo-pdf-surface.c:
+	* src/cairo-spline.c:
+	* src/cairo-wideint.c:
+	* src/cairo-win32-font.c:
+	* src/cairo-xlib-surface.c: Standardize brace handling around all
+	else clauses according to new CODING_STYLE guidelines.
+
+2005-06-03  Kristian Høgsberg  <krh@redhat.com>
+
+	Patch from Tomasz Cholewo <cholewo@ieee-cis.org>:
+
+	* src/cairo-pdf-surface.c: (cairo_pdf_ft_font_write_head_table),
+	(cairo_pdf_ft_font_generate): Store the index of the checksum
+	instead of a pointer to the location.
+
+2005-06-03  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h:
+	* src/cairo-gstate.c:
+	* src/cairo.c: (_cairo_set_source_solid), (cairo_set_source_rgb),
+	(cairo_set_source_rgba): Move internal convenience up from
+	_cairo_gstate_set_source_solid to _cairo_set_source_solid so that
+	all set_source functions flow through cairo_set_source.
+
+2005-06-01  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-gstate.c: (_cairo_gstate_init): Remove obsolete
+	_cairo_gstate_set_target_surface, folding its contents into
+	_cairo_gstate_init, most of which disappears due to constant
+	folding. Ensure that gstate->next is initialized even if
+	_cairo_pattern_create_solid fails.
+	
+	* src/cairo-xcb-surface.c: Remove unused
+	_cairo_xcb_surface_set_clip_region.
+
+2005-06-01  Carl Worth  <cworth@cworth.org>
+
+	* src/cairoint.h:
+	* src/cairo-font.c:
+	* src/cairo-ft-font.c:
+	* src/cairo-glitz-surface.c:
+	* src/cairo-gstate.c:
+	* src/cairo-image-surface.c:
+	* src/cairo-pattern.c:
+	* src/cairo-pdf-surface.c:
+	* src/cairo-png.c:
+	* src/cairo-surface.c:
+	* src/cairo-win32-font.c:
+	* src/cairo-win32-surface.c:
+	* src/cairo-xcb-surface.c:
+	* src/cairo-xlib-surface.c: Rename CAIRO_OK to STATUS_OK. No
+	intended changes in functionality.
+
+2005-06-01  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-gstate-private.h:
+	* src/cairo-gstate.c: Rename gstate->surface to gstate->target. No
+	intended changes in functionality.
+
+2005-06-01  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-gstate-private.h:
+	* src/cairo-gstate.c: (_cairo_gstate_init): Remove unused fields
+	from cairo_gstate_t, (font_family, font_slant,
+	font_weight). Reorder fields to match between declaration and
+	initialization and to put the most problematic fields (surface and
+	source) at the end. No intended changes in functionality.
+
+2005-06-01  Carl Worth  <cworth@cworth.org>
+
+	* test/Makefile.am (XFAIL_TESTS): Add self-intersecting to the
+	list of expected failures.
+
+2005-06-01  Carl Worth  <cworth@cworth.org>
+
+	* test/.cvsignore:
+	* test/Makefile.am:
+	* test/self-intersecting-ref.png:
+	* test/self-intersecting.c: (draw), (main): Add self-intersecting
+	test which demonstrates the long-standing bug with stroking
+	self-intersecting paths.
+
+2005-06-01  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo-gstate.c (_cairo_gstate_get_clip_extents): Fix bug in
+	converting box to rectangle that left clip_rect.height
+	uninitialized, (leading to unpredictable, intermittent test
+	failures).
+
+2005-05-31  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.h:
+	* src/cairo.c: (cairo_status_to_string), (cairo_status_string):
+	Add new function cairo_status_to_string an reimplement
+	cairo_status_string in terms of the new function.
+
+2005-05-27  Olivier Andrieu  <oliv__a@users.sourceforge.net>
+
+	* src/cairo-path-data.c (_cpdc_curve_to_flatten),
+	(_cpdp_curve_to_flatten) : Fix memory leak
+
+2005-05-26  Keith Packard  <keithp@keithp.com>
+
+	reviewed by: krh, otaylor, cworth
+
+	Replace nesting-only surface clipping with gstate contained
+	serial-number tracked clipping sets that are loaded into the surface
+	on demand just before each rendering operation.  This permits
+	multiple cairo_t contexts to reference a surface without
+	regard to ordering of operations among the contexts.
+
+	Also in this patch is a change to the xlib surface that
+	creates two separate Pictures, one for source and one for
+	destination operands which separates the source clipping
+	from destination clipping.  Cairo now specifies that sources
+	are never clipped by any clipping applied to them as destinations.
+
+	* src/cairoint.h:
+	* src/cairo-gstate-private.h:
+	Move cairo_clip_t (renamed from cairo_clip_rec_t) from cairoint.h
+	to cairo-gstate-private.h.  Eliminate stack of clip state
+	from surfaces.  Add new surface clipping API.
+	
+	* src/cairo-gstate.c: (_cairo_gstate_init),
+	(_cairo_gstate_init_copy), (_cairo_gstate_fini),
+	(_cairo_gstate_has_surface_clip), (_cairo_gstate_set_clip),
+	(_cairo_gstate_get_clip_extents),
+	(_cairo_gstate_set_target_surface), (_cairo_gstate_paint),
+	(_cairo_gstate_combine_clip_surface),
+	(_cairo_gstate_intersect_clip), (_get_mask_extents),
+	(_cairo_gstate_mask), (_cairo_gstate_stroke),
+	(_clip_and_compute_extents_arbitrary), (_composite_trap_region),
+	(_cairo_gstate_fill), (_cairo_gstate_reset_clip),
+	(_cairo_gstate_clip), (_cairo_gstate_show_glyphs):
+	Manage clip objects entirely within the gstate, loading
+	the whole thing into the surface just before drawing.
+	
+	* src/cairo-pattern.c:
+	(_cairo_pattern_acquire_surface_for_gradient),
+	(_cairo_pattern_acquire_surface_for_solid),
+	(_cairo_pattern_acquire_surface_for_surface),
+	(_cairo_pattern_acquire_surface), (_cairo_pattern_release_surface):
+	Source surfaces need not have clipping modified as the
+	surface interface now specifies that source surfaces are always
+	unclipped.
+	
+	* src/cairo-surface.c: (_cairo_surface_init),
+	(cairo_surface_finish), (_cairo_surface_clone_similar),
+	(_cairo_surface_get_current_clip_serial),
+	(_cairo_surface_allocate_clip_serial), (_cairo_surface_reset_clip),
+	(_cairo_surface_can_clip_region), (_cairo_surface_set_clip_region),
+	(_cairo_surface_can_clip_path), (_cairo_surface_clip_path),
+	(_cairo_surface_get_extents):
+	Eliminate nested clipping contexts, leaving clip management
+	entirely to the gstate.  Create new clip API for the gstate
+	which uses per-surface serial numbers to match gstate clipping
+	against current surface clipping values.
+	
+	Surfaces no longer track clipping regions at all, so the
+	old _cairo_surface_get_clip_extents has been replaced with
+	_cairo_surface_get_extents.  For PDF/PS surfaces, this
+	function is expected to return a rectangle covering the
+	entire fixed point coordinate space to leave rendering
+	unclipped by the surface.
+	
+	* src/cairo-xcb-surface.c:
+	Region clipping capability is now signalled by a non-NULL
+	function pointer in set_clip_region.
+	
+	* src/cairo-xlib-surface.c: (_cairo_xlib_surface_finish),
+	(_cairo_xlib_surface_ensure_src_picture),
+	(_cairo_xlib_surface_ensure_dst_picture),
+	(_cairo_xlib_surface_set_matrix), (_cairo_xlib_surface_set_filter),
+	(_cairo_xlib_surface_set_repeat),
+	(_cairo_xlib_surface_set_attributes),
+	(_cairo_xlib_surface_composite),
+	(_cairo_xlib_surface_fill_rectangles),
+	(_cairo_xlib_surface_composite_trapezoids),
+	(_cairo_xlib_surface_set_clip_region),
+	(_cairo_xlib_surface_create_internal),
+	(_cairo_xlib_surface_show_glyphs32),
+	(_cairo_xlib_surface_show_glyphs16),
+	(_cairo_xlib_surface_show_glyphs8),
+	(_cairo_xlib_surface_show_glyphs):
+	Each surface now contains two Pictures, one for source
+	and one for destination operands so that source operands
+	are never clipped by destination clipping.
+
+	* src/cairo.h:
+	* src/cairo.c: (cairo_status_string):
+	CAIRO_STATUS_BAD_NESTING removed
+	
+	* test/Makefile.am:
+	* test/self-copy.c: (main):
+	self-copy now passes (Xlib only, until libpixman changes land)
+
+2005-05-26  Olivier Andrieu  <oliv__a@users.sourceforge.net>
+
+	* src/cairo.c: trivial doc fixes.
+
+2005-05-24  Carl Worth  <cworth@cworth.org>
+
+	* gtk-doc.make: Re-synch with latest from gtk-doc CVS tree.
+
+	* doc/public/Makefile.am (MKTMPL_OPTIONS): Add --only-section-tmpl
+	option so that changes to inline documentation does not lead to
+	churn in the .sgml template files.
+
+	* doc/public/tmpl/cairo-font.sgml:
+	* doc/public/tmpl/cairo-ft.sgml:
+	* doc/public/tmpl/cairo-glitz.sgml:
+	* doc/public/tmpl/cairo-matrix.sgml:
+	* doc/public/tmpl/cairo-pattern.sgml:
+	* doc/public/tmpl/cairo-pdf.sgml:
+	* doc/public/tmpl/cairo-png.sgml:
+	* doc/public/tmpl/cairo-ps.sgml:
+	* doc/public/tmpl/cairo-quartz.sgml:
+	* doc/public/tmpl/cairo-surface.sgml:
+	* doc/public/tmpl/cairo-xcb.sgml:
+	* doc/public/tmpl/cairo-xlib.sgml:
+	* doc/public/tmpl/cairo.sgml: Commit new templates now that
+	gtk-doc has ripped all the inline portions out.
+
+	* doc/public/tmpl/cairo-win32.sgml:
+	* doc/public/tmpl/cairo-xcb-xrender.sgml:
+	* doc/public/tmpl/cairo-xlib-xrender.sgml: New template files
+	added for new sections.
+
+	* doc/public/cairo-sections.txt: Update to match current API.
+
+	* src/cairo-xcb.h: Make parameter names match those in the .c file
+	and its documentation.
+
+2005-05-22  Carl Worth  <cworth@cworth.org>
+
+	* src/cairo.c (cairo_create): Protect less-than and greater-than
+	symbols in documentation string.
+
+	* TODO: Not that a patch has been submitted for consistent error
+	handling.
+	
+	* src/cairo.c: Fix documentation string for cairo_create so that
+	it might actualyl appear in the manual.
+
+2005-05-18  Carl Worth  <cworth@cworth.org>
+
+	* configure.in: Add -head to CAIRO_VERSION after tagging with
+	SNAPSHOT_0_5_0.
+
 2005-05-17  Carl Worth  <cworth@cworth.org>
 
 	* PORTING_GUIDE: Added porting guide to help with transition to

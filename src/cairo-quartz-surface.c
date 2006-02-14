@@ -62,7 +62,6 @@ static cairo_surface_t *_cairo_quartz_surface_create_similar(void
                                                              *abstract_src,
                                                              cairo_format_t
                                                              format,
-                                                             int drawable,
                                                              int width,
                                                              int height)
 {
@@ -227,6 +226,7 @@ static const struct _cairo_surface_backend cairo_quartz_surface_backend = {
     NULL, /* copy_page */
     NULL, /* show_page */
     _cairo_quartz_surface_set_clip_region,
+    NULL, /* intersect_clip_path */
     _cairo_quartz_surface_get_extents,
     NULL  /* show_glyphs */
 };

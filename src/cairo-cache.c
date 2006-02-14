@@ -182,19 +182,25 @@ _cache_lookup (cairo_cache_t *cache,
 	{
 	    /* We are looking up an exact entry. */
 	    if (*probe == NULL)
+	    {
 		/* Found an empty spot, there can't be a match */
 		break;
+	    }
 	    else if (*probe != DEAD_ENTRY 
 		     && (*probe)->hashcode == hash
 		     && predicate (cache, key, *probe))
+	    {
 		return probe;
+	    }
 	}
 	else
 	{
 	    /* We are just looking for a free slot. */
 	    if (*probe == NULL 
 		|| *probe == DEAD_ENTRY)
+	    {
 		return probe;
+	    }
 	}
 
 	if (step == 0) { 	    
@@ -339,7 +345,6 @@ _cairo_cache_init (cairo_cache_t *cache,
 
     if (cache != NULL){
 	cache->arrangement = &cache_arrangements[0];
-	cache->refcount = 1;
 	cache->max_memory = max_memory;
 	cache->used_memory = 0;
 	cache->live_entries = 0;
@@ -362,31 +367,20 @@ _cairo_cache_init (cairo_cache_t *cache,
 }
 
 void
-_cairo_cache_reference (cairo_cache_t *cache)
-{
-    _cache_sane_state (cache);
-    cache->refcount++;
-}
-
-void
 _cairo_cache_destroy (cairo_cache_t *cache)
 {
     unsigned long i;
-    if (cache != NULL) {
+    if (cache == NULL)
+	return;
 	
-	_cache_sane_state (cache);
+    _cache_sane_state (cache);
 
-	if (--cache->refcount > 0)
-	    return;
+    for (i = 0; i < cache->arrangement->size; ++i)
+	_entry_destroy (cache, i);
 	
-	for (i = 0; i < cache->arrangement->size; ++i) {
-	    _entry_destroy (cache, i);
-	}
-	
-	free (cache->entries);
-	cache->entries = NULL;
-	cache->backend->destroy_cache (cache);
-    }
+    free (cache->entries);
+    cache->entries = NULL;
+    cache->backend->destroy_cache (cache);
 }
 
 cairo_status_t

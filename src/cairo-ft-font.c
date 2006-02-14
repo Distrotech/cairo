@@ -256,6 +256,7 @@ static void
 _ft_font_cache_destroy_cache (void *cache)
 {
     ft_cache_t *fc = (ft_cache_t *) cache;
+
     FT_Done_FreeType (fc->lib);
     free (fc);
 }
@@ -337,11 +338,11 @@ _ft_unscaled_font_get_for_pattern (FcPattern *pattern)
     }
 
     status = _cairo_cache_lookup (cache, &key, (void **) &entry, &created_entry);
-    if (CAIRO_OK (status) && !created_entry)
+    if (status == CAIRO_STATUS_SUCCESS && !created_entry)
 	_cairo_unscaled_font_reference (&entry->unscaled->base);
 
     _unlock_global_ft_cache ();
-    if (!CAIRO_OK (status))
+    if (status)
 	return NULL;
 
     return entry->unscaled;
@@ -482,6 +483,9 @@ _cairo_ft_unscaled_font_destroy (void *abstract_font)
 {
     ft_unscaled_font_t *unscaled  = abstract_font;
 
+    if (unscaled == NULL)
+	return;
+
     if (unscaled->from_face) {
 	/* See comments in _ft_font_face_destroy about the "zombie" state
 	 * for a _ft_font_face.
@@ -575,10 +579,9 @@ _cairo_ft_unscaled_font_create_glyph (void                            *abstract_
     height = (unsigned int) ((cbox.yMax - cbox.yMin) >> 6);
     stride = (width + 3) & -4;
     
-    if (width * height == 0) 
+    if (width * height == 0) {
 	val->image = NULL;
-    else	
-    {
+    } else  {
 
 	bitmap.pixel_mode = ft_pixel_mode_grays;
 	bitmap.num_grays  = 256;
@@ -863,7 +866,7 @@ _cairo_ft_scaled_font_text_to_glyphs (void	     *abstract_font,
     _cairo_ft_scaled_font_get_glyph_cache_key (scaled_font, &key);
 
     status = _cairo_utf8_to_ucs4 ((unsigned char*)utf8, -1, &ucs4, num_glyphs);
-    if (!CAIRO_OK (status))
+    if (status)
 	return status;
 
     face = cairo_ft_scaled_font_lock_face (&scaled_font->base);
@@ -1341,6 +1344,9 @@ _ft_font_face_destroy (void *abstract_face)
     ft_font_face_t *tmp_face = NULL;
     ft_font_face_t *last_face = NULL;
 
+    if (font_face == NULL)
+	return;
+
     /* When destroying the face created by cairo_ft_font_face_create_for_ft_face,
      * we have a special "zombie" state for the face when the unscaled font
      * is still alive but there are no public references to the font face.
@@ -1476,7 +1482,7 @@ cairo_ft_font_face_create_for_pattern (FcPattern *pattern)
 }
 
 /**
- * cairo_ft_font_create_for_ft_face:
+ * cairo_ft_font_face_create_for_ft_face:
  * @face: A FreeType face object, already opened. This must
  *   be kept around until the face's refcount drops to
  *   zero and it is freed. Since the face may be referenced

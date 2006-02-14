@@ -229,7 +229,6 @@ _CAIRO_FORMAT_DEPTH (cairo_format_t format)
 static cairo_surface_t *
 _cairo_xcb_surface_create_similar (void		       *abstract_src,
 				   cairo_format_t	format,
-				   int			drawable,
 				   int			width,
 				   int			height)
 {
@@ -371,7 +370,7 @@ _get_image_surface (cairo_xcb_surface_t    *surface,
 	rect.x = interest_rect->x;
 	rect.y = interest_rect->y;
 	rect.width = interest_rect->width;
-	rect.height = interest_rect->width;
+	rect.height = interest_rect->height;
     
 	if (rect.x > x1)
 	    x1 = rect.x;
@@ -521,9 +520,6 @@ _get_image_surface (cairo_xcb_surface_t    *surface,
     /* Let the surface take ownership of the data */
     _cairo_image_surface_assume_ownership_of_data (image);
 
-    _cairo_image_surface_set_repeat (image, surface->base.repeat);
-    _cairo_image_surface_set_matrix (image, &(surface->base.matrix));
-
     *image_out = image;
     return CAIRO_STATUS_SUCCESS;
 }
@@ -569,10 +565,12 @@ _cairo_xcb_surface_acquire_source_image (void                    *abstract_surfa
     cairo_status_t status;
 
     status = _get_image_surface (surface, NULL, &image, NULL);
-    if (status == CAIRO_STATUS_SUCCESS)
-	*image_out = image;
+    if (status)
+	return status;
 
-    return status;
+    *image_out = image;
+
+    return CAIRO_STATUS_SUCCESS;
 }
 
 static void
@@ -595,10 +593,12 @@ _cairo_xcb_surface_acquire_dest_image (void                    *abstract_surface
     cairo_status_t status;
 
     status = _get_image_surface (surface, interest_rect, &image, image_rect_out);
-    if (status == CAIRO_STATUS_SUCCESS)
-	*image_out = image;
+    if (status)
+	return status;
 
-    return status;
+    *image_out = image;
+
+    return CAIRO_STATUS_SUCCESS;
 }
 
 static void
@@ -637,7 +637,7 @@ _cairo_xcb_surface_clone_similar (void			*abstract_surface,
 	cairo_image_surface_t *image_src = (cairo_image_surface_t *)src;
     
 	clone = (cairo_xcb_surface_t *)
-	    _cairo_xcb_surface_create_similar (surface, image_src->format, 0,
+	    _cairo_xcb_surface_create_similar (surface, image_src->format,
 					       image_src->width, image_src->height);
 	if (clone == NULL)
 	    return CAIRO_STATUS_NO_MEMORY;
@@ -850,12 +850,12 @@ _cairo_xcb_surface_composite (cairo_operator_t		operator,
 	return status;
     
     status = _cairo_xcb_surface_set_attributes (src, &src_attr);
-    if (CAIRO_OK (status))
+    if (status == CAIRO_STATUS_SUCCESS)
     {
 	if (mask)
 	{
 	    status = _cairo_xcb_surface_set_attributes (mask, &mask_attr);
-	    if (CAIRO_OK (status))
+	    if (status == CAIRO_STATUS_SUCCESS)
 		XCBRenderComposite (dst->dpy,
 				    _render_operator (operator),
 				    src->picture,
@@ -966,7 +966,7 @@ _cairo_xcb_surface_composite_trapezoids (cairo_operator_t	operator,
     /* XXX: _format_from_cairo is slow. should cache something. */
     render_format = _format_from_cairo (dst->dpy, CAIRO_FORMAT_A8),
     status = _cairo_xcb_surface_set_attributes (src, &attributes);
-    if (CAIRO_OK (status))
+    if (status == CAIRO_STATUS_SUCCESS)
 	XCBRenderTrapezoids (dst->dpy,
 			     _render_operator (operator),
 			     src->picture, dst->picture,
@@ -978,14 +978,6 @@ _cairo_xcb_surface_composite_trapezoids (cairo_operator_t	operator,
     _cairo_pattern_release_surface (&dst->base, &src->base, &attributes);
 
     return status;
-}
-
-static cairo_int_status_t
-_cairo_xcb_surface_set_clip_region (void *abstract_surface,
-				    pixman_region16_t *region)
-{
-    /* XXX: FIXME */
-    return CAIRO_INT_STATUS_UNSUPPORTED;
 }
 
 static cairo_int_status_t
@@ -1016,7 +1008,8 @@ static const cairo_surface_backend_t cairo_xcb_surface_backend = {
     _cairo_xcb_surface_composite_trapezoids,
     NULL, /* copy_page */
     NULL, /* show_page */
-    _cairo_xcb_surface_set_clip_region,
+    NULL, /* _cairo_xcb_surface_set_clip_region */
+    NULL, /* intersect_clip_path */
     _cairo_xcb_surface_get_extents,
     NULL /* show_glyphs */
 };

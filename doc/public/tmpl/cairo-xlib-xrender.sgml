@@ -1,5 +1,5 @@
 <!-- ##### SECTION Title ##### -->
-ATSUI Fonts
+XLib/Xrender Backend
 
 <!-- ##### SECTION Short_Description ##### -->
 
@@ -15,5 +15,18 @@ ATSUI Fonts
 </para>
 
 <!-- ##### SECTION Stability_Level ##### -->
+
+
+<!-- ##### FUNCTION cairo_xlib_surface_create_with_xrender_format ##### -->
+<para>
+
+</para>
+
+@dpy: 
+@drawable: 
+@format: 
+@width: 
+@height: 
+@Returns: 
 
 

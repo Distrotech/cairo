@@ -20,6 +20,7 @@ pixman-rotate			\
 scale-source-surface-paint	\
 select-font-no-show-text	\
 self-copy			\
+self-intersecting		\
 set-source			\
 source-clip			\
 source-surface-scale-paint	\
@@ -34,7 +35,7 @@ user-data			\
 rel-path
 
 if CAIRO_HAS_PDF_SURFACE
-TESTS += pdf-surface
+TESTS += pdf-surface pdf-clip
 endif
 
 if CAIRO_HAS_PS_SURFACE
@@ -67,6 +68,7 @@ path-data-ref.png			\
 pixman-rotate-ref.png			\
 romedalen.png				\
 self-copy-ref.png			\
+self-intersecting-ref.png		\
 scale-source-surface-paint-ref.png	\
 set-source-ref.png			\
 source-clip-ref.png			\
@@ -93,7 +95,7 @@ rel-path-ref.png
 XFAIL_TESTS =			\
 filter-nearest-offset		\
 pixman-rotate			\
-self-copy			\
+self-intersecting		\
 source-surface-scale-paint	\
 text-rotate
 
@@ -103,7 +105,12 @@ check_PROGRAMS = $(TESTS)
 # not be the most portable approach, but it is pragmatic and I'm
 # willing to do something cleaner as soon as it causes someone a
 # problem.
-INCLUDES = -D_GNU_SOURCE -I$(srcdir) $(CAIRO_CFLAGS) -I$(top_srcdir)/src
+INCLUDES =					\
+	-D_GNU_SOURCE				\
+	$(CAIRO_CFLAGS)				\
+	-I$(srcdir)				\
+	-I$(top_srcdir)/src			\
+	-I$(top_builddir)/src
 
 noinst_LTLIBRARIES = libcairotest.la
 
@@ -141,11 +148,13 @@ paint_LDADD = $(LDADDS)
 paint_with_alpha_LDADD = $(LDADDS)
 path_data_LDADD = $(LDADDS)
 pdf_surface_LDADD = $(LDADDS)
+pdf_clip_LDADD = $(LDADDS)
 ps_surface_LDADD = $(LDADDS)
 pixman_rotate_LDADD = $(LDADDS)
 scale_source_surface_paint_LDADD = $(LDADDS)
 select_font_no_show_text_LDADD = $(LDADDS)
 self_copy_LDADD = $(LDADDS)
+self_intersecting_LDADD = $(LDADDS)
 set_source_LDADD = $(LDADDS)
 source_clip_LDADD = $(LDADDS)
 source_surface_scale_paint_LDADD = $(LDADDS)
@@ -163,4 +172,10 @@ xlib_surface_LDADD = $(LDADDS)
 noinst_PROGRAMS = imagediff
 imagediff_LDADD = $(LDADDS)
 
-CLEANFILES = *-out.png *-diff.png *.log ps-surface.ps pdf-surface.pdf
+CLEANFILES =					\
+	*-out.png				\
+	*-diff.png				\
+	*.log					\
+	ps-surface.ps				\
+	pdf-surface.pdf				\
+	pdf-clip.pdf

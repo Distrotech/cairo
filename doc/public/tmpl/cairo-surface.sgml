@@ -23,20 +23,6 @@ cairo_surface_t
 </para>
 
 
-<!-- ##### MACRO cairo_surface_create_for_image ##### -->
-<para>
-
-</para>
-
-@Returns: 
-<!-- # Unused Parameters # -->
-@data: 
-@format: 
-@width: 
-@height: 
-@stride: 
-
-
 <!-- ##### FUNCTION cairo_surface_create_similar ##### -->
 <para>
 
@@ -74,60 +60,6 @@ cairo_surface_t
 @Returns: 
 
 
-<!-- ##### MACRO cairo_surface_set_repeat ##### -->
-<para>
-
-</para>
-
-@Returns: 
-<!-- # Unused Parameters # -->
-@surface: 
-@repeat: 
-
-
-<!-- ##### MACRO cairo_surface_set_matrix ##### -->
-<para>
-
-</para>
-
-@Returns: 
-<!-- # Unused Parameters # -->
-@surface: 
-@matrix: 
-
-
-<!-- ##### MACRO cairo_surface_get_matrix ##### -->
-<para>
-
-</para>
-
-@Returns: 
-<!-- # Unused Parameters # -->
-@surface: 
-@matrix: 
-
-
-<!-- ##### MACRO cairo_surface_set_filter ##### -->
-<para>
-
-</para>
-
-@Returns: 
-<!-- # Unused Parameters # -->
-@surface: 
-@filter: 
-
-
-<!-- ##### MACRO cairo_surface_get_filter ##### -->
-<para>
-
-</para>
-
-@Returns: 
-<!-- # Unused Parameters # -->
-@surface: 
-
-
 <!-- ##### FUNCTION cairo_surface_set_user_data ##### -->
 <para>
 
@@ -138,8 +70,6 @@ cairo_surface_t
 @user_data: 
 @destroy: 
 @Returns: 
-<!-- # Unused Parameters # -->
-@data: 
 
 
 <!-- ##### FUNCTION cairo_surface_get_user_data ##### -->

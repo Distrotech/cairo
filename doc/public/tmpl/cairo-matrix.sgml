@@ -65,14 +65,6 @@ cairo_matrix_t
 @yy: 
 @x0: 
 @y0: 
-<!-- # Unused Parameters # -->
-@Param7: 
-@a: 
-@b: 
-@c: 
-@d: 
-@tx: 
-@ty: 
 
 
 <!-- ##### FUNCTION cairo_matrix_init_identity ##### -->
@@ -120,8 +112,6 @@ cairo_matrix_t
 @matrix: 
 @tx: 
 @ty: 
-<!-- # Unused Parameters # -->
-@Returns: 
 
 
 <!-- ##### FUNCTION cairo_matrix_scale ##### -->
@@ -132,8 +122,6 @@ cairo_matrix_t
 @matrix: 
 @sx: 
 @sy: 
-<!-- # Unused Parameters # -->
-@Returns: 
 
 
 <!-- ##### FUNCTION cairo_matrix_rotate ##### -->
@@ -143,8 +131,6 @@ cairo_matrix_t
 
 @matrix: 
 @radians: 
-<!-- # Unused Parameters # -->
-@Returns: 
 
 
 <!-- ##### FUNCTION cairo_matrix_invert ##### -->
@@ -164,8 +150,6 @@ cairo_matrix_t
 @result: 
 @a: 
 @b: 
-<!-- # Unused Parameters # -->
-@Returns: 
 
 
 <!-- ##### FUNCTION cairo_matrix_transform_distance ##### -->
@@ -176,25 +160,15 @@ cairo_matrix_t
 @matrix: 
 @dx: 
 @dy: 
-<!-- # Unused Parameters # -->
-@Returns: 
 
 
 <!-- ##### FUNCTION cairo_matrix_transform_point ##### -->
 <para>
+
 </para>
 
 @matrix: 
 @x: 
 @y: 
-<!-- # Unused Parameters # -->
-@Returns: 
-
-<!--
-Local variables:
-mode: sgml
-sgml-parent-document: ("../cairo-docs.xml" "book" "refsect2" "")
-End:
--->
 
 

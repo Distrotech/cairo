@@ -259,7 +259,6 @@ cairo_image_surface_get_height (cairo_surface_t *surface)
 static cairo_surface_t *
 _cairo_image_surface_create_similar (void		*abstract_src,
 				     cairo_format_t	format,
-				     int		drawable,
 				     int		width,
 				     int		height)
 {
@@ -352,7 +351,7 @@ _cairo_image_surface_clone_similar (void		*abstract_surface,
     return CAIRO_INT_STATUS_UNSUPPORTED;
 }
 
-cairo_status_t
+static cairo_status_t
 _cairo_image_surface_set_matrix (cairo_image_surface_t	*surface,
 				 const cairo_matrix_t	*matrix)
 {
@@ -375,7 +374,7 @@ _cairo_image_surface_set_matrix (cairo_image_surface_t	*surface,
     return CAIRO_STATUS_SUCCESS;
 }
 
-cairo_status_t
+static cairo_status_t
 _cairo_image_surface_set_filter (cairo_image_surface_t *surface, cairo_filter_t filter)
 {
     pixman_filter_t pixman_filter;
@@ -405,7 +404,7 @@ _cairo_image_surface_set_filter (cairo_image_surface_t *surface, cairo_filter_t 
     return CAIRO_STATUS_SUCCESS;
 }
 
-cairo_status_t
+static cairo_status_t
 _cairo_image_surface_set_repeat (cairo_image_surface_t *surface, int repeat)
 {
     pixman_image_set_repeat (surface->pixman_image, repeat);
@@ -518,12 +517,12 @@ _cairo_image_surface_composite (cairo_operator_t	operator,
 	return status;
     
     status = _cairo_image_surface_set_attributes (src, &src_attr);
-    if (CAIRO_OK (status))
+    if (status == CAIRO_STATUS_SUCCESS)
     {
 	if (mask)
 	{
 	    status = _cairo_image_surface_set_attributes (mask, &mask_attr);
-	    if (CAIRO_OK (status))
+	    if (status == CAIRO_STATUS_SUCCESS)
 		pixman_composite (_pixman_operator (operator),
 				  src->pixman_image,
 				  mask->pixman_image,
@@ -621,7 +620,7 @@ _cairo_image_surface_composite_trapezoids (cairo_operator_t	operator,
     /* XXX: The pixman_trapezoid_t cast is evil and needs to go away
      * somehow. */
     status = _cairo_image_surface_set_attributes (src, &attributes);
-    if (CAIRO_OK (status))
+    if (status == CAIRO_STATUS_SUCCESS)
 	pixman_composite_trapezoids (_pixman_operator (operator),
 				     src->pixman_image,
 				     dst->pixman_image,
@@ -714,6 +713,7 @@ static const cairo_surface_backend_t cairo_image_surface_backend = {
     NULL, /* copy_page */
     NULL, /* show_page */
     _cairo_image_abstract_surface_set_clip_region,
+    NULL, /* intersect_clip_path */
     _cairo_image_abstract_surface_get_extents,
     NULL /* show_glyphs */
 };

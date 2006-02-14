@@ -159,7 +159,6 @@ cairo_ps_surface_create_for_stream (cairo_write_func_t	write_func,
 static cairo_surface_t *
 _cairo_ps_surface_create_similar (void		*abstract_src,
 				 cairo_format_t	format,
-				 int		drawable,
 				 int		width,
 				 int		height)
 {
@@ -373,6 +372,7 @@ static const cairo_surface_backend_t cairo_ps_surface_backend = {
     _cairo_ps_surface_copy_page,
     _cairo_ps_surface_show_page,
     _cairo_ps_surface_set_clip_region,
+    NULL, /* intersect_clip_path */
     _cairo_ps_surface_get_extents,
     NULL /* show_glyphs */
 };

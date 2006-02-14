@@ -22,11 +22,31 @@ PS Backend
 
 </para>
 
-@file: 
-@width_inches: 
-@height_inches: 
-@x_pixels_per_inch: 
-@y_pixels_per_inch: 
+@filename: 
+@width_in_points: 
+@height_in_points: 
 @Returns: 
+
+
+<!-- ##### FUNCTION cairo_ps_surface_create_for_stream ##### -->
+<para>
+
+</para>
+
+@write_func: 
+@closure: 
+@width_in_points: 
+@height_in_points: 
+@Returns: 
+
+
+<!-- ##### FUNCTION cairo_ps_surface_set_dpi ##### -->
+<para>
+
+</para>
+
+@surface: 
+@x_dpi: 
+@y_dpi: 
 
 

@@ -69,6 +69,12 @@ API Issues (more detail in TODO file)
                     of them.
         Status: not started, there is a rough plan in TODO
 
+ A9. consistent error handling for all objects
+	Difficulty: Easy to implement to get the API right. Hard to test.
+	Status: Done for cairo_t, cairo_path_t, and cairo_pattern_t.
+	        Still need to do cairo_font_face_t,
+		cairo_scaled_font_t, and cairo_surface_t.
+
 Performance work
 ----------------
 ✓P1. Make pixel-aligned rectangle compositing fast

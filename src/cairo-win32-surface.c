@@ -1,6 +1,6 @@
 /* Cairo - a vector graphics library with display and print output
  *
- * Copyright Â© 2005 Red Hat, Inc.
+ * Copyright Â© 2005 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it either under the terms of the GNU Lesser General Public
@@ -292,7 +292,6 @@ _cairo_win32_surface_create_for_dc (HDC             original_dc,
 static cairo_surface_t *
 _cairo_win32_surface_create_similar (void	    *abstract_src,
 				     cairo_format_t  format,
-				     int	     drawable,
 				     int	     width,
 				     int	     height)
 {
@@ -359,7 +358,6 @@ _cairo_win32_surface_get_subimage (cairo_win32_surface_t  *surface,
     local = 
 	(cairo_win32_surface_t *) _cairo_win32_surface_create_similar (surface,
 								       surface->format,
-								       0,
 								       width, height);
     if (!local)
 	return CAIRO_STATUS_NO_MEMORY;
@@ -404,12 +402,13 @@ _cairo_win32_surface_acquire_source_image (void                    *abstract_sur
     status = _cairo_win32_surface_get_subimage (abstract_surface, 0, 0,
 						surface->clip_rect.width,
 						surface->clip_rect.height, &local);
-    if (CAIRO_OK (status)) {
-	*image_out = (cairo_image_surface_t *)local->image;
-	*image_extra = local;
-    }
+    if (status)
+	return status;
 
-    return status;
+    *image_out = (cairo_image_surface_t *)local->image;
+    *image_extra = local;
+
+    return CAIRO_STATUS_SUCCESS;
 }
 
 static void
@@ -475,17 +474,18 @@ _cairo_win32_surface_acquire_dest_image (void                    *abstract_surfa
     status = _cairo_win32_surface_get_subimage (abstract_surface, 
 						x1, y1, x2 - x1, y2 - y1,
 						&local);
-    if (CAIRO_OK (status)) {
-	*image_out = (cairo_image_surface_t *)local->image;
-	*image_extra = local;
-	
-	image_rect->x = x1;
-	image_rect->y = y1;
-	image_rect->width = x2 - x1;
-	image_rect->height = y2 - y1;
-    }
+    if (status)
+	return status;
 
-    return status;
+    *image_out = (cairo_image_surface_t *)local->image;
+    *image_extra = local;
+    
+    image_rect->x = x1;
+    image_rect->y = y1;
+    image_rect->width = x2 - x1;
+    image_rect->height = y2 - y1;
+
+    return CAIRO_STATUS_SUCCESS;
 }
 
 static void
@@ -941,6 +941,7 @@ static const cairo_surface_backend_t cairo_win32_surface_backend = {
     NULL, /* copy_page */
     NULL, /* show_page */
     _cairo_win32_surface_set_clip_region,
+    NULL, /* intersect_clip_path */
     _cairo_win32_surface_get_extents,
     NULL  /* show_glyphs */
 };
