@@ -1,3 +1,21 @@
+2004-04-16  Carl Worth  <cworth@isi.edu>
+
+	* NEWS: Added notes for snapshot 0.1.22.
+
+	* configure.in: Now depends on libpixman 0.1.1.
+	Bump version to 0.1.22.
+
+	* src/cairo_image_surface.c (_create_pixman_format): Track pixman
+	fixes to PIXMAN_FORMAT_NAME_*.
+
+	* src/cairo_png_surface.c (cairo_png_surface_create): Explicitly
+	add cases for all enum values to eliminate compiler warnings.
+
+	* src/cairo.h: Remove proposal for surface_clip interface as
+	cairo_clip should be able to cover this case now.
+
+	* BUGS: Added bug concerning negative ref_counts.
+
 2004-04-09  David Reveman  <c99drn@cs.umu.se>
 
 	* NEWS: Added notes for snapshot 0.1.21.
