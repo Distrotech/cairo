@@ -2063,7 +2063,7 @@ _xlib_glyphset_cache_create_entry (void *abstract_cache,
     entry->key = *key;
     _cairo_unscaled_font_reference (entry->key.unscaled);
 
-    if (!im->image) {
+    if (im->image->width == 0 || im->image->height == 0) {
 	entry->glyph = None;
 	entry->glyphset = None;
 	entry->key.base.memory = 0;
