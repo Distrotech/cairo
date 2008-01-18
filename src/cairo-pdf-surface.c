@@ -1722,11 +1722,11 @@ _cairo_pdf_surface_select_pattern (cairo_pdf_surface_t *surface,
         if (is_stroke) {
             _cairo_output_stream_printf (surface->output,
                                          "/Pattern CS /res%d SCN ",
-                                         surface->emitted_pattern.pattern);
+                                         surface->emitted_pattern.pattern.id);
         } else {
             _cairo_output_stream_printf (surface->output,
                                          "/Pattern cs /res%d scn ",
-                                         surface->emitted_pattern.pattern);
+                                         surface->emitted_pattern.pattern.id);
         }
 
         _cairo_output_stream_printf (surface->output,
