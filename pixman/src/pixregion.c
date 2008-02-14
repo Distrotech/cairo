@@ -355,6 +355,15 @@ pixman_region_init_rects(pixman_region16_t *region, pixman_box16_t *boxes, int c
     }
 
     pixman_region_init(region);
+
+    /* if it's 0, don't call pixman_rect_alloc -- 0 rectangles is
+     * a special case, and causing pixman_rect_alloc would cause
+     * us to leak memory (because the 0-rect case should be the
+     * static pixman_region_emptyData data).
+     */
+    if (count == 0)
+        return PIXMAN_REGION_STATUS_SUCCESS;
+
     if (!pixman_rect_alloc(region, count))
 	return PIXMAN_REGION_STATUS_FAILURE;
 
