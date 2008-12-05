@@ -444,9 +444,8 @@ CAIRO_BACKEND_ENABLE(beos, BeOS/Zeta, beos, BEOS_SURFACE, no, [
   esac
 ])
 
-if test "x$use_beos" = "xyes"; then
-  AC_PROG_CXX
-fi
+dnl We need g++ to compile the Beos backend
+AC_PROG_CXX
 
 dnl ===========================================================================
 

@@ -230,8 +230,9 @@ cairo_sources += $(os2_sources)
 backend_pkgconfigs += cairo-os2.pc
 endif
 
-beos_headers = cairo-beos.h
-beos_sources = cairo-beos-surface.cpp
+# comment out the cpp files otherwise automake thinks we need g++
+#beos_headers = cairo-beos.h
+#beos_sources = cairo-beos-surface.cpp
 cairo_all_sources += $(beos_headers) $(beos_sources)
 if CAIRO_HAS_BEOS_SURFACE
 cairo_headers += $(beos_headers)
