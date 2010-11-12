@@ -189,7 +189,7 @@ _cairo_xcb_surface_create_similar (void			*abstract_other,
     if (other->drm != NULL) {
 	cairo_surface_t *drm;
 
-	drm = _cairo_drm_surface_create_similar (other->drm, content, width, height);
+	drm = other->drm->backend->create_similar (other->drm, content, width, height);
 	if (drm != NULL)
 	    return drm;
     }
