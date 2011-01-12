@@ -374,6 +374,7 @@ REFERENCE_IMAGES = \
 	composite-integer-translate-source.ref.png \
 	composite-integer-translate-source.svg12.argb32.xfail.png \
 	composite-integer-translate-source.svg12.rgb24.xfail.png \
+	conjoint-solid.ref.png \
 	copy-path.image16.ref.png \
 	copy-path.ps.ref.png \
 	copy-path.ref.png \
