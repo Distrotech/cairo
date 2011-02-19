@@ -1902,8 +1902,6 @@ cairo_arc_negative (cairo_t *cr,
 	return;
     }
 
-	return;
-
     while (angle2 > angle1)
 	angle2 -= 2 * M_PI;
 
