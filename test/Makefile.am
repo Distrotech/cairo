@@ -1230,6 +1230,7 @@ REFERENCE_IMAGES = \
 	stroke-image.quartz.ref.png \
 	stroke-image.ref.png \
 	stroke-image.xlib.ref.png \
+	stroke-open-box.ref.png \
 	subsurface.ref.png \
 	subsurface.image16.ref.png \
 	subsurface.ps.ref.png \
