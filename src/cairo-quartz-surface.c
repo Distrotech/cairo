@@ -2579,12 +2579,19 @@ _cairo_quartz_surface_show_glyphs_cg (void *abstract_surface,
 	}
     }
 
+    /* scale(1,-1) * scaled_font->scale */
     textTransform = CGAffineTransformMake (scaled_font->scale.xx,
 					   scaled_font->scale.yx,
 					   -scaled_font->scale.xy,
 					   -scaled_font->scale.yy,
 					   0, 0);
-    _cairo_quartz_cairo_matrix_to_quartz (&scaled_font->scale_inverse, &invTextTransform);
+
+    /* scaled_font->scale_inverse * scale(1,-1) */
+    invTextTransform = CGAffineTransformMake (scaled_font->scale_inverse.xx,
+					      -scaled_font->scale_inverse.yx,
+					      scaled_font->scale_inverse.xy,
+					      -scaled_font->scale_inverse.yy,
+					      0.0, 0.0);
 
     CGContextSetTextMatrix (surface->cgContext, CGAffineTransformIdentity);
 
