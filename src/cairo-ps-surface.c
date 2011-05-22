@@ -3779,10 +3779,17 @@ _cairo_ps_surface_set_bounding_box (void		*abstract_surface,
     cairo_bool_t has_page_media;
     const char *page_media;
 
-    x1 = floor (_cairo_fixed_to_double (bbox->p1.x));
-    y1 = floor (surface->height - _cairo_fixed_to_double (bbox->p2.y));
-    x2 = ceil (_cairo_fixed_to_double (bbox->p2.x));
-    y2 = ceil (surface->height - _cairo_fixed_to_double (bbox->p1.y));
+    if (surface->eps) {
+	x1 = floor (_cairo_fixed_to_double (bbox->p1.x));
+	y1 = floor (surface->height - _cairo_fixed_to_double (bbox->p2.y));
+	x2 = ceil (_cairo_fixed_to_double (bbox->p2.x));
+	y2 = ceil (surface->height - _cairo_fixed_to_double (bbox->p1.y));
+    } else {
+	x1 = 0;
+	y1 = 0;
+	x2 = ceil (surface->width);
+	y2 = ceil (surface->height);
+    }
 
     surface->page_bbox.x = x1;
     surface->page_bbox.y = y1;
