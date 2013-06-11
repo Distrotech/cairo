@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <link href='https://fonts.googleapis.com/css?family=Chivo:900' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/pygment_trac.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print" />
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <title>Cairo by Distrotech</title>
+  </head>
+
+  <body>
+    <div id="container">
+      <div class="inner">
+
+        <header>
+          <h1>Cairo</h1>
+          <h2>Mirror of git://anongit.freedesktop.org/git/cairo</h2>
+        </header>
+
+        <section id="downloads" class="clearfix">
+          <a href="https://github.com/Distrotech/cairo/zipball/master" id="download-zip" class="button"><span>Download .zip</span></a>
+          <a href="https://github.com/Distrotech/cairo/tarball/master" id="download-tar-gz" class="button"><span>Download .tar.gz</span></a>
+          <a href="https://github.com/Distrotech/cairo" id="view-on-github" class="button"><span>View on GitHub</span></a>
+        </section>
+
+        <hr>
+
+        <section id="main_content">
+          <p>Cairo - Multi-platform 2D graphics library
+<a href="http://cairographics.org">http://cairographics.org</a></p>
+
+<h1>
+<a name="what-is-cairo" class="anchor" href="#what-is-cairo"><span class="octicon octicon-link"></span></a>What is cairo</h1>
+
+<p>Cairo is a 2D graphics library with support for multiple output
+devices. Currently supported output targets include the X Window
+System (via both Xlib and XCB), quartz, win32, and image buffers,
+as well as PDF, PostScript, and SVG file output. Experimental backends
+include OpenGL, BeOS, OS/2, and DirectFB.</p>
+
+<p>Cairo is designed to produce consistent output on all output media
+while taking advantage of display hardware acceleration when available
+(for example, through the X Render Extension).</p>
+
+<p>The cairo API provides operations similar to the drawing operators of
+PostScript and PDF. Operations in cairo include stroking and filling
+cubic Bézier splines, transforming and compositing translucent images,
+and antialiased text rendering. All drawing operations can be
+transformed by any affine transformation (scale, rotation, shear,
+etc.).</p>
+
+<p>Cairo has been designed to let you draw anything you want in a modern
+2D graphical user interface.  At the same time, the cairo API has been
+designed to be as fun and easy to learn as possible. If you're not
+having fun while programming with cairo, then we have failed
+somewhere---let us know and we'll try to fix it next time around.</p>
+
+<p>Cairo is free software and is available to be redistributed and/or
+modified under the terms of either the GNU Lesser General Public
+License (LGPL) version 2.1 or the Mozilla Public License (MPL) version
+1.1.</p>
+
+<h1>
+<a name="where-to-get-more-information-about-cairo" class="anchor" href="#where-to-get-more-information-about-cairo"><span class="octicon octicon-link"></span></a>Where to get more information about cairo</h1>
+
+<p>The primary source of information about cairo is:</p>
+
+<pre><code>http://cairographics.org/
+</code></pre>
+
+<p>The latest versions of cairo can always be found at:</p>
+
+<pre><code>http://cairographics.org/download
+</code></pre>
+
+<p>Documentation on using cairo and frequently-asked questions:</p>
+
+<pre><code>http://cairographics.org/documentation
+http://cairographics.org/FAQ
+</code></pre>
+
+<p>Mailing lists for contacting cairo users and developers:</p>
+
+<pre><code>http://cairographics.org/lists
+</code></pre>
+
+<p>Roadmap and unscheduled things to do, (please feel free to help out):</p>
+
+<pre><code>http://cairographics.org/roadmap
+http://cairographics.org/todo
+</code></pre>
+
+<h1>
+<a name="dependencies" class="anchor" href="#dependencies"><span class="octicon octicon-link"></span></a>Dependencies</h1>
+
+<p>The set of libraries needed to compile cairo depends on which backends
+are enabled when cairo is configured. So look at the list below to
+determine which dependencies are needed for the backends of interest.</p>
+
+<p>For the surface backends, we have both "supported" and "experimental"
+backends. Further, the supported backends can be divided into the
+"standard" backends which can be easily built on any platform, and the
+"platform" backends which depend on some underlying platform-specific
+system, (such as the X Window System or some other window system).</p>
+
+<p>As an example, for a standard Linux build, (with image, png, pdf,
+PostScript, svg, and xlib surface backends, and the freetype font
+backend), the following sample commands will install necessary
+dependencies:</p>
+
+<pre><code>Debian (and similar):
+
+apt-get install libpng12-dev libz-dev libxrender-dev libfontconfig1-dev
+
+Fedora (and similar):
+
+yum install libpng-devel zlib-devel libXrender-devel fontconfig-devel
+</code></pre>
+
+<p>(Those commands intentionally don't install pixman from a distribution
+package since if you're manually compiling cairo, then you likely want
+to grab pixman from the same place at the same time and compile it as
+well.)</p>
+
+<h2>
+<a name="supported-standard-surface-backends" class="anchor" href="#supported-standard-surface-backends"><span class="octicon octicon-link"></span></a>Supported, "standard" surface backends</h2>
+
+<pre><code>image backend (required)
+------------------------
+pixman &gt;= 0.20.2    http://cairographics.org/releases
+
+png support (can be left out if desired, but many
+-----------  applications expect it to be present)
+libpng          http://www.libpng.org/pub/png/libpng.html
+
+pdf backend
+-----------
+zlib            http://www.gzip.org/zlib
+
+postscript backend
+------------------
+zlib            http://www.gzip.org/zlib
+
+svg backend
+-----------
+[none]
+</code></pre>
+
+<h2>
+<a name="supported-platform-surface-backends" class="anchor" href="#supported-platform-surface-backends"><span class="octicon octicon-link"></span></a>Supported, "platform" surface backends</h2>
+
+<pre><code>xlib backend
+------------
+X11         http://freedesktop.org/Software/xlibs
+
+xlib-xrender backend
+--------------------
+Xrender &gt;= 0.6      http://freedesktop.org/Software/xlibs
+
+quartz backend
+--------------
+MacOS X &gt;= 10.4 with Xcode &gt;= 2.4
+
+win32 backend
+-------------
+Microsoft Windows 2000 or newer[*].
+
+xcb backend
+-----------
+XCB         http://xcb.freedesktop.org
+</code></pre>
+
+<h2>
+<a name="font-backends-required-to-have-at-least-one" class="anchor" href="#font-backends-required-to-have-at-least-one"><span class="octicon octicon-link"></span></a>Font backends (required to have at least one)</h2>
+
+<pre><code>freetype font backend
+---------------------
+freetype &gt;= 2.1.9   http://freetype.org
+fontconfig      http://fontconfig.org
+
+quartz-font backend
+-------------------
+MacOS X &gt;= 10.4 with Xcode &gt;= 2.4
+
+win32 font backend
+------------------
+Microsoft Windows 2000 or newer[*].
+
+[*] The Win32 backend should work on Windows 2000 and newer
+    (excluding Windows Me.) Most testing has been done on
+    Windows XP. While some portions of the code have been
+    adapted to work on older versions of Windows, considerable
+    work still needs to be done to get cairo running in those
+    environments.
+
+    Cairo can be compiled on Windows with either the gcc
+    toolchain (see http://www.mingw.org) or with Microsoft
+    Visual C++.  If the gcc toolchain is used, the standard
+    build instructions using configure apply, (see INSTALL).
+    If Visual C++ is desired, GNU make is required and
+    Makefile.win32 can be used via 'make -f Makefile.win32'.
+    The compiler, include paths, and library paths must be set
+    up correctly in the environment.
+
+    MSVC versions earlier than 7.1 are known to miscompile
+    parts of cairo and pixman, and so should be avoided. MSVC
+    7.1 or later, including the free Microsoft Visual Studio
+    Express editions, produce correct code.
+</code></pre>
+
+<h2>
+<a name="experimental-surface-backends" class="anchor" href="#experimental-surface-backends"><span class="octicon octicon-link"></span></a>Experimental surface backends</h2>
+
+<pre><code>beos backend
+------------
+No dependencies in itself other than an installed BeOS system, but cairo
+requires a font backend. See the freetype dependency list.
+
+os2 backend
+-----------
+Cairo should run on any recent version of OS/2 or eComStation, but it
+requires a font backend. See the freetype dependency list. Ready to use
+packages and developer dependencies are available at Netlabs:
+            ftp://ftp.netlabs.org/pub/cairo
+</code></pre>
+
+<h1>
+<a name="compiling" class="anchor" href="#compiling"><span class="octicon octicon-link"></span></a>Compiling</h1>
+
+<p>See the INSTALL document for build instructions.</p>
+
+<h1>
+<a name="history" class="anchor" href="#history"><span class="octicon octicon-link"></span></a>History</h1>
+
+<p>Cairo was originally developed by Carl Worth <a href="mailto:cworth@cworth.org">cworth@cworth.org</a> and
+Keith Packard <a href="mailto:keithp@keithp.com">keithp@keithp.com</a>. Many thanks are due to Lyle Ramshaw
+without whose patient help our ignorance would be much more apparent.</p>
+
+<p>Since the original development, many more people have contributed to
+cairo. See the AUTHORS files for as complete a list as we've been able
+to compile so far.</p>
+        </section>
+
+        <footer>
+          Cairo is maintained by <a href="https://github.com/Distrotech">Distrotech</a><br>
+          This page was generated by <a href="http://pages.github.com">GitHub Pages</a>. Tactile theme by <a href="http://twitter.com/jasonlong">Jason Long</a>.
+        </footer>
+
+        
+      </div>
+    </div>
+  </body>
+</html>
