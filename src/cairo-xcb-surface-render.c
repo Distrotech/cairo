@@ -2909,9 +2909,7 @@ _boxes_for_traps (cairo_boxes_t *boxes,
 
     _cairo_boxes_init (boxes);
 
-    boxes->num_boxes    = traps->num_traps;
     boxes->chunks.base  = (cairo_box_t *) traps->traps;
-    boxes->chunks.count = traps->num_traps;
     boxes->chunks.size  = traps->num_traps;
 
     if (antialias != CAIRO_ANTIALIAS_NONE) {
@@ -2957,6 +2955,9 @@ _boxes_for_traps (cairo_boxes_t *boxes,
 		  boxes->chunks.base[j].p1.y != boxes->chunks.base[j].p2.y);
 	}
     }
+
+    boxes->num_boxes    = j;
+    boxes->chunks.count = j;
 }
 
 static cairo_status_t
