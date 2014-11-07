@@ -1,3 +1,69 @@
+Release 1.12.18 (2014-11-06 Bryce Harrington <bryce@osg.samsung.com>)
+=====================================================================
+By popular demand, here is an update of the 1.12 series.  This provides
+an array of important bug fix patches cherrypicked from the 1.14
+series.  Also included is the distcheck warnings cleanup work.
+
+Note that glib 2.14 is now required for g_once_init_enter(), etc. in
+cairo-gobject.
+
+
+Bug Fixes
+---------
+
+    Don't embed CMYK JPEG images since SVG viewers don't have support
+
+    Fix regression in the embedding of mime-data in PDF
+
+    Fix hardcoding of awk; search $PATH instead
+
+    Fix stroke-clipped for dashed strokes, etc.
+
+    Fix rectangle stroke with non-rectilinear pens in PDF
+
+    Fix imagemask with pattern source on certain PS printers
+
+    Fix font names in generated PDF when they have white space or
+    delimiter characters.
+
+    Fix crash in pixman_image_composite32()
+
+    Fix issue with modification of all-clipped cairo_clip_t, causing a
+    write to read-only memory.
+
+    Fix segfault in firefox when scrolling certain pages.
+
+    Fix potential double free.
+
+    Fix check for image surface for inplace upload.
+
+    Fix crash in sweep_line_delete on video playback by prefiltering
+    zero-area boxes when converting traps, given a traps tesselator like
+    cairo-xlib.
+
+    Fix cache_frozen assertions on Win32.
+
+    Fix image scale when GDI scale  is not identity on windows.
+
+    Fix build with --enable-pdf=no
+
+    Fix build for Qt backend
+
+    Fix typo in _cairo_int128_negate and _cairo_int128_not
+    implementations, which could be a problem on systems without a
+    uint128 type.
+
+    Use setpagedevice to set page size
+
+    Add font DSC comments
+
+    Remove LTO support.
+
+    Various improvements to code documentation, tons of warnings and
+    distcheck cleanup and fixes, and repairs to a slew of tests.
+
+
+
 Release 1.12.16 (2013-08-21 Chris Wilson <chris@chris-wilson.co.uk>)
 ===================================================================
 Thanks to everybody who reported a bug and helped us develop a fix,
