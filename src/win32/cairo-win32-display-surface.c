@@ -917,41 +917,31 @@ static const cairo_surface_backend_t cairo_win32_display_surface_backend = {
  */
 
 /**
- * cairo_win32_surface_create_with_format:
+ * cairo_win32_surface_create:
  * @hdc: the DC to create a surface for
- * @format: format of pixels in the surface to create
  *
  * Creates a cairo surface that targets the given DC.  The DC will be
  * queried for its initial clip extents, and this will be used as the
- * size of the cairo surface.
+ * size of the cairo surface.  The resulting surface will always be of
+ * format %CAIRO_FORMAT_RGB24; should you need another surface format,
+ * you will need to create one through
+ * cairo_win32_surface_create_with_dib().
  *
- * Supported formats are:
- * %CAIRO_FORMAT_ARGB32
- * %CAIRO_FORMAT_RGB24
+ * Return value: the newly created surface
  *
- * Note: @format only tells cairo how to draw on the surface, not what
- * the format of the surface is. Namely, cairo does not (and cannot)
- * check that @hdc actually supports alpha-transparency.
- *
- * Return value: the newly created surface, NULL on failure
- *
- * Since: 1.14.3
+ * Since: 1.0
  **/
 cairo_surface_t *
-cairo_win32_surface_create_with_format (HDC hdc, cairo_format_t format)
+cairo_win32_surface_create (HDC hdc)
 {
     cairo_win32_display_surface_t *surface;
 
+    cairo_format_t format;
     cairo_status_t status;
     cairo_device_t *device;
 
-    switch (format) {
-    default:
-	return _cairo_surface_create_in_error (_cairo_error (CAIRO_STATUS_INVALID_FORMAT));
-    case CAIRO_FORMAT_ARGB32:
-    case CAIRO_FORMAT_RGB24:
-	break;
-    }
+    /* Assume that everything coming in as a HDC is RGB24 */
+    format = CAIRO_FORMAT_RGB24;
 
     surface = malloc (sizeof (*surface));
     if (surface == NULL)
@@ -984,28 +974,6 @@ cairo_win32_surface_create_with_format (HDC hdc, cairo_format_t format)
     cairo_device_destroy (device);
 
     return &surface->win32.base;
-}
-
-/**
- * cairo_win32_surface_create:
- * @hdc: the DC to create a surface for
- *
- * Creates a cairo surface that targets the given DC.  The DC will be
- * queried for its initial clip extents, and this will be used as the
- * size of the cairo surface.  The resulting surface will always be of
- * format %CAIRO_FORMAT_RGB24; should you need another surface format,
- * you will need to create one through
- * cairo_win32_surface_create_with_format() or
- * cairo_win32_surface_create_with_dib().
- *
- * Return value: the newly created surface, NULL on failure
- *
- * Since: 1.0
- **/
-cairo_surface_t *
-cairo_win32_surface_create (HDC hdc)
-{
-    return cairo_win32_surface_create_with_format (hdc, CAIRO_FORMAT_RGB24);
 }
 
 /**
@@ -1059,16 +1027,12 @@ cairo_win32_surface_create_with_ddb (HDC hdc,
     HDC screen_dc, ddb_dc;
     HBITMAP saved_dc_bitmap;
 
-    switch (format) {
-    default:
-/* XXX handle these eventually */
-    case CAIRO_FORMAT_A8:
-    case CAIRO_FORMAT_A1:
+    if (format != CAIRO_FORMAT_RGB24)
 	return _cairo_surface_create_in_error (_cairo_error (CAIRO_STATUS_INVALID_FORMAT));
-    case CAIRO_FORMAT_ARGB32:
-    case CAIRO_FORMAT_RGB24:
-	break;
-    }
+/* XXX handle these eventually
+	format != CAIRO_FORMAT_A8 ||
+	format != CAIRO_FORMAT_A1)
+*/
 
     if (!hdc) {
 	screen_dc = GetDC (NULL);
