@@ -36,3 +36,7 @@ headers-standalone
 !cairo-uninstalled.pc.in
 !cairo-features.pc.in
 !cairo-features-uninstalled.pc.in
+.history
+.history/*
+.gitignore
+
