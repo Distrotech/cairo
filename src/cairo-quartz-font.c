@@ -774,22 +774,6 @@ _cairo_quartz_ucs4_to_index (void *abstract_font,
 
     return glyph[0];
 }
-/*
-static unsigned long
-_cairo_quartz_ucs4_to_index (void *abstract_font,
-			     uint32_t ucs4)
-{
-    cairo_quartz_scaled_font_t *font = (cairo_quartz_scaled_font_t*) abstract_font;
-    cairo_quartz_font_face_t *ffont = _cairo_quartz_scaled_to_face(font);
-	CGGlyph glyph[2];
-	UniChar utf16[2];
-    UniChar u = (UniChar) ucs4;
-    CGGlyph glyph;
-    CGFontGetGlyphsForUnicharsPtr (ffont->cgFont, &u, &glyph, 1);
-    return glyph;
-
-}
-*/
 
 static cairo_int_status_t
 _cairo_quartz_load_truetype_table (void	            *abstract_font,
