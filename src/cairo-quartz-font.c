@@ -81,6 +81,14 @@ static void (*CGFontGetGlyphsForUnicharsPtr) (CGFontRef, const UniChar[], const 
 static void (*CGContextSetAllowsFontSmoothingPtr) (CGContextRef, bool) = NULL;
 static bool (*CGContextGetAllowsFontSmoothingPtr) (CGContextRef) = NULL;
 
+/* Not public in the least bit */
+static CGPathRef (*CGFontGetGlyphPathPtr) (CGFontRef fontRef, CGAffineTransform *textTransform, int unknown, CGGlyph glyph) = NULL;
+
+/* CTFontCreateWithGraphicsFont is not available until 10.5 */
+typedef const struct __CTFontDescriptor *CTFontDescriptorRef;
+static CTFontRef (*CTFontCreateWithGraphicsFontPtr) (CGFontRef, CGFloat, const CGAffineTransform*, CTFontDescriptorRef) = NULL;
+static CGPathRef (*CTFontCreatePathForGlyphPtr) (CTFontRef, CGGlyph, CGAffineTransform *) = NULL;
+
 /* CGFontGetHMetrics isn't public, but the other functions are public/present in 10.5 */
 typedef struct {
     int ascent;
@@ -125,6 +133,11 @@ quartz_font_ensure_symbols(void)
     CGFontGetUnitsPerEmPtr = dlsym(RTLD_DEFAULT, "CGFontGetUnitsPerEm");
     CGFontGetGlyphAdvancesPtr = dlsym(RTLD_DEFAULT, "CGFontGetGlyphAdvances");
 
+    CTFontCreateWithGraphicsFontPtr = dlsym(RTLD_DEFAULT, "CTFontCreateWithGraphicsFont");
+    CTFontCreatePathForGlyphPtr = dlsym(RTLD_DEFAULT, "CTFontCreatePathForGlyph");
+    if (!CTFontCreateWithGraphicsFontPtr || !CTFontCreatePathForGlyphPtr)
+	CGFontGetGlyphPathPtr = dlsym(RTLD_DEFAULT, "CGFontGetGlyphPath");
+
     CGFontGetHMetricsPtr = dlsym(RTLD_DEFAULT, "CGFontGetHMetrics");
     CGFontGetAscentPtr = dlsym(RTLD_DEFAULT, "CGFontGetAscent");
     CGFontGetDescentPtr = dlsym(RTLD_DEFAULT, "CGFontGetDescent");
@@ -140,6 +153,7 @@ quartz_font_ensure_symbols(void)
 	CGFontGetGlyphsForUnicharsPtr &&
 	CGFontGetUnitsPerEmPtr &&
 	CGFontGetGlyphAdvancesPtr &&
+	((CTFontCreateWithGraphicsFontPtr && CTFontCreatePathForGlyphPtr) || CGFontGetGlyphPathPtr) &&
 	(CGFontGetHMetricsPtr || (CGFontGetAscentPtr && CGFontGetDescentPtr && CGFontGetLeadingPtr)))
 	_cairo_quartz_font_symbols_present = TRUE;
 
@@ -545,7 +559,6 @@ _cairo_quartz_init_glyph_path (cairo_quartz_scaled_font_t *font,
     CGGlyph glyph = _cairo_quartz_scaled_glyph_index (scaled_glyph);
     CGAffineTransform textMatrix;
     CGPathRef glyphPath;
-    CTFontRef ctFont;
     cairo_path_fixed_t *path;
 
     if (glyph == INVALID_GLYPH) {
@@ -560,9 +573,14 @@ _cairo_quartz_init_glyph_path (cairo_quartz_scaled_font_t *font,
 					-font->base.scale.yy,
 					0, 0);
 
-    ctFont = CTFontCreateWithGraphicsFont (font_face->cgFont, 1.0, NULL, NULL);
-    glyphPath = CTFontCreatePathForGlyph (ctFont, glyph, &textMatrix);
-    CFRelease (ctFont);
+    if (CTFontCreateWithGraphicsFontPtr && CTFontCreatePathForGlyphPtr) {
+	CTFontRef ctFont = CTFontCreateWithGraphicsFontPtr (font_face->cgFont, 1.0, NULL, NULL);
+	glyphPath = CTFontCreatePathForGlyphPtr (ctFont, glyph, &textMatrix);
+	CFRelease (ctFont);
+    } else {
+	glyphPath = CGFontGetGlyphPathPtr (font_face->cgFont, &textMatrix, 0, glyph);
+    }
+
     if (!glyphPath)
 	return CAIRO_INT_STATUS_UNSUPPORTED;
 
@@ -744,16 +762,17 @@ _cairo_quartz_scaled_glyph_init (void *abstract_font,
 
 static unsigned long
 _cairo_quartz_ucs4_to_index (void *abstract_font,
-			     uint32_t ucs4)
+        uint32_t ucs4)
 {
     cairo_quartz_scaled_font_t *font = (cairo_quartz_scaled_font_t*) abstract_font;
     cairo_quartz_font_face_t *ffont = _cairo_quartz_scaled_to_face(font);
-    UniChar u = (UniChar) ucs4;
-    CGGlyph glyph;
+    CGGlyph glyph[2];
+    UniChar utf16[2];
+    
+    CFIndex len = CFStringGetSurrogatePairForLongCharacter (ucs4, utf16) ? 2 : 1;
+    CGFontGetGlyphsForUnicharsPtr (ffont->cgFont, utf16, glyph, len);
 
-    CGFontGetGlyphsForUnicharsPtr (ffont->cgFont, &u, &glyph, 1);
-
-    return glyph;
+    return glyph[0];
 }
 
 static cairo_int_status_t
